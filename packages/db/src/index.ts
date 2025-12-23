@@ -29,5 +29,6 @@ export type {
 } from './types';
 
 // Export client functions
-export { createServerClient, createBrowserClient } from './client';
+export { createServerClient, createBrowserClient, createServiceRoleClient } from './client';
+export { createSessionClient, createOAuthScopedClient, isOAuthScopedClient } from './auth-client';
 

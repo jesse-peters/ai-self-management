@@ -1,25 +1,29 @@
 /**
  * Artifact service - handles artifact management for tasks
+ * 
+ * IMPORTANT: This service now uses RLS for security.
+ * All functions accept an authenticated SupabaseClient.
  */
 
-import { createServerClient } from '@projectflow/db';
-import type { Artifact, ArtifactInsert } from '@projectflow/db';
+import type { Artifact, Database } from '@projectflow/db';
 import { mapSupabaseError, ValidationError } from '../errors';
-import { validateUUID } from '../validation';
 import { getTask } from './tasks';
 import { emitEvent } from '../events';
 import type { ArtifactType } from '../types';
 
+// SupabaseClient type from @supabase/supabase-js
+type SupabaseClient<T = any> = any;
+
 /**
  * Appends an artifact to a task
  * 
- * @param userId - User ID
- * @param taskId - Task ID
- * @param data - Artifact data (type, ref, summary)
+ * @param client Authenticated Supabase client (session or OAuth)
+ * @param taskId Task ID
+ * @param data Artifact data (type, ref, summary)
  * @returns The created artifact
  */
 export async function appendArtifact(
-  userId: string,
+  client: SupabaseClient<Database>,
   taskId: string,
   data: {
     type: ArtifactType;
@@ -28,9 +32,6 @@ export async function appendArtifact(
   }
 ): Promise<Artifact> {
   try {
-    validateUUID(userId, 'userId');
-    validateUUID(taskId, 'taskId');
-
     // Validate artifact data
     const validTypes: ArtifactType[] = ['diff', 'pr', 'test_report', 'document', 'other'];
     if (!validTypes.includes(data.type)) {
@@ -58,16 +59,13 @@ export async function appendArtifact(
     }
 
     // Verify user has access to the task and get task/project info
-    const task = await getTask(userId, taskId);
+    const task = await getTask(client, taskId);
 
-    const supabase = createServerClient();
-
-    const { data: artifact, error } = await (supabase as any)
+    const { data: artifact, error } = await (client as any)
       .from('artifacts')
       .insert([
         {
           task_id: taskId,
-          user_id: userId,
           type: data.type,
           ref: data.ref.trim(),
           summary: data.summary?.trim() || null,
@@ -84,20 +82,26 @@ export async function appendArtifact(
       throw new Error('Failed to retrieve created artifact');
     }
 
+    // Get userId for event
+    const { data: { user } } = await client.auth.getUser();
+    const userId = user?.id;
+
     // Emit ArtifactProduced event
-    await emitEvent({
-      project_id: task.project_id,
-      task_id: taskId,
-      user_id: userId,
-      event_type: 'ArtifactProduced',
-      payload: {
-        artifact_id: artifact.id,
+    if (userId) {
+      await emitEvent({
+        project_id: task.project_id,
         task_id: taskId,
-        type: data.type,
-        ref: data.ref.trim(),
-        summary: data.summary?.trim() || null,
-      },
-    });
+        user_id: userId,
+        event_type: 'ArtifactProduced',
+        payload: {
+          artifact_id: artifact.id,
+          task_id: taskId,
+          type: data.type,
+          ref: data.ref.trim(),
+          summary: data.summary?.trim() || null,
+        },
+      });
+    }
 
     return artifact as Artifact;
   } catch (error) {
@@ -110,25 +114,23 @@ export async function appendArtifact(
 
 /**
  * Lists all artifacts for a task
+ * 
+ * @param client Authenticated Supabase client (session or OAuth)
+ * @param taskId Task ID
+ * @returns Array of artifacts
  */
 export async function listArtifacts(
-  userId: string,
+  client: SupabaseClient<Database>,
   taskId: string
 ): Promise<Artifact[]> {
   try {
-    validateUUID(userId, 'userId');
-    validateUUID(taskId, 'taskId');
-
     // Verify user has access to the task
-    await getTask(userId, taskId);
+    await getTask(client, taskId);
 
-    const supabase = createServerClient();
-
-    const { data: artifacts, error } = await (supabase as any)
+    const { data: artifacts, error } = await (client as any)
       .from('artifacts')
       .select('*')
       .eq('task_id', taskId)
-      .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
     if (error) {

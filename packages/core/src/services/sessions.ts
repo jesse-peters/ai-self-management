@@ -1,40 +1,48 @@
 /**
  * Session service - handles agent session and project context operations
+ * 
+ * IMPORTANT: This service now uses RLS for security.
+ * All functions accept an authenticated SupabaseClient.
  */
 
-import { createServerClient } from '@projectflow/db';
-import type { AgentSession } from '@projectflow/db';
+import type { AgentSession, Database } from '@projectflow/db';
 import { mapSupabaseError } from '../errors';
-import { validateUUID, validateSessionData } from '../validation';
+import { validateSessionData } from '../validation';
 import type { ProjectContext } from '../types';
 import { getProject } from './projects';
 import { listTasks } from './tasks';
 
+// SupabaseClient type from @supabase/supabase-js
+type SupabaseClient<T = any> = any;
+
 /**
  * Saves or updates a session context for a project
+ * 
+ * @param client Authenticated Supabase client (session or OAuth)
+ * @param projectId Project ID to save session for
+ * @param snapshot Session snapshot data
+ * @param summary Optional session summary
+ * @returns The saved session
+ * 
+ * RLS automatically sets user_id from authenticated context.
  */
 export async function saveSessionContext(
-  userId: string,
+  client: SupabaseClient<Database>,
   projectId: string,
   snapshot: Record<string, unknown>,
   summary?: string
 ): Promise<AgentSession> {
   try {
-    validateUUID(userId, 'userId');
-    validateUUID(projectId, 'projectId');
     validateSessionData({ snapshot, summary });
 
     // Verify user owns the project
-    await getProject(userId, projectId);
+    await getProject(client, projectId);
 
-    const supabase = createServerClient();
-
-    const { data: session, error } = await (supabase
+    const { data: session, error } = await (client
       .from('agent_sessions')
       .insert([
         {
           project_id: projectId,
-          user_id: userId,
           snapshot,
           summary: summary || null,
         },
@@ -61,25 +69,23 @@ export async function saveSessionContext(
 
 /**
  * Gets the latest session for a project
+ * 
+ * @param client Authenticated Supabase client (session or OAuth)
+ * @param projectId Project ID to get session for
+ * @returns The latest session or null if none exists
  */
 export async function getLatestSession(
-  userId: string,
+  client: SupabaseClient<Database>,
   projectId: string
 ): Promise<AgentSession | null> {
   try {
-    validateUUID(userId, 'userId');
-    validateUUID(projectId, 'projectId');
-
     // Verify user owns the project
-    await getProject(userId, projectId);
+    await getProject(client, projectId);
 
-    const supabase = createServerClient();
-
-    const { data: session, error } = await supabase
+    const { data: session, error } = await client
       .from('agent_sessions')
       .select('*')
       .eq('project_id', projectId)
-      .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
@@ -100,20 +106,21 @@ export async function getLatestSession(
 
 /**
  * Gets complete project context including project, tasks, and latest session
+ * 
+ * @param client Authenticated Supabase client (session or OAuth)
+ * @param projectId Project ID to get context for
+ * @returns Complete project context
  */
 export async function getProjectContext(
-  userId: string,
+  client: SupabaseClient<Database>,
   projectId: string
 ): Promise<ProjectContext> {
   try {
-    validateUUID(userId, 'userId');
-    validateUUID(projectId, 'projectId');
-
     // Load all data in parallel
     const [project, tasks, latestSession] = await Promise.all([
-      getProject(userId, projectId),
-      listTasks(userId, projectId),
-      getLatestSession(userId, projectId),
+      getProject(client, projectId),
+      listTasks(client, projectId),
+      getLatestSession(client, projectId),
     ]);
 
     return {

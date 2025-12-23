@@ -92,7 +92,7 @@ async function handleAuthorizationCodeGrant(
   }
 
   // Get authorization code
-  const codeData = getAuthorizationCode(tokenRequest.code);
+  const codeData = await getAuthorizationCode(tokenRequest.code);
   if (!codeData) {
     console.error(`[OAuth Token] Invalid or expired authorization code: ${tokenRequest.code.substring(0, 8)}...`);
     return NextResponse.json(

@@ -1,5 +1,9 @@
 /**
  * OAuth helper utilities for MCP authentication
+ * 
+ * IMPORTANT: Authorization codes are now persisted to Supabase database
+ * instead of in-memory storage. This ensures they survive server restarts
+ * and work across multiple serverless instances.
  */
 
 import {
@@ -8,6 +12,8 @@ import {
   revokeRefreshToken,
   generateAuthorizationCode,
 } from '@projectflow/core';
+import { createServiceRoleClient } from '@projectflow/db';
+import type { Database } from '@projectflow/db';
 
 /**
  * Validates an OAuth access token
@@ -144,26 +150,14 @@ export function validateTokenRequest(body: Record<string, unknown>): TokenReques
 }
 
 /**
- * Stores authorization codes temporarily (in-memory for now)
- * In production, consider using Redis or database
+ * Stores an authorization code in Supabase database
+ * 
+ * Authorization codes are:
+ * - One-time use only
+ * - Valid for 10 minutes
+ * - Scoped to a specific client, user, and redirect URI
  */
-const authorizationCodes = new Map<
-  string,
-  {
-    userId: string;
-    clientId: string;
-    redirectUri: string;
-    scope: string;
-    expiresAt: Date;
-    codeChallenge?: string;
-    codeChallengeMethod?: string;
-  }
->();
-
-/**
- * Stores an authorization code
- */
-export function storeAuthorizationCode(
+export async function storeAuthorizationCode(
   code: string,
   userId: string,
   clientId: string,
@@ -171,50 +165,78 @@ export function storeAuthorizationCode(
   scope: string,
   codeChallenge?: string,
   codeChallengeMethod?: string
-): void {
+): Promise<void> {
+  const client = createServiceRoleClient();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-  authorizationCodes.set(code, {
-    userId,
-    clientId,
-    redirectUri,
-    scope,
-    expiresAt,
-    codeChallenge,
-    codeChallengeMethod,
-  });
 
-  // Clean up expired codes periodically
-  setTimeout(() => {
-    authorizationCodes.delete(code);
-  }, 10 * 60 * 1000);
+  const { error } = await (client as any)
+    .from('oauth_authorization_codes')
+    .insert({
+      code,
+      user_id: userId,
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      scope,
+      code_challenge: codeChallenge,
+      code_challenge_method: codeChallengeMethod,
+      expires_at: expiresAt.toISOString(),
+    });
+
+  if (error) {
+    throw new Error(`Failed to store authorization code: ${error.message}`);
+  }
 }
 
 /**
  * Retrieves and validates an authorization code
+ * 
+ * Performs the following checks:
+ * - Code exists in database
+ * - Code has not expired
+ * - Code has not been used before
+ * 
+ * Marks code as used (one-time use enforcement)
  */
-export function getAuthorizationCode(code: string): {
+export async function getAuthorizationCode(code: string): Promise<{
   userId: string;
   clientId: string;
   redirectUri: string;
   scope: string;
   codeChallenge?: string;
   codeChallengeMethod?: string;
-} | null {
-  const codeData = authorizationCodes.get(code);
+} | null> {
+  const client = createServiceRoleClient();
+  
+  const { data, error } = await (client as any)
+    .from('oauth_authorization_codes')
+    .select('*')
+    .eq('code', code)
+    .is('used_at', null)
+    .single();
 
-  if (!codeData) {
+  if (error || !data) {
     return null;
   }
 
-  if (codeData.expiresAt < new Date()) {
-    authorizationCodes.delete(code);
+  // Check if code has expired
+  if (new Date(data.expires_at) < new Date()) {
     return null;
   }
 
-  // Delete code after use (one-time use)
-  authorizationCodes.delete(code);
+  // Mark code as used (one-time use enforcement)
+  await (client as any)
+    .from('oauth_authorization_codes')
+    .update({ used_at: new Date().toISOString() })
+    .eq('code', code);
 
-  return codeData;
+  return {
+    userId: data.user_id,
+    clientId: data.client_id,
+    redirectUri: data.redirect_uri,
+    scope: data.scope,
+    codeChallenge: data.code_challenge,
+    codeChallengeMethod: data.code_challenge_method,
+  };
 }
 
 /**

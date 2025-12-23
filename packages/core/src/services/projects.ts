@@ -1,26 +1,44 @@
 /**
  * Project service - handles all project-related business logic
+ * 
+ * IMPORTANT: This service now uses RLS for security.
+ * 
+ * All functions accept an authenticated SupabaseClient that has:
+ * - Either a session (via auth.uid())
+ * - Or an OAuth token (via auth.current_user_id())
+ * 
+ * The client's auth context is automatically used by RLS policies
+ * to filter results to the authenticated user's data only.
  */
 
-import { createServerClient } from '@projectflow/db';
-import type { Project, ProjectInsert } from '@projectflow/db';
+import type { Project, ProjectInsert, Database } from '@projectflow/db';
 import { NotFoundError, mapSupabaseError } from '../errors';
-import { validateUUID, validateProjectData } from '../validation';
+import { validateProjectData } from '../validation';
 import { emitEvent } from '../events';
 
-/**
- * Creates a new project for the given user
- */
-export async function createProject(userId: string, data: ProjectInsert): Promise<Project> {
-  try {
-    validateUUID(userId, 'userId');
-    validateProjectData(data);
+// SupabaseClient type from @supabase/supabase-js
+type SupabaseClient<T = any> = any;
 
-    const supabase = createServerClient();
+/**
+ * Creates a new project
+ * 
+ * @param client Authenticated Supabase client (session or OAuth)
+ * @param data Project data to create
+ * @returns The created project
+ * @throws NotFoundError if project creation fails
+ * 
+ * RLS automatically sets user_id from authenticated context.
+ * No need to pass userId - it's implicit in the auth context.
+ */
+export async function createProject(
+  client: SupabaseClient<Database>,
+  data: ProjectInsert
+): Promise<Project> {
+  try {
+    validateProjectData(data);
 
     // Build insert data with rules if provided
     const insertData: any = {
-      user_id: userId,
       name: data.name,
       description: data.description || null,
     };
@@ -30,7 +48,7 @@ export async function createProject(userId: string, data: ProjectInsert): Promis
       insertData.rules = (data as any).rules;
     }
 
-    const { data: project, error } = await (supabase
+    const { data: project, error } = await (client
       .from('projects')
       .insert([insertData] as any)
       .select()
@@ -44,18 +62,25 @@ export async function createProject(userId: string, data: ProjectInsert): Promis
       throw new NotFoundError('Failed to retrieve created project');
     }
 
-    // Emit ProjectCreated event
-    await emitEvent({
-      project_id: project.id,
-      user_id: userId,
-      event_type: 'ProjectCreated',
-      payload: {
+    // Get userId from auth context for event
+    // We'll fetch it again to use in event
+    const { data: { user }, error: userError } = await client.auth.getUser();
+    const userId = user?.id;
+
+    // Emit ProjectCreated event (if we have userId)
+    if (userId) {
+      await emitEvent({
         project_id: project.id,
-        name: project.name,
-        description: project.description,
-        rules: (project as any).rules || {},
-      },
-    });
+        user_id: userId,
+        event_type: 'ProjectCreated',
+        payload: {
+          project_id: project.id,
+          name: project.name,
+          description: project.description,
+          rules: (project as any).rules || {},
+        },
+      });
+    }
 
     return project as Project;
   } catch (error) {
@@ -67,18 +92,18 @@ export async function createProject(userId: string, data: ProjectInsert): Promis
 }
 
 /**
- * Lists all projects for the given user
+ * Lists all projects for the authenticated user
+ * 
+ * @param client Authenticated Supabase client (session or OAuth)
+ * @returns Array of projects owned by the authenticated user
+ * 
+ * RLS automatically filters to authenticated user's projects.
  */
-export async function listProjects(userId: string): Promise<Project[]> {
+export async function listProjects(client: SupabaseClient<Database>): Promise<Project[]> {
   try {
-    validateUUID(userId, 'userId');
-
-    const supabase = createServerClient();
-
-    const { data: projects, error } = await supabase
+    const { data: projects, error } = await client
       .from('projects')
       .select('*')
-      .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -95,20 +120,24 @@ export async function listProjects(userId: string): Promise<Project[]> {
 }
 
 /**
- * Gets a single project by ID, verifying the user owns it
+ * Gets a single project by ID
+ * 
+ * @param client Authenticated Supabase client (session or OAuth)
+ * @param projectId Project ID to fetch
+ * @returns The project
+ * @throws NotFoundError if project not found or user doesn't own it
+ * 
+ * RLS ensures the user can only access their own projects.
  */
-export async function getProject(userId: string, projectId: string): Promise<Project> {
+export async function getProject(
+  client: SupabaseClient<Database>,
+  projectId: string
+): Promise<Project> {
   try {
-    validateUUID(userId, 'userId');
-    validateUUID(projectId, 'projectId');
-
-    const supabase = createServerClient();
-
-    const { data: project, error } = await supabase
+    const { data: project, error } = await client
       .from('projects')
       .select('*')
       .eq('id', projectId)
-      .eq('user_id', userId)
       .single();
 
     if (error) {

@@ -6,17 +6,21 @@
  * - startTask: Start working on a locked task
  * - blockTask: Mark a task as blocked
  * - completeTask: Complete a task after gates pass and artifacts are attached
+ * 
+ * IMPORTANT: This service now uses RLS for security.
+ * All functions accept an authenticated SupabaseClient.
  */
 
-import { createServerClient } from '@projectflow/db';
-import type { Task } from '@projectflow/db';
+import type { Task, Database } from '@projectflow/db';
 import { NotFoundError, UnauthorizedError, ValidationError, mapSupabaseError } from '../errors';
-import { validateUUID } from '../validation';
 import { getProject } from './projects';
 import { listTasks, getTask } from './tasks';
 import { emitEvent } from '../events';
 import { evaluateGates } from '../gates/evaluator';
 import { listArtifacts } from './artifacts';
+
+// SupabaseClient type from @supabase/supabase-js
+type SupabaseClient<T = any> = any;
 
 /**
  * Task picking strategy
@@ -26,36 +30,31 @@ export type TaskPickingStrategy = 'priority' | 'dependencies' | 'oldest' | 'newe
 /**
  * Picks the next available task for a project, considering dependencies and locking
  * 
- * @param userId - User ID
- * @param projectId - Project ID
- * @param strategy - Strategy for picking tasks (default: 'dependencies')
- * @param lockedBy - Identifier for the agent/session that will lock the task
+ * @param client Authenticated Supabase client (session or OAuth)
+ * @param projectId Project ID
+ * @param strategy Strategy for picking tasks (default: 'dependencies')
+ * @param lockedBy Identifier for the agent/session that will lock the task
  * @returns The picked and locked task, or null if no tasks available
  */
 export async function pickNextTask(
-  userId: string,
+  client: SupabaseClient<Database>,
   projectId: string,
   strategy: TaskPickingStrategy = 'dependencies',
   lockedBy?: string
 ): Promise<Task | null> {
   try {
-    validateUUID(userId, 'userId');
-    validateUUID(projectId, 'projectId');
-
     // Verify user owns the project
-    await getProject(userId, projectId);
-
-    const supabase = createServerClient();
+    await getProject(client, projectId);
 
     // Get all tasks for the project
-    const allTasks = await listTasks(userId, projectId, { status: 'todo' });
+    const allTasks = await listTasks(client, projectId, { status: 'todo' });
 
     if (allTasks.length === 0) {
       return null;
     }
 
     // Filter tasks that are ready (dependencies met)
-    const readyTasks = await filterReadyTasks(userId, allTasks);
+    const readyTasks = await filterReadyTasks(client, allTasks);
 
     if (readyTasks.length === 0) {
       return null;
@@ -112,14 +111,13 @@ export async function pickNextTask(
 
     // Lock the task
     const now = new Date().toISOString();
-    const { data: lockedTask, error: lockError } = await (supabase as any)
+    const { data: lockedTask, error: lockError } = await (client as any)
       .from('tasks')
       .update({
         locked_at: now,
         locked_by: lockedBy || null,
       })
       .eq('id', selectedTask.id)
-      .eq('user_id', userId)
       .eq('status', 'todo')
       .is('locked_at', null) // Only lock if not already locked
       .select()
@@ -131,21 +129,27 @@ export async function pickNextTask(
 
     if (!lockedTask) {
       // Task was already locked by another process, try again
-      return pickNextTask(userId, projectId, strategy, lockedBy);
+      return pickNextTask(client, projectId, strategy, lockedBy);
     }
 
+    // Get userId for event
+    const { data: { user } } = await client.auth.getUser();
+    const userId = user?.id;
+
     // Emit TaskPicked event (using TaskStarted event type for now, or we could add TaskPicked)
-    await emitEvent({
-      project_id: projectId,
-      task_id: lockedTask.id,
-      user_id: userId,
-      event_type: 'TaskStarted',
-      payload: {
+    if (userId) {
+      await emitEvent({
+        project_id: projectId,
         task_id: lockedTask.id,
-        locked_at: now,
-        locked_by: lockedBy || null,
-      },
-    });
+        user_id: userId,
+        event_type: 'TaskStarted',
+        payload: {
+          task_id: lockedTask.id,
+          locked_at: now,
+          locked_by: lockedBy || null,
+        },
+      });
+    }
 
     return lockedTask as Task;
   } catch (error) {
@@ -159,7 +163,7 @@ export async function pickNextTask(
 /**
  * Filters tasks to only those whose dependencies are met
  */
-async function filterReadyTasks(userId: string, tasks: Task[]): Promise<Task[]> {
+async function filterReadyTasks(client: SupabaseClient<Database>, tasks: Task[]): Promise<Task[]> {
   const readyTasks: Task[] = [];
 
   for (const task of tasks) {
@@ -173,12 +177,10 @@ async function filterReadyTasks(userId: string, tasks: Task[]): Promise<Task[]> 
     }
 
     // Check if all dependencies are completed
-    const supabase = createServerClient();
-    const { data: depTasks, error } = await (supabase as any)
+    const { data: depTasks, error } = await (client as any)
       .from('tasks')
       .select('id, status')
-      .in('id', dependencies)
-      .eq('user_id', userId);
+      .in('id', dependencies);
 
     if (error) {
       // If we can't verify dependencies, skip this task
@@ -197,19 +199,16 @@ async function filterReadyTasks(userId: string, tasks: Task[]): Promise<Task[]> 
 /**
  * Starts a task that has been picked/locked
  * 
- * @param userId - User ID
- * @param taskId - Task ID to start
+ * @param client Authenticated Supabase client (session or OAuth)
+ * @param taskId Task ID to start
  * @returns The started task
  */
-export async function startTask(userId: string, taskId: string): Promise<Task> {
+export async function startTask(
+  client: SupabaseClient<Database>,
+  taskId: string
+): Promise<Task> {
   try {
-    validateUUID(userId, 'userId');
-    validateUUID(taskId, 'taskId');
-
-    const supabase = createServerClient();
-
-    // Get the task and verify it's locked
-    const task = await getTask(userId, taskId);
+    const task = await getTask(client, taskId);
     const taskData = task as any;
 
     if (task.status !== 'todo' && task.status !== 'in_progress') {
@@ -223,13 +222,12 @@ export async function startTask(userId: string, taskId: string): Promise<Task> {
     }
 
     // Update task to in_progress
-    const { data: updatedTask, error: updateError } = await (supabase as any)
+    const { data: updatedTask, error: updateError } = await (client as any)
       .from('tasks')
       .update({
         status: 'in_progress',
       })
       .eq('id', taskId)
-      .eq('user_id', userId)
       .select()
       .single();
 
@@ -241,18 +239,24 @@ export async function startTask(userId: string, taskId: string): Promise<Task> {
       throw new NotFoundError('Failed to retrieve updated task');
     }
 
+    // Get userId for event
+    const { data: { user } } = await client.auth.getUser();
+    const userId = user?.id;
+
     // Emit TaskStarted event
-    await emitEvent({
-      project_id: task.project_id,
-      task_id: taskId,
-      user_id: userId,
-      event_type: 'TaskStarted',
-      payload: {
+    if (userId) {
+      await emitEvent({
+        project_id: task.project_id,
         task_id: taskId,
-        locked_at: taskData.locked_at || new Date().toISOString(),
-        locked_by: taskData.locked_by || null,
-      },
-    });
+        user_id: userId,
+        event_type: 'TaskStarted',
+        payload: {
+          task_id: taskId,
+          locked_at: taskData.locked_at || new Date().toISOString(),
+          locked_by: taskData.locked_by || null,
+        },
+      });
+    }
 
     return updatedTask as Task;
   } catch (error) {
@@ -266,33 +270,28 @@ export async function startTask(userId: string, taskId: string): Promise<Task> {
 /**
  * Blocks a task with a reason
  * 
- * @param userId - User ID
- * @param taskId - Task ID to block
- * @param reason - Reason for blocking
- * @param needsHuman - Whether human intervention is required
+ * @param client Authenticated Supabase client (session or OAuth)
+ * @param taskId Task ID to block
+ * @param reason Reason for blocking
+ * @param needsHuman Whether human intervention is required
  * @returns The blocked task
  */
 export async function blockTask(
-  userId: string,
+  client: SupabaseClient<Database>,
   taskId: string,
   reason: string,
   needsHuman: boolean = false
 ): Promise<Task> {
   try {
-    validateUUID(userId, 'userId');
-    validateUUID(taskId, 'taskId');
-
     if (!reason || reason.trim().length === 0) {
       throw new ValidationError('Block reason is required');
     }
 
-    const supabase = createServerClient();
-
     // Get the task to verify ownership
-    const task = await getTask(userId, taskId);
+    const task = await getTask(client, taskId);
 
     // Update task to blocked status
-    const { data: updatedTask, error: updateError } = await (supabase as any)
+    const { data: updatedTask, error: updateError } = await (client as any)
       .from('tasks')
       .update({
         status: 'blocked',
@@ -300,7 +299,6 @@ export async function blockTask(
         locked_by: null,
       })
       .eq('id', taskId)
-      .eq('user_id', userId)
       .select()
       .single();
 
@@ -312,18 +310,24 @@ export async function blockTask(
       throw new NotFoundError('Failed to retrieve updated task');
     }
 
+    // Get userId for event
+    const { data: { user } } = await client.auth.getUser();
+    const userId = user?.id;
+
     // Emit TaskBlocked event
-    await emitEvent({
-      project_id: task.project_id,
-      task_id: taskId,
-      user_id: userId,
-      event_type: 'TaskBlocked',
-      payload: {
+    if (userId) {
+      await emitEvent({
+        project_id: task.project_id,
         task_id: taskId,
-        reason: reason.trim(),
-        needs_human: needsHuman,
-      },
-    });
+        user_id: userId,
+        event_type: 'TaskBlocked',
+        payload: {
+          task_id: taskId,
+          reason: reason.trim(),
+          needs_human: needsHuman,
+        },
+      });
+    }
 
     return updatedTask as Task;
   } catch (error) {
@@ -337,24 +341,19 @@ export async function blockTask(
 /**
  * Completes a task after verifying gates pass and artifacts are attached
  * 
- * @param userId - User ID
- * @param taskId - Task ID to complete
- * @param artifactIds - Optional array of artifact IDs to verify (if not provided, checks all artifacts)
+ * @param client Authenticated Supabase client (session or OAuth)
+ * @param taskId Task ID to complete
+ * @param artifactIds Optional array of artifact IDs to verify (if not provided, checks all artifacts)
  * @returns The completed task
  */
 export async function completeTask(
-  userId: string,
+  client: SupabaseClient<Database>,
   taskId: string,
   artifactIds?: string[]
 ): Promise<Task> {
   try {
-    validateUUID(userId, 'userId');
-    validateUUID(taskId, 'taskId');
-
-    const supabase = createServerClient();
-
     // Get the task to verify ownership and status
-    const task = await getTask(userId, taskId);
+    const task = await getTask(client, taskId);
 
     if (task.status === 'done') {
       throw new ValidationError('Task is already completed');
@@ -365,7 +364,7 @@ export async function completeTask(
     }
 
     // Evaluate gates
-    const gateResults = await evaluateGates(userId, taskId);
+    const gateResults = await evaluateGates(client, taskId);
     const allGatesPassed = gateResults.every((result) => result.passed);
 
     if (!allGatesPassed) {
@@ -377,7 +376,7 @@ export async function completeTask(
     }
 
     // Verify artifacts are attached
-    const artifacts = await listArtifacts(userId, taskId);
+    const artifacts = await listArtifacts(client, taskId);
     if (artifactIds && artifactIds.length > 0) {
       // Verify specific artifacts exist
       const artifactIdSet = new Set(artifactIds);
@@ -392,7 +391,7 @@ export async function completeTask(
     }
 
     // Update task to done status and release lock
-    const { data: updatedTask, error: updateError } = await (supabase as any)
+    const { data: updatedTask, error: updateError } = await (client as any)
       .from('tasks')
       .update({
         status: 'done',
@@ -400,7 +399,6 @@ export async function completeTask(
         locked_by: null,
       })
       .eq('id', taskId)
-      .eq('user_id', userId)
       .select()
       .single();
 
@@ -412,34 +410,40 @@ export async function completeTask(
       throw new NotFoundError('Failed to retrieve updated task');
     }
 
-    // Emit GateEvaluated event
-    await emitEvent({
-      project_id: task.project_id,
-      task_id: taskId,
-      user_id: userId,
-      event_type: 'GateEvaluated',
-      payload: {
-        task_id: taskId,
-        gates: gateResults.map((r) => ({
-          type: r.gate.type,
-          passed: r.passed,
-          reason: r.reason,
-          missingRequirements: r.missingRequirements,
-        })),
-      },
-    });
+    // Get userId for event
+    const { data: { user } } = await client.auth.getUser();
+    const userId = user?.id;
 
-    // Emit TaskCompleted event
-    await emitEvent({
-      project_id: task.project_id,
-      task_id: taskId,
-      user_id: userId,
-      event_type: 'TaskCompleted',
-      payload: {
+    if (userId) {
+      // Emit GateEvaluated event
+      await emitEvent({
+        project_id: task.project_id,
         task_id: taskId,
-        artifacts: artifacts.map((a) => a.id),
-      },
-    });
+        user_id: userId,
+        event_type: 'GateEvaluated',
+        payload: {
+          task_id: taskId,
+          gates: gateResults.map((r) => ({
+            type: r.gate.type,
+            passed: r.passed,
+            reason: r.reason,
+            missingRequirements: r.missingRequirements,
+          })),
+        },
+      });
+
+      // Emit TaskCompleted event
+      await emitEvent({
+        project_id: task.project_id,
+        task_id: taskId,
+        user_id: userId,
+        event_type: 'TaskCompleted',
+        payload: {
+          task_id: taskId,
+          artifacts: artifacts.map((a) => a.id),
+        },
+      });
+    }
 
     return updatedTask as Task;
   } catch (error) {

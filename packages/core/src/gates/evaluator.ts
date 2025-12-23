@@ -1,32 +1,39 @@
 /**
  * Gate evaluator - evaluates quality gates for tasks
+ * 
+ * IMPORTANT: This now uses RLS for security.
+ * All functions accept an authenticated SupabaseClient.
  */
 
+import type { Database } from '@projectflow/db';
 import type { Gate, GateResult, ProjectRules } from '../types';
 import { listArtifacts } from '../services/artifacts';
 import { getTask } from '../services/tasks';
 import { getProject } from '../services/projects';
 
+// SupabaseClient type from @supabase/supabase-js
+type SupabaseClient<T = any> = any;
+
 /**
  * Evaluates all gates for a task
  * 
- * @param userId - User ID
- * @param taskId - Task ID to evaluate gates for
- * @param gates - Optional list of gates to evaluate. If not provided, uses default gates from project rules or hardcoded defaults.
+ * @param client Authenticated Supabase client (session or OAuth)
+ * @param taskId Task ID to evaluate gates for
+ * @param gates Optional list of gates to evaluate. If not provided, uses default gates from project rules or hardcoded defaults.
  * @returns Array of gate evaluation results
  */
 export async function evaluateGates(
-  userId: string,
+  client: SupabaseClient<Database>,
   taskId: string,
   gates?: Gate[]
 ): Promise<GateResult[]> {
   // Get task to access acceptance criteria and other metadata
-  const task = await getTask(userId, taskId);
+  const task = await getTask(client, taskId);
   const taskData = task as any;
 
   // If no gates provided, load default gates from project rules
   if (!gates || gates.length === 0) {
-    const project = await getProject(userId, task.project_id);
+    const project = await getProject(client, task.project_id);
     const projectData = project as any;
     const projectRules: ProjectRules = (projectData.rules || {}) as ProjectRules;
 
@@ -45,7 +52,7 @@ export async function evaluateGates(
   const results: GateResult[] = [];
 
   // Get artifacts for the task
-  const artifacts = await listArtifacts(userId, taskId);
+  const artifacts = await listArtifacts(client, taskId);
 
   for (const gate of gates) {
     const result = await evaluateGate(gate, taskData, artifacts);

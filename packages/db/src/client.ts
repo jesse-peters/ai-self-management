@@ -2,16 +2,17 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
 /**
- * Creates a Supabase client for server-side usage.
- * Uses the service role key to bypass RLS policies when available.
- * Falls back to browser client (anon key) in browser/Next.js contexts.
- * Should ONLY be used on the server side when service role is available.
- *
- * @returns Supabase client with database access
+ * Creates a Supabase client for server-side usage with service role key
+ * WARNING: This bypasses RLS policies. Only use for:
+ * - OAuth token management
+ * - Admin operations
+ * 
+ * For user data access, use createOAuthScopedClient or session-based client.
+ * 
+ * @returns Supabase client that bypasses RLS
  * @throws Error if required environment variables are missing
  */
-export function createServerClient() {
-  // Prioritize service role key for server-side operations (bypasses RLS)
+export function createServiceRoleClient() {
   const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -47,6 +48,14 @@ export function createServerClient() {
   }
 
   throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable');
+}
+
+/**
+ * Backward compatibility wrapper for createServiceRoleClient
+ * @deprecated Use createServiceRoleClient instead
+ */
+export function createServerClient() {
+  return createServiceRoleClient();
 }
 
 /**

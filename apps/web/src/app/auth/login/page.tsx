@@ -56,13 +56,25 @@ function LoginContent() {
       });
 
       if (error) {
-        setError(error.message);
+        // Check for common configuration issues
+        if (error.message.includes('Email signups disabled') || error.message.includes('provider')) {
+          setError(`Email authentication is not enabled. Please check your Supabase configuration. Original error: ${error.message}`);
+        } else if (error.message.includes('Failed to fetch') || error.message.includes('fetch')) {
+          setError('Cannot reach Supabase. Check your internet connection and NEXT_PUBLIC_SUPABASE_URL environment variable.');
+        } else {
+          setError(error.message);
+        }
         return;
       }
 
       router.push(`/auth/check-email?email=${encodeURIComponent(email)}&type=magic-link`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+      if (errorMessage.includes('fetch')) {
+        setError('Network error: Cannot reach Supabase. Check your internet connection.');
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -81,7 +93,16 @@ function LoginContent() {
       });
 
       if (error) {
-        setError(error.message);
+        // Check for common configuration issues
+        if (error.message.includes('Email signups disabled') || error.message.includes('provider')) {
+          setError(`Email/password authentication is not enabled. Check your Supabase configuration. Original error: ${error.message}`);
+        } else if (error.message.includes('Invalid login credentials')) {
+          setError('Invalid email or password. Please try again.');
+        } else if (error.message.includes('Failed to fetch') || error.message.includes('fetch')) {
+          setError('Cannot reach Supabase. Check your internet connection and NEXT_PUBLIC_SUPABASE_URL environment variable.');
+        } else {
+          setError(error.message);
+        }
         return;
       }
 
@@ -90,7 +111,12 @@ function LoginContent() {
       const redirectTo = redirectParam || '/dashboard';
       router.push(redirectTo);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+      if (errorMessage.includes('fetch')) {
+        setError('Network error: Cannot reach Supabase. Check your internet connection.');
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setIsLoading(false);
     }

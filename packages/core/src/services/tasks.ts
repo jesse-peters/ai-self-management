@@ -1,37 +1,44 @@
 /**
  * Task service - handles all task-related business logic
+ * 
+ * IMPORTANT: This service now uses RLS for security.
+ * All functions accept an authenticated SupabaseClient.
  */
 
-import { createServerClient } from '@projectflow/db';
-import type { Task, TaskInsert, TaskUpdate } from '@projectflow/db';
+import type { Task, TaskInsert, TaskUpdate, Database } from '@projectflow/db';
 import { UnauthorizedError, NotFoundError, mapSupabaseError } from '../errors';
-import { validateUUID, validateTaskData } from '../validation';
+import { validateTaskData } from '../validation';
 import type { TaskFilters } from '../types';
 import { getProject } from './projects';
 import { emitEvent } from '../events';
 
+// SupabaseClient type from @supabase/supabase-js
+type SupabaseClient<T = any> = any;
+
 /**
  * Creates a new task for a project
+ * 
+ * @param client Authenticated Supabase client (session or OAuth)
+ * @param projectId Project ID to create task in
+ * @param data Task data to create
+ * @returns The created task
+ * 
+ * RLS automatically sets user_id from authenticated context.
  */
 export async function createTask(
-  userId: string,
+  client: SupabaseClient<Database>,
   projectId: string,
   data: TaskInsert
 ): Promise<Task> {
   try {
-    validateUUID(userId, 'userId');
-    validateUUID(projectId, 'projectId');
     validateTaskData(data);
 
     // Verify user owns the project
-    await getProject(userId, projectId);
-
-    const supabase = createServerClient();
+    await getProject(client, projectId);
 
     // Build insert data with enhanced fields
     const insertData: any = {
       project_id: projectId,
-      user_id: userId,
       title: data.title,
       description: data.description || null,
       status: data.status || 'todo',
@@ -49,7 +56,7 @@ export async function createTask(
       insertData.dependencies = (data as any).dependencies;
     }
 
-    const { data: task, error } = await (supabase
+    const { data: task, error } = await (client
       .from('tasks')
       .insert([insertData] as any)
       .select()
@@ -63,23 +70,29 @@ export async function createTask(
       throw new NotFoundError('Failed to retrieve created task');
     }
 
+    // Get userId and project info for event
+    const { data: { user } } = await client.auth.getUser();
+    const userId = user?.id;
+
     // Emit TaskCreated event
-    await emitEvent({
-      project_id: projectId,
-      task_id: task.id,
-      user_id: userId,
-      event_type: 'TaskCreated',
-      payload: {
+    if (userId) {
+      await emitEvent({
+        project_id: projectId,
         task_id: task.id,
-        title: task.title,
-        description: task.description,
-        status: task.status,
-        priority: task.priority || null,
-        acceptance_criteria: (task as any).acceptance_criteria || [],
-        constraints: (task as any).constraints || {},
-        dependencies: (task as any).dependencies || [],
-      },
-    });
+        user_id: userId,
+        event_type: 'TaskCreated',
+        payload: {
+          task_id: task.id,
+          title: task.title,
+          description: task.description,
+          status: task.status,
+          priority: task.priority || null,
+          acceptance_criteria: (task as any).acceptance_criteria || [],
+          constraints: (task as any).constraints || {},
+          dependencies: (task as any).dependencies || [],
+        },
+      });
+    }
 
     return task as Task;
   } catch (error) {
@@ -92,26 +105,27 @@ export async function createTask(
 
 /**
  * Lists tasks for a project with optional filters
+ * 
+ * @param client Authenticated Supabase client (session or OAuth)
+ * @param projectId Project ID to list tasks for
+ * @param filters Optional filters (status, priority)
+ * @returns Array of tasks
+ * 
+ * RLS automatically filters to authenticated user's tasks.
  */
 export async function listTasks(
-  userId: string,
+  client: SupabaseClient<Database>,
   projectId: string,
   filters?: TaskFilters
 ): Promise<Task[]> {
   try {
-    validateUUID(userId, 'userId');
-    validateUUID(projectId, 'projectId');
-
     // Verify user owns the project
-    await getProject(userId, projectId);
+    await getProject(client, projectId);
 
-    const supabase = createServerClient();
-
-    let query = supabase
+    let query = client
       .from('tasks')
       .select('*')
-      .eq('project_id', projectId)
-      .eq('user_id', userId);
+      .eq('project_id', projectId);
 
     if (filters?.status) {
       query = query.eq('status', filters.status);
@@ -137,20 +151,24 @@ export async function listTasks(
 }
 
 /**
- * Gets a single task by ID, verifying the user owns it
+ * Gets a single task by ID
+ * 
+ * @param client Authenticated Supabase client (session or OAuth)
+ * @param taskId Task ID to fetch
+ * @returns The task
+ * @throws NotFoundError if task not found or user doesn't own it
+ * 
+ * RLS ensures the user can only access their own tasks.
  */
-export async function getTask(userId: string, taskId: string): Promise<Task> {
+export async function getTask(
+  client: SupabaseClient<Database>,
+  taskId: string
+): Promise<Task> {
   try {
-    validateUUID(userId, 'userId');
-    validateUUID(taskId, 'taskId');
-
-    const supabase = createServerClient();
-
-    const { data: task, error } = await (supabase as any)
+    const { data: task, error } = await (client as any)
       .from('tasks')
       .select('*')
       .eq('id', taskId)
-      .eq('user_id', userId)
       .single();
 
     if (error) {
@@ -172,25 +190,27 @@ export async function getTask(userId: string, taskId: string): Promise<Task> {
 
 /**
  * Updates a task
+ * 
+ * @param client Authenticated Supabase client (session or OAuth)
+ * @param taskId Task ID to update
+ * @param patch Fields to update
+ * @returns The updated task
+ * 
+ * RLS ensures the user can only update their own tasks.
  */
 export async function updateTask(
-  userId: string,
+  client: SupabaseClient<Database>,
   taskId: string,
   patch: TaskUpdate
 ): Promise<Task> {
   try {
-    validateUUID(userId, 'userId');
-    validateUUID(taskId, 'taskId');
     validateTaskData(patch);
 
-    const supabase = createServerClient();
-
-    // Get the task to verify ownership
-    const { data: existingTask, error: fetchError } = await supabase
+    // Get the task to verify ownership and check for status changes
+    const { data: existingTask, error: fetchError } = await client
       .from('tasks')
       .select('*')
       .eq('id', taskId)
-      .eq('user_id', userId)
       .single();
 
     if (fetchError) {
@@ -208,11 +228,10 @@ export async function updateTask(
     if (patch.status !== undefined) updateData.status = patch.status;
     if (patch.priority !== undefined) updateData.priority = patch.priority;
 
-    const { data: updatedTask, error: updateError } = await (supabase as any)
+    const { data: updatedTask, error: updateError } = await (client as any)
       .from('tasks')
       .update(updateData)
       .eq('id', taskId)
-      .eq('user_id', userId)
       .select()
       .single();
 
@@ -224,8 +243,12 @@ export async function updateTask(
       throw new NotFoundError('Failed to retrieve updated task');
     }
 
+    // Get userId for event
+    const { data: { user } } = await client.auth.getUser();
+    const userId = user?.id;
+
     // Emit events for status changes
-    if (patch.status && patch.status !== existingTask.status) {
+    if (patch.status && patch.status !== existingTask.status && userId) {
       const eventType = patch.status === 'done' ? 'TaskCompleted' :
                        patch.status === 'blocked' ? 'TaskBlocked' :
                        patch.status === 'cancelled' ? 'TaskCancelled' :
