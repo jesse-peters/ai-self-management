@@ -9,6 +9,7 @@ build/
 .next/
 out/
 *.tsbuildinfo
+.turbo/
 
 # Environment variables
 .env
@@ -17,6 +18,8 @@ out/
 .env.development.local
 .env.test.local
 .env.production.local
+# Keep .env.example tracked in git as template
+!.env.example
 
 # IDE
 .vscode/

@@ -14,11 +14,14 @@
     "isolatedModules": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true,
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "composite": true
+    "sourceMap": true
   },
-  "exclude": ["node_modules", "dist", "build"]
+  "files": [],
+  "references": [
+    { "path": "packages/config" },
+    { "path": "packages/db" },
+    { "path": "packages/core" },
+    { "path": "apps/mcp-server" },
+    { "path": "apps/web" }
+  ]
 }
-

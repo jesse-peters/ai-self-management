@@ -11,7 +11,7 @@ import type { Database } from '@projectflow/db';
  * Uses the anonymous key and respects RLS policies
  * Can be used in client components and browser code
  */
-export function createBrowserClient() {
+export function createBrowserClient(): ReturnType<typeof createSupabaseBrowserClient<Database>> {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -29,7 +29,7 @@ export function createBrowserClient() {
 /**
  * Create a Supabase client for middleware
  */
-export function createMiddlewareClient() {
+export function createMiddlewareClient(): ReturnType<typeof createSupabaseBrowserClient<Database>> {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -50,7 +50,7 @@ export function createMiddlewareClient() {
  * Properly handles cookies for Next.js App Router
  * Required for server components and API routes
  */
-export async function createServerClient() {
+export async function createServerClient(): Promise<ReturnType<typeof createSupabaseServerClient<Database>>> {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 

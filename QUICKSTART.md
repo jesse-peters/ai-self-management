@@ -1,12 +1,37 @@
 # ProjectFlow Quick Start Guide
 
-## 🚀 Getting Started in 5 Minutes
+## 🚀 Quickest Setup (Recommended)
+
+Run a single command that handles everything:
+
+```bash
+pnpm setup
+```
+
+This will:
+- ✅ Create `.env.local` from template (prompt you for values)
+- ✅ Install dependencies
+- ✅ Run database migrations
+- ✅ Generate TypeScript types
+- ✅ Validate configuration
+- ✅ Check GitHub and Vercel setup
+
+Then start developing:
+
+```bash
+pnpm dev
+```
+
+Open http://localhost:3000/auth/login
+
+## 📖 Manual Setup (5 Minutes)
+
+If you prefer to set up manually:
 
 ### 1. Clone & Install
 ```bash
-cd /Users/jesse/Projects/personal/ai-project-management
 pnpm install
-```
+
 
 ### 2. Set Up Supabase
 
