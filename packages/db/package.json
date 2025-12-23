@@ -12,7 +12,11 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:reset": "npx supabase db reset --local",
+    "db:generate-types": "tsx scripts/generate-types.ts",
+    "db:status": "npx supabase migration list"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.38.0"
@@ -20,6 +24,7 @@
   "devDependencies": {
     "@projectflow/config": "workspace:*",
     "@types/node": "^20.0.0",
+    "tsx": "^4.7.0",
     "typescript": "^5.0.0"
   }
 }

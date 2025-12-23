@@ -7,9 +7,16 @@
     "dev:web": "pnpm --filter web dev",
     "dev:mcp": "pnpm --filter mcp-server dev",
     "lint": "pnpm lint --recursive",
-    "build": "pnpm -r build"
+    "build": "pnpm -r build",
+    "db:migrate": "pnpm --filter @projectflow/db db:migrate",
+    "db:reset": "pnpm --filter @projectflow/db db:reset",
+    "db:generate-types": "pnpm --filter @projectflow/db db:generate-types",
+    "db:status": "pnpm --filter @projectflow/db db:status"
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "supabase": "^1.200.0"
   }
 }

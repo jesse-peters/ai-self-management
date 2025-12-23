@@ -1,0 +1,76 @@
+name: Database Migrations
+
+on:
+  push:
+    branches:
+      - main
+      - production
+    paths:
+      - 'packages/db/supabase/migrations/**'
+      - '.github/workflows/migrate.yml'
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    name: Run Database Migrations
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Supabase CLI
+        run: pnpm add -D supabase
+
+      - name: Run migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          cd packages/db
+          
+          # Link to Supabase project if not already linked
+          if [ -n "$SUPABASE_PROJECT_ID" ]; then
+            npx supabase link --project-ref $SUPABASE_PROJECT_ID || true
+          fi
+          
+          # Push migrations to remote database
+          if [ -n "$SUPABASE_ACCESS_TOKEN" ] || [ -n "$SUPABASE_PROJECT_ID" ]; then
+            echo "Running migrations on remote Supabase project..."
+            npx supabase db push
+          else
+            echo "Warning: SUPABASE_ACCESS_TOKEN or SUPABASE_PROJECT_ID not set. Skipping migrations."
+            echo "Please set these secrets in your GitHub repository settings."
+          fi
+
+      - name: Generate types
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: |
+          cd packages/db
+          pnpm db:generate-types || echo "Warning: Type generation failed. This is non-blocking."
+
+      - name: Check for type changes
+        run: |
+          cd packages/db
+          if [ -n "$(git status --porcelain src/types-generated.ts)" ]; then
+            echo "::warning::Generated types have changed. Please commit the updated types."
+            git diff src/types-generated.ts || true
+          fi
+
