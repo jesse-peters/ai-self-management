@@ -26,8 +26,8 @@ This package requires the following environment variables to be set:
 
 ### Supabase CLI (for migrations and type generation)
 
-- `SUPABASE_ACCESS_TOKEN` - Your Supabase access token (get from [Supabase Dashboard](https://supabase.com/dashboard/account/tokens))
-- `SUPABASE_PROJECT_ID` - Your Supabase project ID (optional, can also link with `supabase link`)
+- `SUPABASE_ACCESS_TOKEN` - Your Supabase personal access token (get from [Supabase Dashboard → Account → Access Tokens](https://supabase.com/dashboard/account/tokens)). This is an account-level token that allows the CLI to authenticate. Alternatively, run `supabase login` to authenticate via browser.
+- `SUPABASE_PROJECT_ID` - Your Supabase project ID (optional, can also link with `supabase link --project-ref <project-ref>`)
 - `SUPABASE_DB_PASSWORD` - Local database password (set automatically on first `supabase start`)
 
 See `.env.local.example` in the project root for a complete example.
