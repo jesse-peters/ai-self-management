@@ -1,6 +1,6 @@
 # @projectflow/db
 
-Database client and types for ProjectFlow. Provides typed access to Supabase with support for both server-side and browser-side operations.
+Database client and types for ProjectFlow. Provides typed access to Supabase with support for both server-side and browser-side operations, managed via Supabase CLI.
 
 ## Installation
 
@@ -23,6 +23,14 @@ This package requires the following environment variables to be set:
 
 - `NEXT_PUBLIC_SUPABASE_URL` - Your Supabase project URL
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Your Supabase anonymous key (safe to expose in the browser)
+
+### Supabase CLI (for migrations and type generation)
+
+- `SUPABASE_ACCESS_TOKEN` - Your Supabase access token (get from [Supabase Dashboard](https://supabase.com/dashboard/account/tokens))
+- `SUPABASE_PROJECT_ID` - Your Supabase project ID (optional, can also link with `supabase link`)
+- `SUPABASE_DB_PASSWORD` - Local database password (set automatically on first `supabase start`)
+
+See `.env.local.example` in the project root for a complete example.
 
 ## Usage
 
@@ -59,7 +67,7 @@ const { data, error } = await supabase
 
 ## Types
 
-All types are exported from the main entry point:
+All types are exported from the main entry point. Types are auto-generated from the database schema:
 
 ```typescript
 import type {
@@ -69,8 +77,83 @@ import type {
   ProjectInsert,
   TaskInsert,
   AgentSessionInsert,
+  Database,
 } from '@projectflow/db';
 ```
+
+**Note:** Types are generated from the Supabase database schema. Run `pnpm db:generate-types` after schema changes to update types.
+
+## Database Migrations
+
+This package uses Supabase CLI for migration management. Migrations are stored in `supabase/migrations/` and are versioned with timestamps.
+
+### Local Development Setup
+
+1. **Start local Supabase instance:**
+   ```bash
+   cd packages/db
+   supabase start
+   ```
+   This starts a local Supabase instance with Docker. The first time you run this, it will download Docker images and set up the database.
+
+2. **Apply migrations to local database:**
+   ```bash
+   pnpm db:reset
+   ```
+   This resets the local database and applies all migrations.
+
+3. **Generate TypeScript types:**
+   ```bash
+   pnpm db:generate-types
+   ```
+   This generates types from your local database schema.
+
+### Creating New Migrations
+
+1. **Create a new migration:**
+   ```bash
+   cd packages/db
+   supabase migration new migration_name
+   ```
+   This creates a new timestamped migration file in `supabase/migrations/`.
+
+2. **Edit the migration file:**
+   Edit the generated SQL file in `supabase/migrations/YYYYMMDDHHMMSS_migration_name.sql`.
+
+3. **Test locally:**
+   ```bash
+   pnpm db:reset
+   ```
+   This applies all migrations including your new one.
+
+4. **Generate types:**
+   ```bash
+   pnpm db:generate-types
+   ```
+   Update types to reflect schema changes.
+
+5. **Commit and push:**
+   Commit the migration file. Migrations will run automatically on deployment via GitHub Actions.
+
+### Migration Scripts
+
+Available scripts (run from root or `packages/db`):
+
+- `pnpm db:migrate` - Run pending migrations (local or remote)
+- `pnpm db:reset` - Reset local database and apply all migrations
+- `pnpm db:generate-types` - Generate TypeScript types from database schema
+- `pnpm db:status` - Check migration status
+
+### Linking to Remote Supabase Project
+
+To work with your remote Supabase project:
+
+```bash
+cd packages/db
+supabase link --project-ref your-project-ref
+```
+
+You can find your project ref in the Supabase dashboard URL or project settings.
 
 ## Database Schema
 
@@ -78,12 +161,12 @@ import type {
 
 ```sql
 CREATE TABLE projects (
-  id UUID PRIMARY KEY,
-  user_id UUID NOT NULL,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT,
-  created_at TIMESTAMPTZ,
-  updated_at TIMESTAMPTZ
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
 
@@ -91,15 +174,15 @@ CREATE TABLE projects (
 
 ```sql
 CREATE TABLE tasks (
-  id UUID PRIMARY KEY,
-  project_id UUID NOT NULL,
-  user_id UUID NOT NULL,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   description TEXT,
-  status TEXT ('todo' | 'in_progress' | 'done'),
-  priority TEXT ('low' | 'medium' | 'high'),
-  created_at TIMESTAMPTZ,
-  updated_at TIMESTAMPTZ
+  status TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'in_progress', 'done')),
+  priority TEXT CHECK (priority IN ('low', 'medium', 'high')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
 
@@ -107,13 +190,13 @@ CREATE TABLE tasks (
 
 ```sql
 CREATE TABLE agent_sessions (
-  id UUID PRIMARY KEY,
-  project_id UUID NOT NULL,
-  user_id UUID NOT NULL,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   snapshot JSONB NOT NULL,
   summary TEXT,
-  created_at TIMESTAMPTZ,
-  updated_at TIMESTAMPTZ
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
 
@@ -129,12 +212,45 @@ RLS is enforced using `auth.uid()` to match the authenticated user's ID.
 
 ## Setup
 
-1. Create a Supabase project at https://supabase.com
-2. Set up authentication (email/password recommended for v0)
-3. Run the migration SQL from `migrations/001_init.sql` in the Supabase SQL editor
-4. Copy your project credentials to `.env.local` or your deployment environment
-5. Install dependencies: `pnpm install`
-6. Build the package: `pnpm build`
+### Initial Setup
+
+1. **Create a Supabase project** at https://supabase.com
+2. **Set up authentication** (email/password recommended)
+3. **Link your project** (optional, for remote migrations):
+   ```bash
+   cd packages/db
+   supabase link --project-ref your-project-ref
+   ```
+4. **Run initial migration:**
+   - For local: `pnpm db:reset`
+   - For remote: `pnpm db:migrate` (after linking)
+5. **Generate types:**
+   ```bash
+   pnpm db:generate-types
+   ```
+6. **Set environment variables** in `.env.local` or your deployment environment
+7. **Install dependencies:**
+   ```bash
+   pnpm install
+   ```
+8. **Build the package:**
+   ```bash
+   pnpm build
+   ```
+
+### Vercel Deployment
+
+Migrations run automatically via GitHub Actions when you push to `main` or `production` branches. The workflow:
+
+1. Detects changes to migration files
+2. Runs migrations against your remote Supabase project
+3. Generates updated types
+4. Warns if types need to be committed
+
+**Required GitHub Secrets:**
+- `SUPABASE_ACCESS_TOKEN` - Your Supabase access token
+- `SUPABASE_PROJECT_ID` - Your Supabase project ID (optional if linked)
+- `SUPABASE_DB_PASSWORD` - Database password (for local testing)
 
 ## Build
 
@@ -142,7 +258,7 @@ RLS is enforced using `auth.uid()` to match the authenticated user's ID.
 pnpm build
 ```
 
-Generates TypeScript declarations and JavaScript files in the `dist/` directory.
+Generates TypeScript declarations and JavaScript files.
 
 ## Type Checking
 
@@ -152,3 +268,33 @@ pnpm type-check
 
 Runs TypeScript compiler without emitting files.
 
+## Troubleshooting
+
+### "Could not find the table 'public.projects' in the schema cache"
+
+This error means migrations haven't been run on your Supabase database. Solutions:
+
+1. **For local development:**
+   ```bash
+   pnpm db:reset
+   ```
+
+2. **For remote/production:**
+   ```bash
+   pnpm db:migrate
+   ```
+   Or run migrations manually in the Supabase SQL editor.
+
+### Types are out of sync
+
+After schema changes, regenerate types:
+```bash
+pnpm db:generate-types
+```
+
+### Migration conflicts
+
+If you have migration conflicts:
+1. Check migration status: `pnpm db:status`
+2. Review migration history in Supabase dashboard
+3. Create a new migration to resolve conflicts
