@@ -5,8 +5,11 @@ Next.js web application for ProjectFlow - an AI-powered project management syste
 ## Features
 
 - **Multiple Authentication Options**:
+
   - Magic Link (passwordless) - Email-only authentication
+
   - Email/Password - Traditional authentication
+
 - **Dashboard**: View and manage projects and tasks (read-only v0)
 - **Responsive Design**: Mobile-friendly UI built with Tailwind CSS
 - **MCP HTTP Endpoint**: Programmatic access to all MCP tools via JWT authentication
@@ -34,6 +37,7 @@ pnpm dev
 ```
 
 This single command will:
+
 - ✅ Check prerequisites (pnpm, Docker)
 - ✅ Install all dependencies
 - ✅ Start local Supabase (if not running)
@@ -277,7 +281,8 @@ The setup guide generates a configuration like this (no tokens needed - OAuth ha
 }
 ```
 
-**Important**: 
+**Important**:
+
 - No authentication tokens are stored in the configuration file
 - OAuth authentication happens automatically when Cursor connects
 - If your Cursor settings file already contains an `mcpServers` object, merge the `projectflow` entry into it
@@ -294,23 +299,27 @@ After configuring Cursor and restarting it:
 ### Troubleshooting
 
 **OAuth authentication fails:**
+
 - Make sure you're logged into ProjectFlow in your browser
 - Check that popup blockers aren't preventing the OAuth window
 - Verify the API URL in the config matches your deployment URL
 - Check Cursor's developer console for MCP-related errors
 
 **Can't find Cursor settings file:**
+
 - Make sure Cursor is installed and you've opened it at least once
 - The `globalStorage` folder is created when Cursor first runs
 - Try creating the file manually if it doesn't exist
 
 **Connection test fails:**
+
 - Verify OAuth authentication completed successfully
 - Check that you've restarted Cursor after adding the configuration
 - Ensure the API URL in the config matches your deployment URL
 - Look for MCP errors in Cursor's developer console (Help > Toggle Developer Tools)
 
 **MCP tools not appearing in Cursor:**
+
 - Verify the JSON syntax is valid (no trailing commas, proper quotes)
 - Check that you've restarted Cursor completely (quit and reopen)
 - Ensure OAuth authentication completed - Cursor should have received tokens
@@ -356,11 +365,13 @@ ProjectFlow uses OAuth 2.1 for secure MCP authentication, following the same pat
 The setup UI uses Cursor's deep link protocol:
 
 **Deep Link Format:**
+
 ```
 cursor://anysphere.cursor-deeplink/mcp/install?name=projectflow&config=<base64-encoded-config>
 ```
 
 **How it works:**
+
 1. The setup UI generates a deep link with your MCP configuration (URL only, no tokens)
 2. Clicking "Connect to Cursor" opens Cursor via the deep link protocol
 3. Cursor automatically adds the MCP server configuration
@@ -463,6 +474,7 @@ Error response:
 List all available MCP tools. **No authentication required.**
 
 **Request:**
+
 ```json
 {
   "jsonrpc": "2.0",
@@ -473,6 +485,7 @@ List all available MCP tools. **No authentication required.**
 ```
 
 **Response:**
+
 ```json
 {
   "jsonrpc": "2.0",
@@ -495,6 +508,7 @@ List all available MCP tools. **No authentication required.**
 Call a specific tool. **Requires OAuth authentication.**
 
 **Request:**
+
 ```json
 {
   "jsonrpc": "2.0",
@@ -511,6 +525,7 @@ Call a specific tool. **Requires OAuth authentication.**
 ```
 
 **Response:**
+
 ```json
 {
   "jsonrpc": "2.0",
@@ -531,6 +546,7 @@ Call a specific tool. **Requires OAuth authentication.**
 Initialize the MCP server connection. **No authentication required.**
 
 **Request:**
+
 ```json
 {
   "jsonrpc": "2.0",
@@ -541,6 +557,7 @@ Initialize the MCP server connection. **No authentication required.**
 ```
 
 **Response:**
+
 ```json
 {
   "jsonrpc": "2.0",
@@ -563,6 +580,7 @@ Initialize the MCP server connection. **No authentication required.**
 Health check. **No authentication required.**
 
 **Request:**
+
 ```json
 {
   "jsonrpc": "2.0",
@@ -573,6 +591,7 @@ Health check. **No authentication required.**
 ```
 
 **Response:**
+
 ```json
 {
   "jsonrpc": "2.0",
@@ -586,6 +605,7 @@ Health check. **No authentication required.**
 The endpoint also supports a legacy REST format for backward compatibility:
 
 **Request:**
+
 ```json
 {
   "name": "tool_name",
@@ -597,6 +617,7 @@ The endpoint also supports a legacy REST format for backward compatibility:
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -617,11 +638,13 @@ All MCP tools (with `pm.*` prefix) are supported through the HTTP endpoint:
 All tools use the `pm.*` prefix. See the [MCP Server README](../mcp-server/README.md) for complete documentation.
 
 **Project Management:**
+
 - `pm.create_project` - Create a new project with rules
 - `pm.list_projects` - List all projects
 - `pm.get_context` - Get complete project context
 
 **Task Management:**
+
 - `pm.create_task` - Create a task with acceptance criteria, constraints, dependencies
 - `pm.list_tasks` - List tasks with filters
 - `pm.update_task` - Update task properties
@@ -631,11 +654,13 @@ All tools use the `pm.*` prefix. See the [MCP Server README](../mcp-server/READM
 - `pm.complete_task` - Complete a task (gates must pass)
 
 **Artifacts & Quality:**
+
 - `pm.append_artifact` - Append artifact to a task
 - `pm.evaluate_gates` - Evaluate quality gates
 - `pm.assert_in_scope` - Check if changeset is within scope
 
 **Checkpoints & Decisions:**
+
 - `pm.create_checkpoint` - Create resumable project snapshot
 - `pm.record_decision` - Record architectural decision
 
