@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { createBrowserClient } from '@/lib/supabaseClient';
 import { ProjectList } from '@/components/ProjectList';
 import { TaskList } from '@/components/TaskList';
 import { MCPSetup } from '@/components/MCPSetup';
@@ -37,7 +38,8 @@ export default function DashboardPage() {
     setIsLoadingProjects(true);
     setError(null);
     try {
-      const data = await listProjects(user.id);
+      const supabase = createBrowserClient();
+      const data = await listProjects(supabase);
       setProjects(data);
       if (data.length > 0 && !selectedProjectId) {
         setSelectedProjectId(data[0].id);
@@ -57,7 +59,8 @@ export default function DashboardPage() {
       setIsLoadingTasks(true);
       setError(null);
       try {
-        const data = await listTasks(user.id, projectId);
+        const supabase = createBrowserClient();
+        const data = await listTasks(supabase, projectId);
         setTasks(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load tasks');

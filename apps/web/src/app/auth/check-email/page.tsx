@@ -57,7 +57,23 @@ function CheckEmailContent() {
         });
 
         if (error) {
-          setError(error.message);
+          // Check for common configuration issues
+          const errorMsg = error.message.toLowerCase();
+          const callbackUrl = `${window.location.origin}/auth/callback`;
+          
+          if (errorMsg.includes('email') && (errorMsg.includes('send') || errorMsg.includes('confirmation') || errorMsg.includes('otp'))) {
+            setError(
+              `Error sending email: ${error.message}\n\n` +
+              `To fix this:\n` +
+              `1. Go to Supabase Dashboard → Authentication → Providers → Email\n` +
+              `2. Ensure "Email" provider is enabled\n` +
+              `3. For production: Configure SMTP in Settings → Auth → SMTP Settings\n` +
+              `4. Check that redirect URLs include: ${callbackUrl}\n` +
+              `   (Go to Authentication → URL Configuration → Redirect URLs)`
+            );
+          } else {
+            setError(error.message);
+          }
           return;
         }
       } else {
@@ -103,7 +119,7 @@ function CheckEmailContent() {
         <div className="mt-8 space-y-6">
           {error && (
             <div className="rounded-md bg-red-50 p-4">
-              <p className="text-sm text-red-700">{error}</p>
+              <p className="text-sm text-red-700 whitespace-pre-line">{error}</p>
             </div>
           )}
 

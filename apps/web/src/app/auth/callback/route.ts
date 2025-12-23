@@ -4,7 +4,7 @@ import { createServerClient } from '@/lib/supabaseClient';
 export async function GET(request: NextRequest) {
     const requestUrl = new URL(request.url);
     const code = requestUrl.searchParams.get('code');
-    
+
     // Check for redirect from query params first, then cookie (for OAuth flow)
     let next = requestUrl.searchParams.get('next') || requestUrl.searchParams.get('redirect');
     if (!next) {

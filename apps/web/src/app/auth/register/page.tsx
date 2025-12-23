@@ -20,19 +20,55 @@ export default function RegisterPage() {
   const handleMagicLinkRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    
+    // Validate email is provided
+    if (!email || !email.trim()) {
+      setError('Please enter your email address');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       // Supabase auto-creates account on first magic link click
       const { error } = await supabase.auth.signInWithOtp({
-        email,
+        email: email.trim(),
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
 
       if (error) {
-        setError(error.message);
+        // Check for common configuration issues
+        const errorMsg = error.message.toLowerCase();
+        const callbackUrl = `${window.location.origin}/auth/callback`;
+        
+        if (errorMsg.includes('email or phone must be set') || errorMsg.includes('email') && errorMsg.includes('phone') && errorMsg.includes('must')) {
+          setError('Please enter a valid email address');
+        } else if (errorMsg.includes('email signups disabled') || errorMsg.includes('provider')) {
+          setError(`Email authentication is not enabled. Please check your Supabase configuration. Original error: ${error.message}`);
+        } else if (errorMsg.includes('failed to fetch') || errorMsg.includes('fetch')) {
+          setError('Cannot reach Supabase. Check your internet connection and NEXT_PUBLIC_SUPABASE_URL environment variable.');
+        } else if (errorMsg.includes('email') && (errorMsg.includes('send') || errorMsg.includes('confirmation') || errorMsg.includes('otp'))) {
+          setError(
+            `Error sending email: ${error.message}\n\n` +
+            `To fix this:\n` +
+            `1. Go to Supabase Dashboard → Authentication → Providers → Email\n` +
+            `2. Ensure "Email" provider is enabled\n` +
+            `3. For production: Configure SMTP in Settings → Auth → SMTP Settings\n` +
+            `4. Check that redirect URLs include: ${callbackUrl}\n` +
+            `   (Go to Authentication → URL Configuration → Redirect URLs)`
+          );
+        } else if (errorMsg.includes('redirect') || errorMsg.includes('url')) {
+          setError(
+            `Redirect URL error: ${error.message}\n\n` +
+            `Add this URL to your Supabase redirect allowlist:\n` +
+            `${callbackUrl}\n\n` +
+            `Go to: Authentication → URL Configuration → Redirect URLs`
+          );
+        } else {
+          setError(error.message);
+        }
         return;
       }
 
@@ -68,7 +104,25 @@ export default function RegisterPage() {
       });
 
       if (error) {
-        setError(error.message);
+        // Check for common configuration issues
+        const errorMsg = error.message.toLowerCase();
+        
+        if (errorMsg.includes('email signups disabled') || errorMsg.includes('provider')) {
+          setError(`Email authentication is not enabled. Please check your Supabase configuration. Original error: ${error.message}`);
+        } else if (errorMsg.includes('failed to fetch') || errorMsg.includes('fetch')) {
+          setError('Cannot reach Supabase. Check your internet connection and NEXT_PUBLIC_SUPABASE_URL environment variable.');
+        } else if (errorMsg.includes('email') && (errorMsg.includes('send') || errorMsg.includes('confirmation'))) {
+          setError(
+            `Error sending confirmation email: ${error.message}\n\n` +
+            `To fix this:\n` +
+            `1. Go to Supabase Dashboard → Authentication → Providers → Email\n` +
+            `2. Ensure "Email" provider is enabled\n` +
+            `3. For production: Configure SMTP in Settings → Auth → SMTP Settings\n` +
+            `4. Or disable email confirmations in Authentication → Providers → Email → Confirm email: OFF`
+          );
+        } else {
+          setError(error.message);
+        }
         return;
       }
 
@@ -124,7 +178,7 @@ export default function RegisterPage() {
 
         {error && (
           <div className="rounded-md bg-red-50 p-4">
-            <p className="text-sm text-red-700">{error}</p>
+            <p className="text-sm text-red-700 whitespace-pre-line">{error}</p>
           </div>
         )}
 
@@ -142,7 +196,7 @@ export default function RegisterPage() {
                   type="email"
                   autoComplete="email"
                   required
-                  className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                  className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                   placeholder="Email address"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -177,7 +231,7 @@ export default function RegisterPage() {
                   type="email"
                   autoComplete="email"
                   required
-                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 bg-white rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                   placeholder="Email address"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -194,7 +248,7 @@ export default function RegisterPage() {
                   type="password"
                   autoComplete="new-password"
                   required
-                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 bg-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                   placeholder="Password (min 6 characters)"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -211,7 +265,7 @@ export default function RegisterPage() {
                   type="password"
                   autoComplete="new-password"
                   required
-                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 bg-white rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                   placeholder="Confirm password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}

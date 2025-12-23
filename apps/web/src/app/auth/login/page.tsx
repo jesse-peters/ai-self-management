@@ -39,6 +39,13 @@ function LoginContent() {
     e.preventDefault();
     setError(null);
     setSuccessMessage(null);
+    
+    // Validate email is provided
+    if (!email || !email.trim()) {
+      setError('Please enter your email address');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -49,7 +56,7 @@ function LoginContent() {
         : `${window.location.origin}/auth/callback`;
 
       const { error } = await supabase.auth.signInWithOtp({
-        email,
+        email: email.trim(),
         options: {
           emailRedirectTo: callbackUrl,
         },
@@ -57,10 +64,31 @@ function LoginContent() {
 
       if (error) {
         // Check for common configuration issues
-        if (error.message.includes('Email signups disabled') || error.message.includes('provider')) {
+        const errorMsg = error.message.toLowerCase();
+        
+        if (errorMsg.includes('email or phone must be set') || errorMsg.includes('email') && errorMsg.includes('phone') && errorMsg.includes('must')) {
+          setError('Please enter a valid email address');
+        } else if (errorMsg.includes('email signups disabled') || errorMsg.includes('provider')) {
           setError(`Email authentication is not enabled. Please check your Supabase configuration. Original error: ${error.message}`);
-        } else if (error.message.includes('Failed to fetch') || error.message.includes('fetch')) {
+        } else if (errorMsg.includes('failed to fetch') || errorMsg.includes('fetch')) {
           setError('Cannot reach Supabase. Check your internet connection and NEXT_PUBLIC_SUPABASE_URL environment variable.');
+        } else if (errorMsg.includes('email') && (errorMsg.includes('send') || errorMsg.includes('confirmation') || errorMsg.includes('otp'))) {
+          setError(
+            `Error sending email: ${error.message}\n\n` +
+            `To fix this:\n` +
+            `1. Go to Supabase Dashboard → Authentication → Providers → Email\n` +
+            `2. Ensure "Email" provider is enabled\n` +
+            `3. For production: Configure SMTP in Settings → Auth → SMTP Settings\n` +
+            `4. Check that redirect URLs include: ${callbackUrl}\n` +
+            `   (Go to Authentication → URL Configuration → Redirect URLs)`
+          );
+        } else if (errorMsg.includes('redirect') || errorMsg.includes('url')) {
+          setError(
+            `Redirect URL error: ${error.message}\n\n` +
+            `Add this URL to your Supabase redirect allowlist:\n` +
+            `${callbackUrl}\n\n` +
+            `Go to: Authentication → URL Configuration → Redirect URLs`
+          );
         } else {
           setError(error.message);
         }
@@ -168,7 +196,7 @@ function LoginContent() {
 
         {error && (
           <div className="rounded-md bg-red-50 p-4">
-            <p className="text-sm text-red-700">{error}</p>
+            <p className="text-sm text-red-700 whitespace-pre-line">{error}</p>
           </div>
         )}
 
@@ -185,7 +213,7 @@ function LoginContent() {
                   type="email"
                   autoComplete="email"
                   required
-                  className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                  className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                   placeholder="Email address"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -219,7 +247,7 @@ function LoginContent() {
                   type="email"
                   autoComplete="email"
                   required
-                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 bg-white rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                   placeholder="Email address"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -236,7 +264,7 @@ function LoginContent() {
                   type="password"
                   autoComplete="current-password"
                   required
-                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 bg-white rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                   placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

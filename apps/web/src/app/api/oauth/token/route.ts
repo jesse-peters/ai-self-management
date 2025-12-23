@@ -14,7 +14,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const startTime = Date.now();
   const url = request.nextUrl.toString();
   console.log(`[OAuth Token] POST ${url}`);
-  
+
   try {
     // Parse request body
     let body: Record<string, unknown>;

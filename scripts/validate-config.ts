@@ -10,8 +10,30 @@
  *   pnpm validate-config --ci         # Non-interactive CI mode
  */
 
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+
+// Load .env.local if it exists
+function loadEnvLocal(root: string): void {
+  const envPath = join(root, '.env.local');
+  if (existsSync(envPath)) {
+    const content = readFileSync(envPath, 'utf-8');
+    content.split('\n').forEach(line => {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith('#')) {
+        const [key, ...valueParts] = trimmed.split('=');
+        if (key) {
+          const value = valueParts.join('=').trim();
+          // Remove quotes if present
+          const cleanValue = value.replace(/^["']|["']$/g, '');
+          if (!process.env[key.trim()]) {
+            process.env[key.trim()] = cleanValue;
+          }
+        }
+      }
+    });
+  }
+}
 
 const GREEN = '\x1b[32m';
 const YELLOW = '\x1b[33m';
@@ -194,6 +216,12 @@ function validateVercel(): ValidationResult {
 async function main() {
   const root = process.cwd();
   const ciMode = process.argv.includes('--ci');
+  const isInGitHubActions = !!process.env.GITHUB_ACTIONS;
+
+  // Load .env.local before validation (unless actually in GitHub Actions)
+  if (!isInGitHubActions) {
+    loadEnvLocal(root);
+  }
 
   log(
     ciMode ? '🔍 Validating configuration (CI mode)' : '🔍 Validating configuration',
