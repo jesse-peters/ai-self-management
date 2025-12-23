@@ -31,7 +31,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install Supabase CLI
-        run: pnpm add -D supabase
+        run: pnpm add -D supabase -w
 
       - name: Run migrations
         env:
