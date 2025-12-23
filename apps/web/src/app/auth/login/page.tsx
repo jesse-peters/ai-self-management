@@ -1,13 +1,19 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@/lib/supabaseClient';
 
 type AuthMethod = 'magic-link' | 'password';
 
-export default function LoginPage() {
+const LoadingFallback = () => (
+  <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <p className="text-sm text-gray-500">Loading…</p>
+  </div>
+);
+
+function LoginContent() {
   const [authMethod, setAuthMethod] = useState<AuthMethod>('magic-link');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,7 +24,6 @@ export default function LoginPage() {
   const searchParams = useSearchParams();
   const supabase = createBrowserClient();
 
-  // Check for error or message from URL params
   useEffect(() => {
     const errorParam = searchParams.get('error');
     const messageParam = searchParams.get('message');
@@ -49,7 +54,6 @@ export default function LoginPage() {
         return;
       }
 
-      // Redirect to check-email page
       router.push(`/auth/check-email?email=${encodeURIComponent(email)}&type=magic-link`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -92,7 +96,6 @@ export default function LoginPage() {
           </h2>
         </div>
 
-        {/* Tab Selection */}
         <div className="flex rounded-lg border border-gray-200 bg-white p-1">
           <button
             type="button"
@@ -102,9 +105,7 @@ export default function LoginPage() {
               setSuccessMessage(null);
             }}
             className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-              authMethod === 'magic-link'
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-700 hover:bg-gray-100'
+              authMethod === 'magic-link' ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'
             }`}
           >
             Magic Link
@@ -117,9 +118,7 @@ export default function LoginPage() {
               setSuccessMessage(null);
             }}
             className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-              authMethod === 'password'
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-700 hover:bg-gray-100'
+              authMethod === 'password' ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'
             }`}
           >
             Email/Password
@@ -138,7 +137,6 @@ export default function LoginPage() {
           </div>
         )}
 
-        {/* Magic Link Form */}
         {authMethod === 'magic-link' && (
           <form className="mt-8 space-y-6" onSubmit={handleMagicLinkLogin}>
             <div className="rounded-md shadow-sm">
@@ -173,7 +171,6 @@ export default function LoginPage() {
           </form>
         )}
 
-        {/* Email/Password Form */}
         {authMethod === 'password' && (
           <form className="mt-8 space-y-6" onSubmit={handlePasswordLogin}>
             <div className="rounded-md shadow-sm -space-y-px">
@@ -235,6 +232,14 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <LoginContent />
+    </Suspense>
   );
 }
 

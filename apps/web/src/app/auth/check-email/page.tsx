@@ -1,12 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 
-export default function CheckEmailPage() {
+const LoadingFallback = () => (
+  <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <p className="text-sm text-gray-500">Loading…</p>
+  </div>
+);
+
+function CheckEmailContent() {
   const [email, setEmail] = useState('');
   const [emailType, setEmailType] = useState<'magic-link' | 'password'>('magic-link');
   const [isResending, setIsResending] = useState(false);
@@ -18,7 +24,6 @@ export default function CheckEmailPage() {
   const { isAuthenticated } = useAuth();
 
   useEffect(() => {
-    // Get email and type from URL params
     const emailParam = searchParams.get('email');
     const typeParam = searchParams.get('type') as 'magic-link' | 'password' | null;
 
@@ -30,7 +35,6 @@ export default function CheckEmailPage() {
       setEmailType(typeParam);
     }
 
-    // Auto-redirect if already authenticated
     if (isAuthenticated) {
       router.push('/dashboard');
     }
@@ -57,9 +61,6 @@ export default function CheckEmailPage() {
           return;
         }
       } else {
-        // For password registration, we'd need to use signUp again
-        // But typically you'd just resend the confirmation email
-        // For now, we'll show a message that they should check their email
         setResendSuccess(true);
         return;
       }
@@ -79,13 +80,13 @@ export default function CheckEmailPage() {
         description: `We've sent a magic link to ${email || 'your email address'}. Click the link in the email to sign in.`,
         resendLabel: 'Resend magic link',
       };
-    } else {
-      return {
-        title: 'Confirm your email',
-        description: `We've sent a confirmation email to ${email || 'your email address'}. Please check your inbox and click the confirmation link to complete your registration.`,
-        resendLabel: 'Resend confirmation email',
-      };
     }
+
+    return {
+      title: 'Confirm your email',
+      description: `We've sent a confirmation email to ${email || 'your email address'}. Please check your inbox and click the confirmation link to complete your registration.`,
+      resendLabel: 'Resend confirmation email',
+    };
   };
 
   const message = getMessage();
@@ -108,9 +109,7 @@ export default function CheckEmailPage() {
 
           {resendSuccess && (
             <div className="rounded-md bg-green-50 p-4">
-              <p className="text-sm text-green-700">
-                Email sent! Please check your inbox.
-              </p>
+              <p className="text-sm text-green-700">Email sent! Please check your inbox.</p>
             </div>
           )}
 
@@ -144,6 +143,14 @@ export default function CheckEmailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CheckEmailPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <CheckEmailContent />
+    </Suspense>
   );
 }
 
