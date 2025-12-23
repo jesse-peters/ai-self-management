@@ -21,7 +21,7 @@ Next.js web application for ProjectFlow - an AI-powered project management syste
 
 - Node.js 20+
 - pnpm
-- Supabase project with Email provider configured
+- Supabase project with Email provider configuredd
   - Enable "Email" provider in Authentication > Providers
   - Enable "Enable Email Confirmations" for magic links
   - Configure redirect URLs in Authentication > URL Configuration
