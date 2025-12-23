@@ -7,10 +7,9 @@
     "dev:web": "pnpm --filter web dev",
     "dev:mcp": "pnpm --filter mcp-server dev",
     "lint": "pnpm lint --recursive",
-    "build": "pnpm build --recursive"
+    "build": "pnpm -r build"
   },
   "engines": {
     "node": ">=20.0.0"
   }
 }
-

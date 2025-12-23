@@ -8,10 +8,12 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
-  CallToolRequest,
-  ListToolsRequest,
+  CallToolRequestSchema,
+  CallToolResult,
+  ListToolsRequestSchema,
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
+import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { tools } from './tools';
 import { routeToolCall } from './handlers';
 
@@ -29,33 +31,40 @@ const server = new Server(
 );
 
 // Register ListToolsRequest handler
-server.setRequestHandler(ListToolsRequest, async () => {
+server.setRequestHandler(ListToolsRequestSchema, async (_request, _extra) => {
   return {
     tools: tools as Tool[],
   };
 });
 
 // Register CallToolRequest handler
-server.setRequestHandler(CallToolRequest, async (request) => {
+server.setRequestHandler(CallToolRequestSchema, async (request, _extra): Promise<CallToolResult> => {
   const toolName = request.params.name;
   const toolParams = (request.params.arguments as Record<string, unknown>) || {};
 
   try {
     const result = await routeToolCall(toolName, toolParams);
-    return result;
+    // Ensure content is always present
+    return {
+      content: result.content || [
+        {
+          type: 'text' as const,
+          text: '',
+        },
+      ],
+    };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return {
       content: [
         {
-          type: 'text',
+          type: 'text' as const,
           text: JSON.stringify({
             code: 'INTERNAL_ERROR',
             message: errorMessage,
           }),
         },
       ],
-      isError: true,
     };
   }
 });

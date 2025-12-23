@@ -15,7 +15,7 @@ import {
 } from './toolImplementations';
 
 export interface ToolCallResult {
-  content?: Array<{ type: string; text: string }>;
+  content: Array<{ type: 'text'; text: string }>;
   isError?: boolean;
 }
 
@@ -31,7 +31,7 @@ export async function handleCreateProject(
     return {
       content: [
         {
-          type: 'text',
+          type: 'text' as const,
           text: JSON.stringify(project, null, 2),
         },
       ],
@@ -262,7 +262,7 @@ export async function routeToolCall(
       return {
         content: [
           {
-            type: 'text',
+            type: 'text' as const,
             text: JSON.stringify({
               code: 'UNKNOWN_TOOL',
               message: `Unknown tool: ${toolName}`,
