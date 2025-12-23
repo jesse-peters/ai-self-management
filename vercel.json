@@ -1,5 +1,5 @@
 {
-  "buildCommand": "pnpm build",
+  "buildCommand": "cd ../.. && pnpm --filter '@projectflow/db' build && pnpm --filter '@projectflow/core' build && cd apps/web && pnpm build",
   "outputDirectory": ".next",
   "installCommand": "cd ../.. && pnpm install"
 }
