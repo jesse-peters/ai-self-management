@@ -1,5 +1,4 @@
 {
-  "buildCommand": "cd ../.. && pnpm install && pnpm --filter '@projectflow/db' build && pnpm --filter '@projectflow/core' build && pnpm --filter '@projectflow/web' build",
+  "buildCommand": "cd ../.. && pnpm --filter '@projectflow/db' build && pnpm --filter '@projectflow/core' build && pnpm --filter '@projectflow/web' build",
   "installCommand": "cd ../.. && pnpm install"
 }
-
