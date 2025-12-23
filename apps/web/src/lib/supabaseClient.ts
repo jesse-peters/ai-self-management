@@ -4,7 +4,6 @@
  */
 
 import { createBrowserClient as createSupabaseBrowserClient, createServerClient as createSupabaseServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
 import type { Database } from '@projectflow/db';
 
 /**
@@ -63,6 +62,8 @@ export async function createServerClient() {
         throw new Error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable');
     }
 
+    // Dynamic import to avoid build-time evaluation
+    const { cookies } = await import('next/headers');
     const cookieStore = await cookies();
 
     return createSupabaseServerClient<Database>(supabaseUrl, supabaseAnonKey, {
