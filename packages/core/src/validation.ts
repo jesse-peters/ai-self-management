@@ -66,9 +66,9 @@ export function validateTaskData(data: {
   }
 
   if (data.status !== undefined && data.status !== null) {
-    const validStatuses = ['todo', 'in_progress', 'done'];
+    const validStatuses = ['todo', 'in_progress', 'blocked', 'done', 'cancelled'];
     if (!validStatuses.includes(String(data.status))) {
-      throw new ValidationError('Task status must be one of: todo, in_progress, done', 'status');
+      throw new ValidationError('Task status must be one of: todo, in_progress, blocked, done, cancelled', 'status');
     }
   }
 

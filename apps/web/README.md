@@ -23,7 +23,31 @@ Next.js web application for ProjectFlow - an AI-powered project management syste
   - Enable "Enable Email Confirmations" for magic links
   - Configure redirect URLs in Authentication > URL Configuration
 
-### Installation
+### Installation & Running Locally
+
+**One-Command Setup (Recommended):**
+
+From the project root, run:
+
+```bash
+pnpm dev
+```
+
+This single command will:
+- ✅ Check prerequisites (pnpm, Docker)
+- ✅ Install all dependencies
+- ✅ Start local Supabase (if not running)
+- ✅ Apply database migrations (including OAuth tables)
+- ✅ Generate TypeScript types
+- ✅ Build required packages
+- ✅ Create `.env.local` with local Supabase credentials
+- ✅ Start the development server
+
+The app will be available at `http://localhost:3000`
+
+**Manual Setup (Alternative):**
+
+If you prefer to set up manually:
 
 1. Copy environment variables:
 
@@ -37,28 +61,25 @@ cp .env.local.example .env.local
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+OAUTH_ALLOWED_CLIENT_IDS=mcp-client
 ```
 
-3. Install dependencies from project root:
+3. Install dependencies and run migrations:
 
 ```bash
-cd ../..
 pnpm install
+pnpm db:reset
+pnpm db:generate-types
+pnpm --filter @projectflow/db build
+pnpm --filter @projectflow/core build
 ```
 
-### Running Locally
-
-From the project root:
+4. Start the dev server:
 
 ```bash
-# Development server
-pnpm dev
-
-# Or run just the web app
-pnpm --filter @projectflow/web dev
+pnpm dev:web
 ```
-
-The app will be available at `http://localhost:3000`
 
 ## Authentication
 
@@ -143,21 +164,213 @@ To enable authentication, configure your Supabase project:
 
 ## Dashboard
 
-The dashboard displays:
+The dashboard provides a comprehensive view of your projects and tasks, with visibility into events, checkpoints, and decisions.
+
+### Main Features
 
 - **Projects List**: All projects you've created (left column)
 - **Tasks List**: Tasks for the selected project (right column)
+- **Event Timeline**: Chronological list of all events for the project
+- **Checkpoints**: Resumable project snapshots
+- **Decision Log**: Architectural and design decisions
+- **Task Details**: Enhanced task view with acceptance criteria, constraints, artifacts, and gate results
 - **Real-time Updates**: Project and task information auto-loads
 
 ### Viewing Tasks
 
 1. Select a project from the projects list
 2. Tasks for that project appear on the right
-3. View task details: title, description, status, and priority
+3. View task details: title, description, status, priority, acceptance criteria, constraints, dependencies, and artifacts
+
+### Event Timeline
+
+The event timeline shows all events for the selected project in chronological order:
+
+- **Event Types**: ProjectCreated, TaskCreated, TaskStarted, TaskCompleted, ArtifactProduced, GateEvaluated, CheckpointCreated, DecisionRecorded, ScopeAsserted
+- **Filtering**: Filter by event type
+- **Details**: Click on events to see full payload
+- **Grouping**: Events grouped by date
+
+### Checkpoints
+
+View project checkpoints to understand project state at specific points:
+
+- **Labels**: Human-readable checkpoint names
+- **Git References**: Commit, branch, or tag references
+- **Summaries**: What was accomplished
+- **Resume Instructions**: How to continue from this point
+- **Snapshots**: Full project state at checkpoint time
+
+### Decision Log
+
+Review architectural and design decisions:
+
+- **Title**: Decision name
+- **Options**: Options that were considered
+- **Choice**: Selected option
+- **Rationale**: Why this choice was made
+- **Timeline**: When the decision was made
+
+### Task Details
+
+Enhanced task view includes:
+
+- **Acceptance Criteria**: Checklist of requirements
+- **Constraints**: Scope limits (allowedPaths, forbiddenPaths, maxFiles)
+- **Dependencies**: Tasks that must complete first
+- **Artifacts**: All artifacts attached to the task
+- **Gate Results**: Quality gate evaluation results
+- **Events**: Event timeline for the specific task
+
+## MCP Setup for Cursor
+
+The dashboard includes a built-in setup guide to help you configure Cursor IDE to use ProjectFlow's MCP server with OAuth 2.1 authentication.
+
+### Accessing the Setup Guide
+
+1. Log into the dashboard
+2. Scroll to the "Set up MCP Integration" section (below the welcome message)
+3. Click to expand the setup instructions
+
+### One-Click Connect with OAuth
+
+The easiest way to set up MCP integration (similar to Vercel's MCP setup):
+
+1. **Click "Connect to Cursor"**: Opens Cursor automatically using a deep link protocol
+2. **OAuth Authentication**: Cursor will open a browser window for OAuth authentication
+   - If not logged in, you'll be redirected to the ProjectFlow login page
+   - After logging in, you'll authorize Cursor to access your projects
+   - Cursor receives OAuth tokens automatically
+3. **Automatic Token Refresh**: Tokens refresh automatically - no manual reconnection needed!
+
+The connection uses Cursor's deep link protocol (`cursor://`) to automatically configure the MCP server. Authentication happens via OAuth 2.1, providing secure, automatically-refreshing tokens.
+
+### Manual Setup (Alternative)
+
+If you prefer manual configuration:
+
+1. **Locate Cursor Settings File**: Platform-specific paths are shown in the guide
+2. **Copy Configuration**: Use the copy button to get the JSON configuration
+3. **Paste into Settings File**: Merge the configuration into your existing MCP settings
+4. **Restart Cursor**: Close and reopen Cursor
+5. **Test Connection**: Verify the setup works
+
+### Cursor Settings File Locations
+
+The setup guide automatically detects your platform and shows the correct path:
+
+- **macOS**: `~/Library/Application Support/Cursor/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
+- **Windows**: `%APPDATA%\Cursor\User\globalStorage\saoudrizwan.claude-dev\settings\cline_mcp_settings.json`
+- **Linux**: `~/.config/Cursor/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
+
+### Configuration Format
+
+The setup guide generates a configuration like this (no tokens needed - OAuth handles authentication):
+
+```json
+{
+  "mcpServers": {
+    "projectflow": {
+      "url": "https://your-app.vercel.app/api/mcp"
+    }
+  }
+}
+```
+
+**Important**: 
+- No authentication tokens are stored in the configuration file
+- OAuth authentication happens automatically when Cursor connects
+- If your Cursor settings file already contains an `mcpServers` object, merge the `projectflow` entry into it
+
+### Testing Your Connection
+
+After configuring Cursor and restarting it:
+
+1. Return to the ProjectFlow dashboard
+2. Expand the "Set up MCP Integration" section
+3. Click the "Test Connection" button
+4. You should see a green success message if everything is working
+
+### Troubleshooting
+
+**OAuth authentication fails:**
+- Make sure you're logged into ProjectFlow in your browser
+- Check that popup blockers aren't preventing the OAuth window
+- Verify the API URL in the config matches your deployment URL
+- Check Cursor's developer console for MCP-related errors
+
+**Can't find Cursor settings file:**
+- Make sure Cursor is installed and you've opened it at least once
+- The `globalStorage` folder is created when Cursor first runs
+- Try creating the file manually if it doesn't exist
+
+**Connection test fails:**
+- Verify OAuth authentication completed successfully
+- Check that you've restarted Cursor after adding the configuration
+- Ensure the API URL in the config matches your deployment URL
+- Look for MCP errors in Cursor's developer console (Help > Toggle Developer Tools)
+
+**MCP tools not appearing in Cursor:**
+- Verify the JSON syntax is valid (no trailing commas, proper quotes)
+- Check that you've restarted Cursor completely (quit and reopen)
+- Ensure OAuth authentication completed - Cursor should have received tokens
+- Look for MCP errors in Cursor's developer console (Help > Toggle Developer Tools)
+
+### Security Notes
+
+- **OAuth provides enhanced security**: No tokens are stored in configuration files
+- Tokens are managed securely by Cursor and refresh automatically
+- Tokens can be revoked at any time via the OAuth revocation endpoint
+- OAuth follows industry-standard security practices (PKCE, secure token storage)
+
+## OAuth 2.1 Authentication Flow
+
+ProjectFlow uses OAuth 2.1 for secure MCP authentication, following the same pattern as Vercel's MCP server.
+
+### OAuth Endpoints
+
+- **Authorization**: `/api/oauth/authorize` - Initiates OAuth flow
+- **Token Exchange**: `/api/oauth/token` - Exchanges authorization code for tokens
+- **Token Revocation**: `/api/oauth/revoke` - Revokes access or refresh tokens
+
+### OAuth Flow
+
+1. **MCP Client Connects**: Cursor connects to `/api/mcp` without authentication
+2. **401 Response**: Server returns 401 with OAuth challenge headers
+3. **Authorization Request**: Cursor redirects user to `/api/oauth/authorize`
+4. **User Authentication**: User logs in (if needed) and authorizes access
+5. **Authorization Code**: Server generates and returns authorization code
+6. **Token Exchange**: Cursor exchanges code for access + refresh tokens at `/api/oauth/token`
+7. **API Access**: Cursor uses access token for subsequent MCP requests
+8. **Token Refresh**: Before expiry, Cursor automatically refreshes using refresh token
+
+### Token Management
+
+- **Access Tokens**: Valid for 1 hour, automatically refreshed
+- **Refresh Tokens**: Valid for 30 days, used to obtain new access tokens
+- **Automatic Refresh**: Cursor handles token refresh transparently
+- **Token Revocation**: Tokens can be revoked at any time for security
+
+### Deep Link Configuration
+
+The setup UI uses Cursor's deep link protocol:
+
+**Deep Link Format:**
+```
+cursor://anysphere.cursor-deeplink/mcp/install?name=projectflow&config=<base64-encoded-config>
+```
+
+**How it works:**
+1. The setup UI generates a deep link with your MCP configuration (URL only, no tokens)
+2. Clicking "Connect to Cursor" opens Cursor via the deep link protocol
+3. Cursor automatically adds the MCP server configuration
+4. When Cursor first connects, OAuth authentication flow is triggered automatically
+
+**Manual Alternative**: If the deep link doesn't work, you can use the manual setup option to copy the configuration JSON (URL only) and place it in your Cursor settings file manually.
 
 ## MCP HTTP Endpoint
 
-The web app exposes an HTTP endpoint for calling MCP tools programmatically.
+The web app exposes an HTTP endpoint implementing the MCP (Model Context Protocol) JSON-RPC 2.0 protocol over HTTP.
 
 ### Endpoint
 
@@ -165,24 +378,214 @@ The web app exposes an HTTP endpoint for calling MCP tools programmatically.
 POST /api/mcp
 ```
 
+### Protocol
+
+The endpoint implements **JSON-RPC 2.0** protocol as specified by the MCP standard. All requests must be JSON-RPC 2.0 formatted.
+
 ### Authentication
 
-All requests must include a valid JWT token in the Authorization header:
+Most methods require a valid OAuth access token in the Authorization header:
 
 ```
-Authorization: Bearer <supabase-jwt-token>
+Authorization: Bearer <oauth-access-token>
 ```
 
-### Getting a Token
+**Note**: The `tools/list` method does not require authentication (public metadata).
 
-You can get a JWT token by:
+### Getting Tokens
 
-1. Logging in via the web interface (token stored in cookies)
-2. Using Supabase client library to authenticate
-3. Making a request to Supabase auth endpoints
+OAuth tokens are obtained through the OAuth 2.1 flow:
 
-### Request Format
+1. **For MCP Clients (like Cursor)**: OAuth flow is automatic when connecting
+2. **For Programmatic Access**: Use the OAuth endpoints:
+   - Request authorization: `GET /api/oauth/authorize?client_id=...&redirect_uri=...&response_type=code`
+   - Exchange code for tokens: `POST /api/oauth/token` with authorization code
+   - Refresh tokens: `POST /api/oauth/token` with refresh_token grant type
 
+### Token Refresh
+
+Access tokens expire after 1 hour. Use the refresh token to obtain a new access token:
+
+```bash
+curl -X POST https://your-app.vercel.app/api/oauth/token \
+  -H "Content-Type: application/json" \
+  -d '{
+    "grant_type": "refresh_token",
+    "refresh_token": "your-refresh-token",
+    "client_id": "mcp-client"
+  }'
+```
+
+### JSON-RPC Request Format
+
+All requests must follow JSON-RPC 2.0 format:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/list",
+  "params": {}
+}
+```
+
+### JSON-RPC Response Format
+
+Success response:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "tools": [...]
+  }
+}
+```
+
+Error response:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32600,
+    "message": "Invalid Request"
+  }
+}
+```
+
+### Available Methods
+
+#### `tools/list`
+
+List all available MCP tools. **No authentication required.**
+
+**Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/list",
+  "params": {}
+}
+```
+
+**Response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "tools": [
+      {
+        "name": "create_project",
+        "description": "Creates a new project for the user",
+        "inputSchema": {...}
+      },
+      ...
+    ]
+  }
+}
+```
+
+#### `tools/call`
+
+Call a specific tool. **Requires OAuth authentication.**
+
+**Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "create_project",
+    "arguments": {
+      "name": "My Project",
+      "description": "A test project"
+    }
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"id\":\"...\",\"name\":\"My Project\",...}"
+      }
+    ]
+  }
+}
+```
+
+#### `initialize`
+
+Initialize the MCP server connection. **No authentication required.**
+
+**Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "initialize",
+  "params": {}
+}
+```
+
+**Response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "result": {
+    "protocolVersion": "2024-11-05",
+    "capabilities": {
+      "tools": {}
+    },
+    "serverInfo": {
+      "name": "projectflow",
+      "version": "0.1.0"
+    }
+  }
+}
+```
+
+#### `ping`
+
+Health check. **No authentication required.**
+
+**Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "method": "ping",
+  "params": {}
+}
+```
+
+**Response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "result": {}
+}
+```
+
+### Legacy REST Format (Backward Compatibility)
+
+The endpoint also supports a legacy REST format for backward compatibility:
+
+**Request:**
 ```json
 {
   "name": "tool_name",
@@ -193,8 +596,7 @@ You can get a JWT token by:
 }
 ```
 
-### Response Format
-
+**Response:**
 ```json
 {
   "success": true,
@@ -204,189 +606,64 @@ You can get a JWT token by:
 }
 ```
 
-Or on error:
-
-```json
-{
-  "success": false,
-  "error": "Error message"
-}
-```
+**Note**: The legacy format is deprecated. Use JSON-RPC 2.0 format for new integrations.
 
 ## Available Tools
 
-All 7 MCP tools are supported through the HTTP endpoint:
+All MCP tools (with `pm.*` prefix) are supported through the HTTP endpoint:
 
-### create_project
+### Core Tools
 
-Create a new project.
+All tools use the `pm.*` prefix. See the [MCP Server README](../mcp-server/README.md) for complete documentation.
 
-**Parameters:**
+**Project Management:**
+- `pm.create_project` - Create a new project with rules
+- `pm.list_projects` - List all projects
+- `pm.get_context` - Get complete project context
 
-- `name` (string, required): Project name
-- `description` (string, optional): Project description
+**Task Management:**
+- `pm.create_task` - Create a task with acceptance criteria, constraints, dependencies
+- `pm.list_tasks` - List tasks with filters
+- `pm.update_task` - Update task properties
+- `pm.pick_next_task` - Pick and lock the next available task
+- `pm.start_task` - Start a locked task
+- `pm.block_task` - Block a task with reason
+- `pm.complete_task` - Complete a task (gates must pass)
 
-**Example:**
+**Artifacts & Quality:**
+- `pm.append_artifact` - Append artifact to a task
+- `pm.evaluate_gates` - Evaluate quality gates
+- `pm.assert_in_scope` - Check if changeset is within scope
+
+**Checkpoints & Decisions:**
+- `pm.create_checkpoint` - Create resumable project snapshot
+- `pm.record_decision` - Record architectural decision
+
+**Example (JSON-RPC):**
 
 ```bash
 curl -X POST http://localhost:3000/api/mcp \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "create_project",
-    "parameters": {
-      "name": "My Project",
-      "description": "A test project"
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "pm.create_project",
+      "arguments": {
+        "name": "My Project",
+        "description": "A test project",
+        "rules": {
+          "allowedPaths": ["src/"],
+          "defaultGates": ["has_tests"]
+        }
+      }
     }
   }'
 ```
 
-### list_projects
-
-List all projects for the authenticated user.
-
-**Parameters:** None
-
-**Example:**
-
-```bash
-curl -X POST http://localhost:3000/api/mcp \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "list_projects",
-    "parameters": {}
-  }'
-```
-
-### create_task
-
-Create a new task in a project.
-
-**Parameters:**
-
-- `projectId` (string, required): Project ID
-- `title` (string, required): Task title
-- `description` (string, optional): Task description
-- `status` (string, optional): 'todo', 'in_progress', or 'done' (default: 'todo')
-- `priority` (string, optional): 'low', 'medium', or 'high' (default: 'medium')
-
-**Example:**
-
-```bash
-curl -X POST http://localhost:3000/api/mcp \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "create_task",
-    "parameters": {
-      "projectId": "550e8400-e29b-41d4-a716-446655440000",
-      "title": "Implement feature",
-      "priority": "high"
-    }
-  }'
-```
-
-### list_tasks
-
-List tasks in a project with optional filtering.
-
-**Parameters:**
-
-- `projectId` (string, required): Project ID
-- `status` (string, optional): Filter by 'todo', 'in_progress', or 'done'
-- `priority` (string, optional): Filter by 'low', 'medium', or 'high'
-
-**Example:**
-
-```bash
-curl -X POST http://localhost:3000/api/mcp \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "list_tasks",
-    "parameters": {
-      "projectId": "550e8400-e29b-41d4-a716-446655440000",
-      "status": "in_progress"
-    }
-  }'
-```
-
-### update_task
-
-Update a task's properties.
-
-**Parameters:**
-
-- `taskId` (string, required): Task ID
-- `title` (string, optional): New title
-- `description` (string, optional): New description
-- `status` (string, optional): New status
-- `priority` (string, optional): New priority
-
-**Example:**
-
-```bash
-curl -X POST http://localhost:3000/api/mcp \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "update_task",
-    "parameters": {
-      "taskId": "550e8400-e29b-41d4-a716-446655440001",
-      "status": "done",
-      "priority": "low"
-    }
-  }'
-```
-
-### get_project_context
-
-Get complete project context including project, tasks, and latest session.
-
-**Parameters:**
-
-- `projectId` (string, required): Project ID
-
-**Example:**
-
-```bash
-curl -X POST http://localhost:3000/api/mcp \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "get_project_context",
-    "parameters": {
-      "projectId": "550e8400-e29b-41d4-a716-446655440000"
-    }
-  }'
-```
-
-### save_session_context
-
-Save an agent session snapshot.
-
-**Parameters:**
-
-- `projectId` (string, required): Project ID
-- `snapshot` (object, required): Session snapshot data
-- `summary` (string, optional): Session summary
-
-**Example:**
-
-```bash
-curl -X POST http://localhost:3000/api/mcp \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "save_session_context",
-    "parameters": {
-      "projectId": "550e8400-e29b-41d4-a716-446655440000",
-      "snapshot": {"state": "analyzing", "progress": 50},
-      "summary": "Analyzed 50% of requirements"
-    }
-  }'
-```
+**Note:** The legacy REST format is deprecated. Use JSON-RPC 2.0 format for all new integrations.
 
 ## Environment Variables
 
@@ -394,10 +671,13 @@ curl -X POST http://localhost:3000/api/mcp \
 
 - `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase project URL
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase anonymous key
+- `NEXT_PUBLIC_APP_URL`: Your app's public URL (optional, defaults to current origin) - Used for generating MCP configuration URLs
 
 ### Server-side Variables
 
-- `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role key (for JWT verification in API routes)
+- `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role key (for database operations)
+- `OAUTH_ALLOWED_CLIENT_IDS`: Comma-separated list of allowed OAuth client IDs (default: "mcp-client")
+- `CRON_SECRET`: Secret for protecting cron endpoints (optional, recommended for production)
 
 ## Project Structure
 
@@ -411,16 +691,30 @@ src/
 │   │   └── register/page.tsx     # Registration page
 │   ├── dashboard/page.tsx        # Protected dashboard
 │   ├── api/
-│   │   └── mcp/route.ts          # MCP HTTP endpoint
+│   │   ├── mcp/
+│   │   │   ├── route.ts          # MCP HTTP endpoint
+│   │   │   ├── connect/route.ts  # MCP connection config download
+│   │   │   └── test/route.ts     # MCP connection test endpoint
+│   │   ├── events/route.ts       # Events API endpoint
+│   │   ├── artifacts/route.ts    # Artifacts API endpoint
+│   │   ├── checkpoints/route.ts  # Checkpoints API endpoint
+│   │   └── decisions/route.ts    # Decisions API endpoint
 │   └── globals.css               # Global styles with Tailwind
 ├── lib/
-│   └── supabaseClient.ts         # Supabase client utilities
+│   ├── supabaseClient.ts         # Supabase client utilities
+│   └── clipboard.ts              # Clipboard utility for copying config
 ├── contexts/
 │   └── AuthContext.tsx           # Auth state management
 └── components/
     ├── Navigation.tsx            # Navigation bar
     ├── ProjectList.tsx           # Projects list component
-    └── TaskList.tsx              # Tasks list component
+    ├── TaskList.tsx              # Tasks list component
+    ├── MCPSetup.tsx              # MCP setup guide component
+    ├── EventTimeline.tsx         # Event timeline component
+    ├── ArtifactList.tsx          # Artifact list component
+    ├── CheckpointList.tsx        # Checkpoint list component
+    ├── TaskDetails.tsx          # Enhanced task details component
+    └── DecisionLog.tsx           # Decision log component
 ```
 
 ## Error Handling
@@ -490,10 +784,14 @@ The MCP endpoint will be available at: `https://your-vercel-app.vercel.app/api/m
 
 ## Security
 
-- JWT tokens are verified server-side for API requests
-- RLS (Row Level Security) policies enforce user data isolation at the database level
-- Service role key is never exposed to the client
-- All API routes are protected with authentication checks
+- **OAuth 2.1 Authentication**: Industry-standard OAuth flow with PKCE support
+- **Token Management**: Access tokens expire after 1 hour, refresh tokens after 30 days
+- **Automatic Token Refresh**: Tokens refresh automatically before expiration
+- **Token Revocation**: Tokens can be revoked at any time for security
+- **RLS (Row Level Security)**: Policies enforce user data isolation at the database level
+- **Service Role Key**: Never exposed to the client, used only for server-side operations
+- **All API Routes**: Protected with OAuth token validation
+- **Cron Protection**: Optional CRON_SECRET for protecting scheduled jobs
 
 ## Support
 

@@ -11,12 +11,28 @@ import type { Database } from './types';
  * @throws Error if required environment variables are missing
  */
 export function createServerClient() {
-  // Check for Next.js browser context first (for client components)
+  // Prioritize service role key for server-side operations (bypasses RLS)
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (supabaseUrl && supabaseServiceRoleKey) {
+    // Use service role client for server-side/MCP contexts (bypasses RLS)
+    return createClient<Database>(supabaseUrl, supabaseServiceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false,
+      },
+    });
+  }
+
+  // Fall back to anon key only if service role is not available
   const nextPublicUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const nextPublicAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (nextPublicUrl && nextPublicAnonKey) {
     // Use browser client for Next.js contexts (client components, etc.)
+    // Note: This respects RLS policies
     return createClient<Database>(nextPublicUrl, nextPublicAnonKey, {
       auth: {
         autoRefreshToken: true,
@@ -26,25 +42,11 @@ export function createServerClient() {
     });
   }
 
-  // Fall back to service role client for server-side/MCP contexts
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
   if (!supabaseUrl) {
     throw new Error('Missing SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL environment variable');
   }
 
-  if (!supabaseServiceRoleKey) {
-    throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY environment variable');
-  }
-
-  return createClient<Database>(supabaseUrl, supabaseServiceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-      detectSessionInUrl: false,
-    },
-  });
+  throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable');
 }
 
 /**

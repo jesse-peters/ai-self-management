@@ -1,12 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { ProjectList } from '@/components/ProjectList';
 import { TaskList } from '@/components/TaskList';
+import { MCPSetup } from '@/components/MCPSetup';
+import { EventTimeline } from '@/components/EventTimeline';
+import { CheckpointList } from '@/components/CheckpointList';
+import { DecisionLog } from '@/components/DecisionLog';
 import { listProjects, listTasks, type Project, type Task } from '@projectflow/core';
-import { createBrowserClient } from '@/lib/supabaseClient';
+
+type DashboardTab = 'tasks' | 'events' | 'checkpoints' | 'decisions';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -14,6 +19,7 @@ export default function DashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>();
+  const [activeTab, setActiveTab] = useState<DashboardTab>('tasks');
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,21 +31,7 @@ export default function DashboardPage() {
     }
   }, [user, authLoading, router]);
 
-  // Load projects when user is available
-  useEffect(() => {
-    if (user) {
-      loadProjects();
-    }
-  }, [user]);
-
-  // Load tasks when project is selected
-  useEffect(() => {
-    if (selectedProjectId && user) {
-      loadTasks(selectedProjectId);
-    }
-  }, [selectedProjectId, user]);
-
-  const loadProjects = async () => {
+  const loadProjects = useCallback(async () => {
     if (!user) return;
 
     setIsLoadingProjects(true);
@@ -56,23 +48,48 @@ export default function DashboardPage() {
     } finally {
       setIsLoadingProjects(false);
     }
-  };
+  }, [user, selectedProjectId]);
 
-  const loadTasks = async (projectId: string) => {
-    if (!user) return;
+  const loadTasks = useCallback(
+    async (projectId: string) => {
+      if (!user) return;
 
-    setIsLoadingTasks(true);
-    setError(null);
-    try {
-      const data = await listTasks(user.id, projectId);
-      setTasks(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load tasks');
-      console.error('Error loading tasks:', err);
-    } finally {
-      setIsLoadingTasks(false);
+      setIsLoadingTasks(true);
+      setError(null);
+      try {
+        const data = await listTasks(user.id, projectId);
+        setTasks(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load tasks');
+        console.error('Error loading tasks:', err);
+      } finally {
+        setIsLoadingTasks(false);
+      }
+    },
+    [user]
+  );
+
+  // Load projects when user is available
+  useEffect(() => {
+    if (user) {
+      loadProjects();
     }
-  };
+  }, [user, loadProjects]);
+
+  // Load tasks when project is selected
+  useEffect(() => {
+    if (selectedProjectId && user) {
+      loadTasks(selectedProjectId);
+    }
+  }, [selectedProjectId, user, loadTasks]);
+
+  // Get active/locked task
+  const activeTask = tasks.find((task) => {
+    const taskWithLock = task as Task & { locked_at?: string; locked_by?: string };
+    return (
+      taskWithLock.locked_at && (task.status === 'todo' || task.status === 'in_progress')
+    );
+  });
 
   if (authLoading) {
     return (
@@ -100,6 +117,29 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* MCP Setup Section */}
+        <MCPSetup />
+
+        {/* Active Task Banner */}
+        {selectedProjectId && activeTask && (
+          <div className="mb-6 rounded-lg border-2 border-blue-500 bg-blue-50 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-blue-900 mb-1">Active Task</h3>
+                <p className="text-sm text-blue-800">{activeTask.title}</p>
+                {(activeTask as Task & { locked_by?: string }).locked_by && (
+                  <p className="text-xs text-blue-600 mt-1">
+                    Locked by: {(activeTask as Task & { locked_by?: string }).locked_by}
+                  </p>
+                )}
+              </div>
+              <span className="text-xs font-semibold px-2 py-1 rounded bg-blue-100 text-blue-800">
+                {activeTask.status === 'in_progress' ? 'In Progress' : 'Locked'}
+              </span>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Projects Column */}
           <div>
@@ -112,18 +152,50 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* Tasks Column */}
+          {/* Main Content Column */}
           <div className="lg:col-span-2">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              {selectedProjectId
-                ? projects.find((p) => p.id === selectedProjectId)?.name || 'Tasks'
-                : 'Select a project'}
-            </h2>
             {selectedProjectId ? (
-              <TaskList tasks={tasks} isLoading={isLoadingTasks} />
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                  {projects.find((p) => p.id === selectedProjectId)?.name || 'Project'}
+                </h2>
+
+                {/* Tabs */}
+                <div className="mb-6 border-b border-gray-200">
+                  <nav className="-mb-px flex space-x-8">
+                    {(['tasks', 'events', 'checkpoints', 'decisions'] as DashboardTab[]).map(
+                      (tab) => (
+                        <button
+                          key={tab}
+                          onClick={() => setActiveTab(tab)}
+                          className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                            activeTab === tab
+                              ? 'border-blue-500 text-blue-600'
+                              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                          }`}
+                        >
+                          {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                        </button>
+                      )
+                    )}
+                  </nav>
+                </div>
+
+                {/* Tab Content */}
+                <div className="mt-6">
+                  {activeTab === 'tasks' && (
+                    <TaskList tasks={tasks} isLoading={isLoadingTasks} />
+                  )}
+                  {activeTab === 'events' && <EventTimeline projectId={selectedProjectId} />}
+                  {activeTab === 'checkpoints' && (
+                    <CheckpointList projectId={selectedProjectId} />
+                  )}
+                  {activeTab === 'decisions' && <DecisionLog projectId={selectedProjectId} />}
+                </div>
+              </div>
             ) : (
               <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
-                <p className="text-gray-500">Select a project to view its tasks</p>
+                <p className="text-gray-500">Select a project to view its details</p>
               </div>
             )}
           </div>

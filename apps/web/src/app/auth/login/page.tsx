@@ -42,10 +42,16 @@ function LoginContent() {
     setIsLoading(true);
 
     try {
+      // Get redirect parameter from URL (for OAuth flow)
+      const redirectParam = searchParams.get('redirect');
+      const callbackUrl = redirectParam 
+        ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectParam)}`
+        : `${window.location.origin}/auth/callback`;
+
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: callbackUrl,
         },
       });
 
@@ -79,7 +85,10 @@ function LoginContent() {
         return;
       }
 
-      router.push('/dashboard');
+      // Get redirect parameter from URL (for OAuth flow)
+      const redirectParam = searchParams.get('redirect');
+      const redirectTo = redirectParam || '/dashboard';
+      router.push(redirectTo);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {

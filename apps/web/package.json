@@ -10,8 +10,10 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.7.0",
     "@projectflow/core": "workspace:*",
     "@projectflow/db": "workspace:*",
+    "@projectflow/mcp-server": "workspace:*",
     "@supabase/ssr": "^0.4.0",
     "@supabase/supabase-js": "^2.39.0",
     "next": "16.1.1",

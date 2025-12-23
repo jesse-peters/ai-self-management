@@ -10,8 +10,16 @@ import {
   implementCreateTask,
   implementListTasks,
   implementUpdateTask,
-  implementGetProjectContext,
-  implementSaveSessionContext,
+  implementGetContext,
+  implementPickNextTask,
+  implementStartTask,
+  implementBlockTask,
+  implementAppendArtifact,
+  implementEvaluateGates,
+  implementCompleteTask,
+  implementCreateCheckpoint,
+  implementRecordDecision,
+  implementAssertInScope,
 } from './toolImplementations';
 
 export interface ToolCallResult {
@@ -175,14 +183,14 @@ export async function handleUpdateTask(
 }
 
 /**
- * Handles get_project_context tool calls
+ * Handles pm.get_context tool calls (renamed from get_project_context)
  */
-export async function handleGetProjectContext(
+export async function handleGetContext(
   params: Record<string, unknown>
 ): Promise<ToolCallResult> {
   try {
     const userId = resolveUserId(params);
-    const context = await implementGetProjectContext(userId, params);
+    const context = await implementGetContext(userId, params);
     return {
       content: [
         {
@@ -206,19 +214,267 @@ export async function handleGetProjectContext(
 }
 
 /**
- * Handles save_session_context tool calls
+ * Handles pm.pick_next_task tool calls
  */
-export async function handleSaveSessionContext(
+export async function handlePickNextTask(
   params: Record<string, unknown>
 ): Promise<ToolCallResult> {
   try {
     const userId = resolveUserId(params);
-    const session = await implementSaveSessionContext(userId, params);
+    const task = await implementPickNextTask(userId, params);
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify(session, null, 2),
+          text: JSON.stringify(task, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.start_task tool calls
+ */
+export async function handleStartTask(
+  params: Record<string, unknown>
+): Promise<ToolCallResult> {
+  try {
+    const userId = resolveUserId(params);
+    const task = await implementStartTask(userId, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(task, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.block_task tool calls
+ */
+export async function handleBlockTask(
+  params: Record<string, unknown>
+): Promise<ToolCallResult> {
+  try {
+    const userId = resolveUserId(params);
+    const task = await implementBlockTask(userId, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(task, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.append_artifact tool calls
+ */
+export async function handleAppendArtifact(
+  params: Record<string, unknown>
+): Promise<ToolCallResult> {
+  try {
+    const userId = resolveUserId(params);
+    const artifact = await implementAppendArtifact(userId, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(artifact, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.evaluate_gates tool calls
+ */
+export async function handleEvaluateGates(
+  params: Record<string, unknown>
+): Promise<ToolCallResult> {
+  try {
+    const userId = resolveUserId(params);
+    const results = await implementEvaluateGates(userId, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(results, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.complete_task tool calls
+ */
+export async function handleCompleteTask(
+  params: Record<string, unknown>
+): Promise<ToolCallResult> {
+  try {
+    const userId = resolveUserId(params);
+    const task = await implementCompleteTask(userId, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(task, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.create_checkpoint tool calls
+ */
+export async function handleCreateCheckpoint(
+  params: Record<string, unknown>
+): Promise<ToolCallResult> {
+  try {
+    const userId = resolveUserId(params);
+    const checkpoint = await implementCreateCheckpoint(userId, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(checkpoint, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.record_decision tool calls
+ */
+export async function handleRecordDecision(
+  params: Record<string, unknown>
+): Promise<ToolCallResult> {
+  try {
+    const userId = resolveUserId(params);
+    const decision = await implementRecordDecision(userId, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(decision, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.assert_in_scope tool calls
+ */
+export async function handleAssertInScope(
+  params: Record<string, unknown>
+): Promise<ToolCallResult> {
+  try {
+    const userId = resolveUserId(params);
+    const result = await implementAssertInScope(userId, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
         },
       ],
     };
@@ -238,26 +494,43 @@ export async function handleSaveSessionContext(
 
 /**
  * Routes tool calls to appropriate handlers
+ * All tools use the pm.* prefix
  */
 export async function routeToolCall(
   toolName: string,
   params: Record<string, unknown>
 ): Promise<ToolCallResult> {
   switch (toolName) {
-    case 'create_project':
+    case 'pm.create_project':
       return handleCreateProject(params);
-    case 'list_projects':
+    case 'pm.list_projects':
       return handleListProjects(params);
-    case 'create_task':
+    case 'pm.create_task':
       return handleCreateTask(params);
-    case 'list_tasks':
+    case 'pm.list_tasks':
       return handleListTasks(params);
-    case 'update_task':
+    case 'pm.update_task':
       return handleUpdateTask(params);
-    case 'get_project_context':
-      return handleGetProjectContext(params);
-    case 'save_session_context':
-      return handleSaveSessionContext(params);
+    case 'pm.get_context':
+      return handleGetContext(params);
+    case 'pm.pick_next_task':
+      return handlePickNextTask(params);
+    case 'pm.start_task':
+      return handleStartTask(params);
+    case 'pm.block_task':
+      return handleBlockTask(params);
+    case 'pm.append_artifact':
+      return handleAppendArtifact(params);
+    case 'pm.evaluate_gates':
+      return handleEvaluateGates(params);
+    case 'pm.complete_task':
+      return handleCompleteTask(params);
+    case 'pm.create_checkpoint':
+      return handleCreateCheckpoint(params);
+    case 'pm.record_decision':
+      return handleRecordDecision(params);
+    case 'pm.assert_in_scope':
+      return handleAssertInScope(params);
     default:
       return {
         content: [

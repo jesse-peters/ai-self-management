@@ -6,6 +6,7 @@ import { createServerClient } from '@projectflow/db';
 import type { Project, ProjectInsert } from '@projectflow/db';
 import { NotFoundError, mapSupabaseError } from '../errors';
 import { validateUUID, validateProjectData } from '../validation';
+import { emitEvent } from '../events';
 
 /**
  * Creates a new project for the given user
@@ -17,15 +18,21 @@ export async function createProject(userId: string, data: ProjectInsert): Promis
 
     const supabase = createServerClient();
 
+    // Build insert data with rules if provided
+    const insertData: any = {
+      user_id: userId,
+      name: data.name,
+      description: data.description || null,
+    };
+    
+    // Add rules if present in data
+    if ((data as any).rules !== undefined) {
+      insertData.rules = (data as any).rules;
+    }
+
     const { data: project, error } = await (supabase
       .from('projects')
-      .insert([
-        {
-          user_id: userId,
-          name: data.name,
-          description: data.description || null,
-        },
-      ] as any)
+      .insert([insertData] as any)
       .select()
       .single() as any);
 
@@ -36,6 +43,19 @@ export async function createProject(userId: string, data: ProjectInsert): Promis
     if (!project) {
       throw new NotFoundError('Failed to retrieve created project');
     }
+
+    // Emit ProjectCreated event
+    await emitEvent({
+      project_id: project.id,
+      user_id: userId,
+      event_type: 'ProjectCreated',
+      payload: {
+        project_id: project.id,
+        name: project.name,
+        description: project.description,
+        rules: (project as any).rules || {},
+      },
+    });
 
     return project as Project;
   } catch (error) {

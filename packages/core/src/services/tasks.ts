@@ -8,6 +8,7 @@ import { UnauthorizedError, NotFoundError, mapSupabaseError } from '../errors';
 import { validateUUID, validateTaskData } from '../validation';
 import type { TaskFilters } from '../types';
 import { getProject } from './projects';
+import { emitEvent } from '../events';
 
 /**
  * Creates a new task for a project
@@ -27,18 +28,30 @@ export async function createTask(
 
     const supabase = createServerClient();
 
+    // Build insert data with enhanced fields
+    const insertData: any = {
+      project_id: projectId,
+      user_id: userId,
+      title: data.title,
+      description: data.description || null,
+      status: data.status || 'todo',
+      priority: data.priority || null,
+    };
+    
+    // Add enhanced fields if present in data
+    if ((data as any).acceptance_criteria !== undefined) {
+      insertData.acceptance_criteria = (data as any).acceptance_criteria;
+    }
+    if ((data as any).constraints !== undefined) {
+      insertData.constraints = (data as any).constraints;
+    }
+    if ((data as any).dependencies !== undefined) {
+      insertData.dependencies = (data as any).dependencies;
+    }
+
     const { data: task, error } = await (supabase
       .from('tasks')
-      .insert([
-        {
-          project_id: projectId,
-          user_id: userId,
-          title: data.title,
-          description: data.description || null,
-          status: data.status || 'todo',
-          priority: data.priority || null,
-        },
-      ] as any)
+      .insert([insertData] as any)
       .select()
       .single() as any);
 
@@ -49,6 +62,24 @@ export async function createTask(
     if (!task) {
       throw new NotFoundError('Failed to retrieve created task');
     }
+
+    // Emit TaskCreated event
+    await emitEvent({
+      project_id: projectId,
+      task_id: task.id,
+      user_id: userId,
+      event_type: 'TaskCreated',
+      payload: {
+        task_id: task.id,
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        priority: task.priority || null,
+        acceptance_criteria: (task as any).acceptance_criteria || [],
+        constraints: (task as any).constraints || {},
+        dependencies: (task as any).dependencies || [],
+      },
+    });
 
     return task as Task;
   } catch (error) {
@@ -97,6 +128,40 @@ export async function listTasks(
     }
 
     return (tasks || []) as Task[];
+  } catch (error) {
+    if (error instanceof Error && error.name.includes('Error')) {
+      throw error;
+    }
+    throw mapSupabaseError(error);
+  }
+}
+
+/**
+ * Gets a single task by ID, verifying the user owns it
+ */
+export async function getTask(userId: string, taskId: string): Promise<Task> {
+  try {
+    validateUUID(userId, 'userId');
+    validateUUID(taskId, 'taskId');
+
+    const supabase = createServerClient();
+
+    const { data: task, error } = await (supabase as any)
+      .from('tasks')
+      .select('*')
+      .eq('id', taskId)
+      .eq('user_id', userId)
+      .single();
+
+    if (error) {
+      throw mapSupabaseError(error);
+    }
+
+    if (!task) {
+      throw new NotFoundError('Task not found');
+    }
+
+    return task as Task;
   } catch (error) {
     if (error instanceof Error && error.name.includes('Error')) {
       throw error;
@@ -157,6 +222,37 @@ export async function updateTask(
 
     if (!updatedTask) {
       throw new NotFoundError('Failed to retrieve updated task');
+    }
+
+    // Emit events for status changes
+    if (patch.status && patch.status !== existingTask.status) {
+      const eventType = patch.status === 'done' ? 'TaskCompleted' :
+                       patch.status === 'blocked' ? 'TaskBlocked' :
+                       patch.status === 'cancelled' ? 'TaskCancelled' :
+                       patch.status === 'in_progress' ? 'TaskStarted' : null;
+
+      if (eventType) {
+        await emitEvent({
+          project_id: existingTask.project_id,
+          task_id: taskId,
+          user_id: userId,
+          event_type: eventType,
+          payload: {
+            task_id: taskId,
+            ...(eventType === 'TaskStarted' ? {
+              locked_at: (updatedTask as any).locked_at || new Date().toISOString(),
+              locked_by: (updatedTask as any).locked_by || null,
+            } : {}),
+            ...(eventType === 'TaskBlocked' ? {
+              reason: 'Status updated to blocked',
+              needs_human: false,
+            } : {}),
+            ...(eventType === 'TaskCompleted' ? {
+              artifacts: [],
+            } : {}),
+          },
+        });
+      }
     }
 
     return updatedTask as Task;

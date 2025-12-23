@@ -11,11 +11,18 @@ import {
   CallToolRequestSchema,
   CallToolResult,
   ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { tools } from './tools';
 import { routeToolCall } from './handlers';
+import { listResources, readResource } from './resources';
+import { prompts, getPrompt } from './prompts';
+import { resolveUserId } from './auth';
 
 // Initialize MCP Server
 const server = new Server(
@@ -26,6 +33,8 @@ const server = new Server(
   {
     capabilities: {
       tools: {},
+      resources: {},
+      prompts: {},
     },
   }
 );
@@ -63,6 +72,91 @@ server.setRequestHandler(CallToolRequestSchema, async (request, _extra): Promise
             code: 'INTERNAL_ERROR',
             message: errorMessage,
           }),
+        },
+      ],
+    };
+  }
+});
+
+// Register ListResourcesRequest handler
+server.setRequestHandler(ListResourcesRequestSchema, async (request, _extra) => {
+  try {
+    // Extract userId from extra context if available, or use default
+    const userId = (request as any).userId || process.env.USER_ID || '';
+    if (!userId) {
+      // Return empty resources if no user context
+      return { resources: [] };
+    }
+    const resources = await listResources(userId);
+    return { resources };
+  } catch (error) {
+    console.error('Error listing resources:', error);
+    return { resources: [] };
+  }
+});
+
+// Register ReadResourceRequest handler
+server.setRequestHandler(ReadResourceRequestSchema, async (request, _extra) => {
+  try {
+    const uri = request.params.uri;
+    // Extract userId from extra context if available, or use default
+    const userId = (request as any).userId || process.env.USER_ID || '';
+    if (!userId) {
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: 'application/json',
+            text: JSON.stringify({ error: 'User authentication required' }),
+          },
+        ],
+      };
+    }
+    return await readResource(userId, uri);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      contents: [
+        {
+          uri: request.params.uri,
+          mimeType: 'application/json',
+          text: JSON.stringify({ error: errorMessage }),
+        },
+      ],
+    };
+  }
+});
+
+// Register ListPromptsRequest handler
+server.setRequestHandler(ListPromptsRequestSchema, async (_request, _extra) => {
+  return {
+    prompts: prompts,
+  };
+});
+
+// Register GetPromptRequest handler
+server.setRequestHandler(GetPromptRequestSchema, async (request, _extra) => {
+  try {
+    const promptName = request.params.name;
+    const args = (request.params.arguments as Record<string, unknown>) || {};
+    
+    // Extract userId from extra context if available, or use default
+    const userId = (request as any).userId || process.env.USER_ID || '';
+    if (!userId) {
+      throw new Error('User authentication required for prompts');
+    }
+    
+    return await getPrompt(userId, promptName, args);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `Error: ${errorMessage}`,
+          },
         },
       ],
     };
