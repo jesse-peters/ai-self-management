@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  transpilePackages: ['@projectflow/core', '@projectflow/db'],
 };
 
 export default nextConfig;
