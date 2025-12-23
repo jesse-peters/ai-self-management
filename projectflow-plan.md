@@ -474,17 +474,33 @@ Next.js app structure created with:
 
 - Created `apps/web/src/lib/supabaseClient.ts` with:
   - `createBrowserClient()` – for client-side operations using anon key
-  - `createServerClient()` – for server-side operations using service role key
+  - `createServerClient()` – for server-side operations using Supabase SSR
   - `createMiddlewareClient()` – for middleware operations
-- Implemented authentication pages:
-  - `/auth/login` – Email/password login with error handling and redirect
-  - `/auth/register` – Email/password signup with confirm password validation
+- Implemented multiple authentication methods using Supabase's built-in providers:
+  - **Magic Link (Passwordless)** – Primary authentication method
+    - Email-only sign in/sign up
+    - Uses `signInWithOtp()` from Supabase SDK
+    - Automatic account creation on first magic link click
+  - **Email/Password** – Traditional authentication method
+    - Email and password sign in/sign up
+    - Uses `signInWithPassword()` and `signUp()` from Supabase SDK
+- Authentication pages with tab interface:
+  - `/auth/login` – Tab selection between Magic Link and Email/Password
+  - `/auth/register` – Tab selection between Magic Link and Email/Password
+  - `/auth/check-email` – Confirmation page after sending magic link or registration email
+    - Shows email address
+    - Resend functionality
+    - Different messaging for magic link vs password confirmation
+  - `/auth/callback` – Handles magic link callback and token exchange
+    - Uses `exchangeCodeForSession()` from Supabase SDK
+    - Redirects to dashboard on success
 - Created React Context provider (`AuthContext.tsx`) for:
   - Session state management
   - User state tracking
   - Logout functionality
   - `useAuth()` and `useSession()` hooks
   - Auto-subscription to auth state changes
+  - Works seamlessly with both authentication methods
 - Root layout configured with AuthProvider wrapper and Navigation component
 
 ### 7.3 Dashboard and UI Components
@@ -570,6 +586,10 @@ Implemented `apps/web/src/app/api/mcp/route.ts`:
 
 - ✅ User can register with email/password
 - ✅ User can login with email/password
+- ✅ User can sign in/sign up with magic links (passwordless)
+- ✅ Magic link callback route works correctly
+- ✅ Check-email page with resend functionality
+- ✅ Tab interface for selecting authentication method
 - ✅ Dashboard displays user's projects
 - ✅ Dashboard displays tasks for selected project
 - ✅ MCP HTTP endpoint works with valid JWT token
@@ -583,6 +603,10 @@ Implemented `apps/web/src/app/api/mcp/route.ts`:
 - Used Next.js 16 with App Router for modern server/client paradigm
 - Implemented AuthContext for centralized auth state management
 - Supabase SSR package provides proper cookie handling for Next.js
+- All authentication uses Supabase's built-in SDK methods (no custom auth logic)
+- Magic Link authentication provides passwordless UX
+- Tab interface allows users to choose preferred authentication method
+- Callback route handles token exchange using Supabase's `exchangeCodeForSession()`
 - Tailwind CSS used for consistent, responsive styling
 - MCP endpoint reuses core service functions for consistency
 - All API errors properly mapped to HTTP status codes

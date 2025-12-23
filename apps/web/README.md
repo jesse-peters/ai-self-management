@@ -4,7 +4,9 @@ Next.js web application for ProjectFlow - an AI-powered project management syste
 
 ## Features
 
-- **User Authentication**: Email/password registration and login via Supabase
+- **Multiple Authentication Options**:
+  - Magic Link (passwordless) - Email-only authentication
+  - Email/Password - Traditional authentication
 - **Dashboard**: View and manage projects and tasks (read-only v0)
 - **Responsive Design**: Mobile-friendly UI built with Tailwind CSS
 - **MCP HTTP Endpoint**: Programmatic access to all MCP tools via JWT authentication
@@ -16,7 +18,10 @@ Next.js web application for ProjectFlow - an AI-powered project management syste
 
 - Node.js 20+
 - pnpm
-- Supabase project with email/password auth configured
+- Supabase project with Email provider configured
+  - Enable "Email" provider in Authentication > Providers
+  - Enable "Enable Email Confirmations" for magic links
+  - Configure redirect URLs in Authentication > URL Configuration
 
 ### Installation
 
@@ -57,22 +62,84 @@ The app will be available at `http://localhost:3000`
 
 ## Authentication
 
-### Register
+ProjectFlow supports two authentication methods using Supabase's built-in providers:
+
+### Magic Link (Passwordless) - Recommended
+
+The simplest authentication method - no password required!
+
+**Sign Up/Sign In:**
+
+1. Navigate to login or register page
+2. Select the "Magic Link" tab (default)
+3. Enter your email address
+4. Click "Send magic link" or "Create account"
+5. Check your email and click the magic link
+6. You'll be automatically logged in and redirected to the dashboard
+
+**Benefits:**
+
+- No password to remember
+- More secure (no password storage)
+- One-click authentication
+- Automatic account creation on first use
+
+### Email/Password (Traditional)
+
+For users who prefer traditional password-based authentication.
+
+**Sign Up:**
 
 1. Navigate to the registration page
-2. Enter email and password (min 6 characters)
-3. Confirm password
-4. Account is created and you're automatically logged in
+2. Select the "Email/Password" tab
+3. Enter email, password (min 6 characters), and confirm password
+4. Click "Sign up"
+5. Check your email for confirmation (if required by Supabase settings)
+6. You'll be redirected to the dashboard
 
-### Login
+**Sign In:**
 
 1. Navigate to login page
-2. Enter credentials
-3. You'll be redirected to the dashboard
+2. Select the "Email/Password" tab
+3. Enter your email and password
+4. Click "Sign in"
+5. You'll be redirected to the dashboard
+
+### Check Email Page
+
+After requesting a magic link or registering with email/password, you'll see a confirmation page:
+
+- Shows the email address where the link was sent
+- Provides "Resend email" functionality
+- Links back to the login page
+- Auto-redirects if you're already authenticated
 
 ### Logout
 
 Click "Sign out" in the navigation bar to logout and return to the login page.
+
+### Supabase Configuration
+
+To enable authentication, configure your Supabase project:
+
+1. **Enable Email Provider:**
+
+   - Go to Authentication > Providers > Email
+   - Enable the "Email" provider
+   - Enable "Enable Email Confirmations" for magic links
+
+2. **Configure Redirect URLs:**
+
+   - Go to Authentication > URL Configuration
+   - Set Site URL: `https://yourapp.vercel.app` (or your domain)
+   - Add Redirect URLs:
+     - `https://yourapp.vercel.app/auth/callback`
+     - `http://localhost:3000/auth/callback` (for local development)
+
+3. **Email Templates (Optional):**
+   - Customize magic link and confirmation email templates
+   - Go to Authentication > Email Templates
+   - Customize the "Magic Link" and "Confirm signup" templates
 
 ## Dashboard
 
