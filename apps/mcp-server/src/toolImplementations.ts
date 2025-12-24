@@ -56,26 +56,48 @@ export async function implementCreateProject(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<Project> {
+  const userId = await extractUserIdFromToken(accessToken);
   const client = createServiceRoleClient();
-  const projectData: any = {
-    name: params.name as string,
-    description: params.description as string | undefined,
-  };
-  
-  // Add rules if provided
-  if (params.rules) {
-    projectData.rules = params.rules;
+
+  const { data: project, error } = await (client
+    .from('projects')
+    .insert([{
+      user_id: userId,
+      name: params.name as string,
+      description: params.description as string | undefined || null,
+      rules: (params.rules as any) || {},
+    }] as any)
+    .select()
+    .single() as any);
+
+  if (error) {
+    throw new Error(`Failed to create project: ${error.message}`);
   }
-  
-  return createProject(client, projectData);
+
+  if (!project) {
+    throw new Error('Failed to retrieve created project');
+  }
+
+  return project as Project;
 }
 
 /**
  * Implements pm.list_projects tool
  */
 export async function implementListProjects(accessToken: string): Promise<Project[]> {
+  const userId = await extractUserIdFromToken(accessToken);
   const client = createServiceRoleClient();
-  return listProjects(client);
+  // Filter to projects belonging to the authenticated user
+  const { data: projects, error } = await client
+    .from('projects')
+    .select('*')
+    .eq('user_id', userId) as any;
+
+  if (error) {
+    throw new Error(`Failed to list projects: ${error.message}`);
+  }
+
+  return projects || [];
 }
 
 /**
@@ -92,7 +114,7 @@ export async function implementCreateTask(
     status: (params.status as 'todo' | 'in_progress' | 'done' | 'blocked' | 'cancelled' | undefined) || 'todo',
     priority: params.priority as 'low' | 'medium' | 'high' | undefined,
   };
-  
+
   // Add enhanced fields if provided
   if (params.acceptanceCriteria) {
     taskData.acceptance_criteria = params.acceptanceCriteria as string[];
@@ -103,7 +125,7 @@ export async function implementCreateTask(
   if (params.dependencies) {
     taskData.dependencies = params.dependencies as string[];
   }
-  
+
   return createTask(client, params.projectId as string, taskData);
 }
 
