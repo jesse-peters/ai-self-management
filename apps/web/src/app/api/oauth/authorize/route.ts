@@ -33,12 +33,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if user is authenticated
+    // Use getUser() to verify authentication securely (authenticates with Supabase Auth server)
     const supabase = await createServerClient();
-    const { data: { session }, error } = await supabase.auth.getSession();
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-    if (error || !session) {
+    if (userError || !user) {
         // #region agent log - H-B
-        fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:noSession', message: 'User not authenticated, redirecting to login', data: { hasError: !!error, errorMsg: error?.message }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'B' }) }).catch(() => { });
+        fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:noUser', message: 'User not authenticated, redirecting to login', data: { hasError: !!userError, errorMsg: userError?.message }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'B' }) }).catch(() => { });
         // #endregion
 
         // User not authenticated - redirect to login page with return URL
@@ -47,13 +48,28 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(loginUrl);
     }
 
+    // User is authenticated - get session tokens (safe after getUser() verification)
+    // We need the tokens to encode in the authorization code
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+    if (sessionError || !session) {
+        // #region agent log - H-B
+        fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:noSession', message: 'User authenticated but no session tokens available', data: { hasError: !!sessionError, errorMsg: sessionError?.message }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'B' }) }).catch(() => { });
+        // #endregion
+
+        // User authenticated but no session - redirect to login
+        const loginUrl = new URL('/auth/login', request.url);
+        loginUrl.searchParams.set('next', request.url);
+        return NextResponse.redirect(loginUrl);
+    }
+
     // User is authenticated - generate authorization code
     // Encode the session tokens in the code itself (no DB needed)
-    const authCode = `${session.user.id}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    const authCode = `${user.id}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
     // Store the code challenge, user info, and tokens in the code
     const codeData = {
-        userId: session.user.id,
+        userId: user.id,
         codeChallenge,
         codeChallengeMethod: codeChallengeMethod || 'S256',
         scope: scope || '',

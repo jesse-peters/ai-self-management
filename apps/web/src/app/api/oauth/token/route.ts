@@ -15,7 +15,24 @@ export async function POST(request: NextRequest) {
         fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/token/route.ts:rawBody', message: 'Raw POST body received', data: { bodyLength: rawText.length, bodyPreview: rawText.substring(0, 200), isEmpty: rawText.trim().length === 0 }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'A' }) }).catch(() => { });
         // #endregion
 
-        const body = rawText ? JSON.parse(rawText) : {};
+        // Parse request body based on Content-Type
+        // OAuth 2.0 token requests typically use application/x-www-form-urlencoded
+        let body: Record<string, string> = {};
+        if (rawText) {
+            const contentType = request.headers.get('content-type') || '';
+            if (contentType.includes('application/x-www-form-urlencoded')) {
+                // Parse form-encoded data
+                const params = new URLSearchParams(rawText);
+                body = Object.fromEntries(params.entries());
+            } else if (contentType.includes('application/json')) {
+                // Parse JSON (for backward compatibility)
+                body = JSON.parse(rawText);
+            } else {
+                // Default to form-encoded (OAuth 2.0 standard)
+                const params = new URLSearchParams(rawText);
+                body = Object.fromEntries(params.entries());
+            }
+        }
 
         // #region agent log - H-A, H-C
         fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/token/route.ts:POST', message: 'Token endpoint received request', data: { bodyKeys: Object.keys(body), grantType: body.grant_type, hasCode: !!body.code, redirectUri: body.redirect_uri, hasVerifier: !!body.code_verifier }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'A-C' }) }).catch(() => { });
