@@ -80,8 +80,8 @@ async function getOAuthStatus(token: string, logger: ReturnType<typeof createReq
         return {
             valid: true,
             userId: claims.sub,
-            clientId: claims.client_id,
-            scopes: claims.scope?.split(' ') || [],
+            email: claims.email || 'unknown',
+            role: claims.role,
             issuedAt: claims.iat ? new Date(claims.iat * 1000).toISOString() : 'unknown',
             expiresAt: claims.exp ? new Date(claims.exp * 1000).toISOString() : 'unknown',
             expiresIn: expiresIn !== null ? `${Math.floor(expiresIn / 60)} minutes` : 'unknown',

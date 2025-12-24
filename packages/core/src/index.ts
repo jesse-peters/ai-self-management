@@ -66,27 +66,13 @@ export {
   recordDecision,
   listDecisions,
   getDecision,
-  // OAuth services
-  createOAuthToken,
-  validateAccessToken,
-  refreshAccessToken,
-  revokeToken,
-  revokeRefreshToken,
-  cleanupExpiredTokens,
-  getTokenByAccessToken,
-  generateAuthorizationCode,
-  verifyPKCE,
 } from './services';
 
 // Export task lifecycle types
 export type { TaskPickingStrategy } from './services';
 
-// Export OAuth types
-export type { OAuthToken, OAuthTokenInsert } from './services/oauth';
-
 // Export JWT types and functions
 export {
-  signAccessToken,
   verifyAccessToken,
   type MCPTokenClaims,
 } from './services/jwt';

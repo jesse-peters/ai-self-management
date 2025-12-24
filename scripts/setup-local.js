@@ -203,9 +203,6 @@ SUPABASE_SERVICE_ROLE_KEY=${
 # App URL
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 
-# OAuth (optional)
-OAUTH_ALLOWED_CLIENT_IDS=mcp-client
-
 # Cron (optional for local dev)
 CRON_SECRET=local-dev-secret
 `;

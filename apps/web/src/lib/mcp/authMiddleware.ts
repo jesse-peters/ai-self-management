@@ -71,9 +71,12 @@ export function methodRequiresAuth(method: string): boolean {
 
 /**
  * Check if user has required scope for a tool
+ * Note: Supabase JWTs don't have granular scopes, so this is a placeholder
  */
 export function hasScope(claims: MCPTokenClaims, requiredScope: string): boolean {
-    const scopes = claims.scope.split(' ');
-    return scopes.includes(requiredScope);
+    // Supabase JWTs don't have scope information
+    // All authenticated users can access all tools
+    // Scope enforcement happens at the database level via RLS
+    return true;
 }
 

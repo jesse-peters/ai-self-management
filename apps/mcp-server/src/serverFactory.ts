@@ -15,7 +15,6 @@ import {
     Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import { signAccessToken } from '@projectflow/core';
 import { tools } from './tools';
 import { routeToolCall } from './handlers';
 import { listResources, readResource } from './resources';
@@ -60,25 +59,13 @@ export function createMCPServer(authProvider?: AuthContextProvider): Server {
         const toolParams = (request.params.arguments as Record<string, unknown>) || {};
 
         try {
-            // For stdio transport, create a temporary access token
-            // Get userId from auth provider or environment
-            const userId = authProvider ? authProvider(extra) : process.env.MCP_USER_ID;
+            // Get access token from request context (passed by auth middleware)
+            // MCP clients must provide a Supabase-issued JWT token
+            const accessToken = (extra as any)?.accessToken || process.env.MCP_ACCESS_TOKEN;
 
-            if (!userId) {
-                throw new Error('User ID not provided');
+            if (!accessToken) {
+                throw new Error('Access token not provided');
             }
-
-            // Create a temporary JWT token for the user
-            // This token will be used by tool implementations to create OAuth-scoped clients
-            const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-            const audience = `${appUrl}/api/mcp`;
-            const accessToken = await signAccessToken(
-                userId,
-                'mcp-cli',
-                ['projects:read', 'projects:write', 'tasks:read', 'tasks:write'],
-                audience,
-                3600
-            );
 
             const result = await routeToolCall(toolName, toolParams, accessToken);
             // Ensure content is always present

@@ -19,7 +19,6 @@ import {
   createCheckpoint,
   recordDecision,
   assertInScope,
-  verifyAccessToken,
 } from '@projectflow/core';
 import type {
   Project,
@@ -36,16 +35,21 @@ import type {
 import { createServiceRoleClient } from '@projectflow/db';
 
 /**
- * Extracts user ID from an OAuth access token
+ * Gets user ID from a Supabase auth token
+ * Uses Supabase's built-in auth.getUser() instead of custom JWT verification
  */
-async function extractUserIdFromToken(accessToken: string): Promise<string> {
+async function getUserFromToken(accessToken: string): Promise<string> {
   try {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    const audience = `${appUrl}/api/mcp`;
-    const claims = await verifyAccessToken(accessToken, audience);
-    return claims.sub;
+    const supabase = createServiceRoleClient();
+    const { data: { user }, error } = await supabase.auth.getUser(accessToken);
+
+    if (error || !user?.id) {
+      throw new Error(error?.message || 'User not found');
+    }
+
+    return user.id;
   } catch (error) {
-    throw new Error(`Failed to verify access token: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(`Failed to get user from token: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
@@ -56,7 +60,7 @@ export async function implementCreateProject(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<Project> {
-  const userId = await extractUserIdFromToken(accessToken);
+  const userId = await getUserFromToken(accessToken);
   const client = createServiceRoleClient();
 
   const { data: project, error } = await (client
@@ -85,7 +89,7 @@ export async function implementCreateProject(
  * Implements pm.list_projects tool
  */
 export async function implementListProjects(accessToken: string): Promise<Project[]> {
-  const userId = await extractUserIdFromToken(accessToken);
+  const userId = await getUserFromToken(accessToken);
   const client = createServiceRoleClient();
   // Filter to projects belonging to the authenticated user
   const { data: projects, error } = await client
@@ -261,7 +265,7 @@ export async function implementCreateCheckpoint(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<Checkpoint> {
-  const userId = await extractUserIdFromToken(accessToken);
+  const userId = await getUserFromToken(accessToken);
   return createCheckpoint(userId, params.projectId as string, {
     label: params.label as string,
     repoRef: params.repoRef as string | undefined,
@@ -277,7 +281,7 @@ export async function implementRecordDecision(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<Decision> {
-  const userId = await extractUserIdFromToken(accessToken);
+  const userId = await getUserFromToken(accessToken);
   return recordDecision(userId, params.projectId as string, {
     title: params.title as string,
     options: params.options as any[],
@@ -293,7 +297,7 @@ export async function implementAssertInScope(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<ScopeResult> {
-  const userId = await extractUserIdFromToken(accessToken);
+  const userId = await getUserFromToken(accessToken);
   const changeset = params.changesetManifest as ChangesetManifest;
   return assertInScope(userId, params.taskId as string, changeset);
 }

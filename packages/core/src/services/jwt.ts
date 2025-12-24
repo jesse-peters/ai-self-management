@@ -24,48 +24,18 @@ function getIssuer(): string {
 }
 
 export interface MCPTokenClaims {
-  sub: string;      // User ID (required for auth.uid())
-  role: string;     // 'authenticated' (required for Supabase)
+  sub: string;      // User ID
+  role: string;     // 'authenticated'
   aud: string;      // Audience (resource server URL)
-  scope: string;    // MCP scopes
-  client_id: string;
-  exp?: number;     // Expiration time (Unix timestamp)
-  iat?: number;     // Issued at time (Unix timestamp)
-}
-
-/**
- * Signs an access token with Supabase's JWT secret
- * This makes auth.uid() work automatically in RLS policies
- */
-export async function signAccessToken(
-  userId: string,
-  clientId: string,
-  scopes: string[],
-  audience: string,
-  expiresInSeconds: number = 3600
-): Promise<string> {
-  const JWT_SECRET = getJWTSecret();
-  const ISSUER = getIssuer();
-  
-  const secret = new TextEncoder().encode(JWT_SECRET);
-  
-  return await new jose.SignJWT({
-    sub: userId,
-    role: 'authenticated',  // Required for Supabase RLS
-    aud: audience,
-    scope: scopes.join(' '),
-    client_id: clientId,
-  })
-    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
-    .setIssuer(ISSUER)
-    .setIssuedAt()
-    .setExpirationTime(`${expiresInSeconds}s`)
-    .sign(secret);
+  email?: string;   // Email address
+  exp: number;      // Expiration time (Unix timestamp)
+  iat: number;      // Issued at time (Unix timestamp)
 }
 
 /**
  * Verifies an access token and returns its claims
  * Validates signature, expiry, and audience
+ * Tokens are now issued by Supabase Auth, not signed locally
  */
 export async function verifyAccessToken(
   token: string,
@@ -88,10 +58,9 @@ export async function verifyAccessToken(
       sub: payload.sub as string,
       role: payload.role as string,
       aud: payload.aud as string,
-      scope: (payload.scope as string) || '',
-      client_id: (payload.client_id as string) || '',
-      exp: payload.exp as number | undefined,
-      iat: payload.iat as number | undefined,
+      email: (payload.email as string) || undefined,
+      exp: payload.exp as number,
+      iat: payload.iat as number,
     };
   } catch (error) {
     // Re-throw with more context
@@ -101,4 +70,5 @@ export async function verifyAccessToken(
     throw error;
   }
 }
+
 
