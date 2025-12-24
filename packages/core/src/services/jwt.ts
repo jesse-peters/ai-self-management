@@ -5,8 +5,23 @@
 
 import * as jose from 'jose';
 
-const JWT_SECRET = process.env.SUPABASE_JWT_SECRET!;
-const ISSUER = process.env.NEXT_PUBLIC_APP_URL!;
+// Helper functions to read environment variables dynamically
+// (not at module import time, but at function call time)
+function getJWTSecret(): string {
+  const secret = process.env.SUPABASE_JWT_SECRET;
+  if (!secret) {
+    throw new Error('SUPABASE_JWT_SECRET environment variable is required');
+  }
+  return secret;
+}
+
+function getIssuer(): string {
+  const issuer = process.env.NEXT_PUBLIC_APP_URL;
+  if (!issuer) {
+    throw new Error('NEXT_PUBLIC_APP_URL environment variable is required');
+  }
+  return issuer;
+}
 
 export interface MCPTokenClaims {
   sub: string;      // User ID (required for auth.uid())
@@ -29,13 +44,8 @@ export async function signAccessToken(
   audience: string,
   expiresInSeconds: number = 3600
 ): Promise<string> {
-  if (!JWT_SECRET) {
-    throw new Error('SUPABASE_JWT_SECRET environment variable is required');
-  }
-  
-  if (!ISSUER) {
-    throw new Error('NEXT_PUBLIC_APP_URL environment variable is required');
-  }
+  const JWT_SECRET = getJWTSecret();
+  const ISSUER = getIssuer();
   
   const secret = new TextEncoder().encode(JWT_SECRET);
   
@@ -61,28 +71,34 @@ export async function verifyAccessToken(
   token: string,
   expectedAudience: string
 ): Promise<MCPTokenClaims> {
-  if (!JWT_SECRET) {
-    throw new Error('SUPABASE_JWT_SECRET environment variable is required');
-  }
+  const JWT_SECRET = getJWTSecret();
   
   const secret = new TextEncoder().encode(JWT_SECRET);
   
-  const { payload } = await jose.jwtVerify(token, secret, {
-    audience: expectedAudience,
-  });
-  
-  if (!payload.sub || !payload.role) {
-    throw new Error('Invalid token claims: missing sub or role');
+  try {
+    const { payload } = await jose.jwtVerify(token, secret, {
+      audience: expectedAudience,
+    });
+    
+    if (!payload.sub || !payload.role) {
+      throw new Error('Invalid token claims: missing sub or role');
+    }
+    
+    return {
+      sub: payload.sub as string,
+      role: payload.role as string,
+      aud: payload.aud as string,
+      scope: (payload.scope as string) || '',
+      client_id: (payload.client_id as string) || '',
+      exp: payload.exp as number | undefined,
+      iat: payload.iat as number | undefined,
+    };
+  } catch (error) {
+    // Re-throw with more context
+    if (error instanceof Error) {
+      throw new Error(`JWT verification failed: ${error.message}`);
+    }
+    throw error;
   }
-  
-  return {
-    sub: payload.sub as string,
-    role: payload.role as string,
-    aud: payload.aud as string,
-    scope: (payload.scope as string) || '',
-    client_id: (payload.client_id as string) || '',
-    exp: payload.exp as number | undefined,
-    iat: payload.iat as number | undefined,
-  };
 }
 

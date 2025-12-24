@@ -70,11 +70,13 @@ export function createMCPServer(authProvider?: AuthContextProvider): Server {
 
             // Create a temporary JWT token for the user
             // This token will be used by tool implementations to create OAuth-scoped clients
+            const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+            const audience = `${appUrl}/api/mcp`;
             const accessToken = await signAccessToken(
                 userId,
                 'mcp-cli',
                 ['projects:read', 'projects:write', 'tasks:read', 'tasks:write'],
-                process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+                audience,
                 3600
             );
 

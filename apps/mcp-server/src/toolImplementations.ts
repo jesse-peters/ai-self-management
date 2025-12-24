@@ -33,17 +33,16 @@ import type {
   TaskPickingStrategy,
   ChangesetManifest,
 } from '@projectflow/core';
-import { createOAuthScopedClient } from '@projectflow/db';
+import { createServiceRoleClient } from '@projectflow/db';
 
 /**
  * Extracts user ID from an OAuth access token
  */
 async function extractUserIdFromToken(accessToken: string): Promise<string> {
   try {
-    const claims = await verifyAccessToken(
-      accessToken,
-      process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    );
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const audience = `${appUrl}/api/mcp`;
+    const claims = await verifyAccessToken(accessToken, audience);
     return claims.sub;
   } catch (error) {
     throw new Error(`Failed to verify access token: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -57,7 +56,7 @@ export async function implementCreateProject(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<Project> {
-  const client = createOAuthScopedClient(accessToken);
+  const client = createServiceRoleClient();
   const projectData: any = {
     name: params.name as string,
     description: params.description as string | undefined,
@@ -75,7 +74,7 @@ export async function implementCreateProject(
  * Implements pm.list_projects tool
  */
 export async function implementListProjects(accessToken: string): Promise<Project[]> {
-  const client = createOAuthScopedClient(accessToken);
+  const client = createServiceRoleClient();
   return listProjects(client);
 }
 
@@ -86,7 +85,7 @@ export async function implementCreateTask(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<Task> {
-  const client = createOAuthScopedClient(accessToken);
+  const client = createServiceRoleClient();
   const taskData: any = {
     title: params.title as string,
     description: params.description as string | undefined,
@@ -115,7 +114,7 @@ export async function implementListTasks(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<Task[]> {
-  const client = createOAuthScopedClient(accessToken);
+  const client = createServiceRoleClient();
   return listTasks(client, params.projectId as string, {
     status: params.status as 'todo' | 'in_progress' | 'done' | 'blocked' | 'cancelled' | undefined,
     priority: params.priority as 'low' | 'medium' | 'high' | undefined,
@@ -129,7 +128,7 @@ export async function implementUpdateTask(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<Task> {
-  const client = createOAuthScopedClient(accessToken);
+  const client = createServiceRoleClient();
   return updateTask(client, params.taskId as string, {
     title: params.title as string | undefined,
     description: params.description as string | undefined,
@@ -145,7 +144,7 @@ export async function implementGetContext(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<ProjectContext> {
-  const client = createOAuthScopedClient(accessToken);
+  const client = createServiceRoleClient();
   return getProjectContext(client, params.projectId as string);
 }
 
@@ -156,7 +155,7 @@ export async function implementPickNextTask(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<Task | null> {
-  const client = createOAuthScopedClient(accessToken);
+  const client = createServiceRoleClient();
   return pickNextTask(
     client,
     params.projectId as string,
@@ -172,7 +171,7 @@ export async function implementStartTask(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<Task> {
-  const client = createOAuthScopedClient(accessToken);
+  const client = createServiceRoleClient();
   return startTask(client, params.taskId as string);
 }
 
@@ -183,7 +182,7 @@ export async function implementBlockTask(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<Task> {
-  const client = createOAuthScopedClient(accessToken);
+  const client = createServiceRoleClient();
   return blockTask(
     client,
     params.taskId as string,
@@ -199,7 +198,7 @@ export async function implementAppendArtifact(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<Artifact> {
-  const client = createOAuthScopedClient(accessToken);
+  const client = createServiceRoleClient();
   return appendArtifact(client, params.taskId as string, {
     type: params.type as 'diff' | 'pr' | 'test_report' | 'document' | 'other',
     ref: params.ref as string,
@@ -214,7 +213,7 @@ export async function implementEvaluateGates(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<GateResult[]> {
-  const client = createOAuthScopedClient(accessToken);
+  const client = createServiceRoleClient();
   return evaluateGates(client, params.taskId as string);
 }
 
@@ -225,7 +224,7 @@ export async function implementCompleteTask(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<Task> {
-  const client = createOAuthScopedClient(accessToken);
+  const client = createServiceRoleClient();
   return completeTask(
     client,
     params.taskId as string,
