@@ -32,22 +32,27 @@ import type {
   TaskPickingStrategy,
   ChangesetManifest,
 } from '@projectflow/core';
-import { createServiceRoleClient } from '@projectflow/db';
+import { createServiceRoleClient, createOAuthScopedClient } from '@projectflow/db';
+import { verifyAccessToken } from '@projectflow/core';
 
 /**
  * Gets user ID from a Supabase auth token
- * Uses Supabase's built-in auth.getUser() instead of custom JWT verification
+ * Extracts user ID directly from verified token claims
  */
 async function getUserFromToken(accessToken: string): Promise<string> {
   try {
-    const supabase = createServiceRoleClient();
-    const { data: { user }, error } = await supabase.auth.getUser(accessToken);
+    // Get the audience from environment or use a default
+    const apiUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL || 'http://localhost:3000';
+    const audience = `${apiUrl}/api/mcp`;
 
-    if (error || !user?.id) {
-      throw new Error(error?.message || 'User not found');
+    // Verify token and extract user ID from claims
+    const claims = await verifyAccessToken(accessToken, audience);
+
+    if (!claims.sub) {
+      throw new Error('Token does not contain user ID (sub claim)');
     }
 
-    return user.id;
+    return claims.sub;
   } catch (error) {
     throw new Error(`Failed to get user from token: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }

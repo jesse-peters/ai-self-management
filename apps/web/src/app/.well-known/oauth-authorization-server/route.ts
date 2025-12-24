@@ -17,15 +17,15 @@ export async function GET() {
     );
   }
 
+  // OAuth 2.1 with PKCE, backed by Supabase Auth
   return NextResponse.json({
     issuer: apiUrl,
     authorization_endpoint: `${apiUrl}/api/oauth/authorize`,
     token_endpoint: `${apiUrl}/api/oauth/token`,
-    revocation_endpoint: `${apiUrl}/api/oauth/revoke`,
     registration_endpoint: `${apiUrl}/api/oauth/register`,
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code', 'refresh_token'],
-    code_challenge_methods_supported: ['S256'],
+    code_challenge_methods_supported: ['S256', 'plain'],
     scopes_supported: [
       'projects:read',
       'projects:write',
@@ -34,6 +34,6 @@ export async function GET() {
       'sessions:read',
       'sessions:write',
     ],
-    token_endpoint_auth_methods_supported: ['none'], // PKCE instead of client secret
+    token_endpoint_auth_methods_supported: ['none'], // Public clients with PKCE
   });
 }

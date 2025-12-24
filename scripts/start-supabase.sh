@@ -71,3 +71,5 @@ echo ""
 echo "🎉 Local Supabase is ready!"
 echo ""
 
+
+

@@ -145,3 +145,5 @@ DROP FUNCTION IF EXISTS auth.user_id_from_oauth_token(TEXT);
 DROP FUNCTION IF EXISTS auth.current_user_id();
 DROP FUNCTION IF EXISTS public.set_user_from_oauth(TEXT);
 
+
+

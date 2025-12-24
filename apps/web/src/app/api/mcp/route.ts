@@ -119,23 +119,30 @@ export async function GET(_request: NextRequest): Promise<NextResponse> {
     // Handle GET requests for OAuth discovery
     const apiUrl = process.env.NEXT_PUBLIC_APP_URL || _request.nextUrl.origin;
 
-    return NextResponse.json(
-        {
-            message: 'MCP endpoint - use POST with JSON-RPC 2.0 format',
-            protocol: 'JSON-RPC 2.0',
-            methods: ['tools/list', 'tools/call', 'resources/list', 'resources/read', 'prompts/list', 'prompts/get', 'initialize', 'ping', 'notifications/initialized'],
-            oauth_discovery: {
-                authorization_server_metadata: `${apiUrl}/.well-known/oauth-authorization-server`,
-                protected_resource_metadata: `${apiUrl}/.well-known/oauth-protected-resource`,
-            },
+    const response: any = {
+        message: 'MCP endpoint - use POST with JSON-RPC 2.0 format',
+        protocol: 'JSON-RPC 2.0',
+        methods: ['tools/list', 'tools/call', 'resources/list', 'resources/read', 'prompts/list', 'prompts/get', 'initialize', 'ping', 'notifications/initialized'],
+        oauth_discovery: {
+            authorization_server_metadata: `${apiUrl}/.well-known/oauth-authorization-server`,
+            protected_resource_metadata: `${apiUrl}/.well-known/oauth-protected-resource`,
         },
-        {
-            status: 200,
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        }
-    );
+    };
+
+    // In development, provide a token generation endpoint for local testing
+    if (process.env.NODE_ENV === 'development') {
+        response.development_only = {
+            token_endpoint: `${apiUrl}/api/mcp/token`,
+            note: 'This endpoint is only available in development. Generate a token by calling GET /api/mcp/token and use it in the Authorization header as "Bearer <token>"'
+        };
+    }
+
+    return NextResponse.json(response, {
+        status: 200,
+        headers: {
+            'Content-Type': 'application/json',
+        },
+    });
 }
 
 export async function OPTIONS(): Promise<NextResponse> {

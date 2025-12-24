@@ -37,3 +37,5 @@ export function getCorrelationIdOrNull(request: NextRequest): string | null {
     return request.headers.get(CORRELATION_ID_HEADER);
 }
 
+
+
