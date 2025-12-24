@@ -5,13 +5,11 @@
   "private": true,
   "packageManager": "pnpm@9.12.3",
   "scripts": {
-    "setup": "tsx scripts/setup.ts",
-    "setup:check": "tsx scripts/setup.ts --check",
-    "setup:github": "tsx scripts/setup-github.ts",
-    "setup:github:check": "tsx scripts/setup-github.ts --check",
-    "setup:vercel": "tsx scripts/setup-vercel.ts",
-    "setup:vercel:check": "tsx scripts/setup-vercel.ts --check",
+    "setup": "tsx scripts/setup-auto.ts",
+    "setup:reset": "tsx scripts/reset.ts",
+    "clean": "tsx scripts/clean.ts",
     "validate-config": "tsx scripts/validate-config.ts",
+    "predev": "bash scripts/start-supabase.sh",
     "dev": "turbo dev",
     "dev:web": "turbo dev --filter web",
     "dev:mcp": "turbo dev --filter @projectflow/mcp-server",
@@ -22,17 +20,22 @@
     "db:migrate": "pnpm --filter @projectflow/db db:migrate",
     "db:reset": "pnpm --filter @projectflow/db db:reset",
     "db:generate-types": "pnpm --filter @projectflow/db db:generate-types",
-    "db:status": "pnpm --filter @projectflow/db db:status"
+    "db:status": "pnpm --filter @projectflow/db db:status",
+    "supabase:start": "cd packages/db && supabase start",
+    "supabase:stop": "cd packages/db && supabase stop",
+    "supabase:status": "cd packages/db && supabase status"
   },
   "engines": {
     "node": ">=20.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "node-fetch": "^3.3.2",
     "supabase": "^1.200.0",
     "tsx": "^4.7.0",
     "turbo": "^2.3.0",
     "typescript": "^5.0.0",
+    "vercel": "^33.0.0",
     "vitest": "^1.0.0"
   }
 }

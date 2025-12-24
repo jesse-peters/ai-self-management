@@ -34,10 +34,10 @@ function runMigrations() {
 
     // Check if we're using local or remote Supabase
     const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const isLocal = !supabaseUrl || supabaseUrl.includes('localhost') || supabaseUrl.includes('127.0.0.1');
+    const isLocal = !supabaseUrl || supabaseUrl.includes('localhost') || supabaseUrl.includes('localhost');
 
     let command: string;
-    
+
     if (isLocal) {
       // Use local Supabase instance
       console.log('Running migrations on local Supabase instance...');
@@ -46,7 +46,7 @@ function runMigrations() {
       // Use remote Supabase project
       console.log('Running migrations on remote Supabase project...');
       const projectId = process.env.SUPABASE_PROJECT_ID;
-      
+
       if (projectId) {
         command = `npx supabase db push --project-id ${projectId}`;
       } else {

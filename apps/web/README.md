@@ -67,7 +67,15 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 OAUTH_ALLOWED_CLIENT_IDS=mcp-client
+LOG_LEVEL=info
 ```
+
+**Logging Configuration:**
+
+- `LOG_LEVEL` - Controls log verbosity (default: `info`)
+  - Options: `trace`, `debug`, `info`, `warn`, `error`, `fatal`
+  - Set to `debug` for detailed MCP authentication flow debugging
+  - In development, logs are pretty-printed; in production, they're JSON formatted
 
 3. Install dependencies and run migrations:
 

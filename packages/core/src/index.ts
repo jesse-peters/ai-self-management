@@ -83,6 +83,13 @@ export type { TaskPickingStrategy } from './services';
 // Export OAuth types
 export type { OAuthToken, OAuthTokenInsert } from './services/oauth';
 
+// Export JWT types and functions
+export {
+  signAccessToken,
+  verifyAccessToken,
+  type MCPTokenClaims,
+} from './services/jwt';
+
 // Export errors
 export {
   ProjectFlowError,

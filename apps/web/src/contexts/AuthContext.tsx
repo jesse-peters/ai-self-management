@@ -27,12 +27,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const supabase = createBrowserClient();
+  
+  // Lazy create supabase client only in browser
+  const getSupabase = () => {
+    if (typeof window === 'undefined') {
+      throw new Error('Supabase client can only be used in the browser');
+    }
+    return createBrowserClient();
+  };
 
   useEffect(() => {
     // Check current session
     const initializeAuth = async () => {
       try {
+        const supabase = getSupabase();
         const {
           data: { session },
           error,
@@ -60,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initializeAuth();
 
     // Subscribe to auth changes
+    const supabase = getSupabase();
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
@@ -71,10 +80,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       subscription?.unsubscribe();
     };
-  }, [supabase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const logout = async () => {
     try {
+      const supabase = getSupabase();
       const { error } = await supabase.auth.signOut();
       if (error) {
         throw error;
@@ -89,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshSession = async () => {
     try {
+      const supabase = getSupabase();
       const {
         data: { session },
         error,

@@ -105,9 +105,10 @@ async function setupEnvLocal(root: string, nonInteractive: boolean): Promise<boo
   let supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
   let anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
   let serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  let jwtSecret = process.env.SUPABASE_JWT_SECRET || '';
 
   // Try to get from local Supabase if running
-  if (!anonKey || !serviceRoleKey) {
+  if (!anonKey || !serviceRoleKey || !jwtSecret) {
     try {
       const dbPath = join(root, 'packages/db');
       const statusOutput = execSync('supabase status --output json', {
@@ -119,6 +120,7 @@ async function setupEnvLocal(root: string, nonInteractive: boolean): Promise<boo
       supabaseUrl = status?.API?.URL || supabaseUrl;
       anonKey = status?.API?.anon_key || anonKey;
       serviceRoleKey = status?.API?.service_role_key || serviceRoleKey;
+      jwtSecret = status?.API?.jwt_secret || jwtSecret;
     } catch {
       // Supabase not running locally, will need manual input
     }
@@ -136,6 +138,8 @@ async function setupEnvLocal(root: string, nonInteractive: boolean): Promise<boo
       value = supabaseUrl;
     } else if (key === 'SUPABASE_SERVICE_ROLE_KEY' && serviceRoleKey) {
       value = serviceRoleKey;
+    } else if (key === 'SUPABASE_JWT_SECRET' && jwtSecret) {
+      value = jwtSecret;
     }
 
     envContent += `${key}=${value}\n`;
@@ -148,10 +152,16 @@ async function setupEnvLocal(root: string, nonInteractive: boolean): Promise<boo
   if (
     supabaseUrl.includes('your-') ||
     anonKey.includes('your-') ||
-    serviceRoleKey.includes('your-')
+    serviceRoleKey.includes('your-') ||
+    jwtSecret.includes('your-')
   ) {
     log('⚠️  .env.local created with placeholder values', YELLOW);
     log('   Please update with values from: https://supabase.com/dashboard', YELLOW);
+    log('   Required values:', YELLOW);
+    log('     - NEXT_PUBLIC_SUPABASE_URL (Project Settings > API)', YELLOW);
+    log('     - NEXT_PUBLIC_SUPABASE_ANON_KEY (Project Settings > API)', YELLOW);
+    log('     - SUPABASE_SERVICE_ROLE_KEY (Project Settings > API)', YELLOW);
+    log('     - SUPABASE_JWT_SECRET (Project Settings > API > JWT Settings)', YELLOW);
 
     if (!nonInteractive) {
       const proceed = await prompt('\nProceed with setup? (y/n) ');

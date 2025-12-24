@@ -14,6 +14,7 @@ import {
 } from '@projectflow/core';
 import { createServiceRoleClient } from '@projectflow/db';
 import type { Database } from '@projectflow/db';
+import crypto from 'crypto';
 
 /**
  * Validates an OAuth access token
@@ -39,6 +40,10 @@ export async function revokeOAuthRefreshToken(refreshToken: string): Promise<voi
 
 /**
  * Generates a new authorization code
+ * 
+ * @deprecated This function is no longer used with Supabase OAuth 2.1 proxy.
+ * Supabase OAuth 2.1 server now manages authorization codes.
+ * Kept for backward compatibility only.
  */
 export function generateOAuthAuthorizationCode(): string {
   return generateAuthorizationCode();
@@ -156,6 +161,10 @@ export function validateTokenRequest(body: Record<string, unknown>): TokenReques
  * - One-time use only
  * - Valid for 10 minutes
  * - Scoped to a specific client, user, and redirect URI
+ * 
+ * @deprecated This function is no longer used with Supabase OAuth 2.1 proxy.
+ * Supabase OAuth 2.1 server now manages authorization codes.
+ * Kept for backward compatibility only.
  */
 export async function storeAuthorizationCode(
   code: string,
@@ -166,21 +175,36 @@ export async function storeAuthorizationCode(
   codeChallenge?: string,
   codeChallengeMethod?: string
 ): Promise<void> {
+  // #region agent log
+  fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth.ts:170', message: 'storeAuthorizationCode entry', data: { hasCode: !!code, codePrefix: code.substring(0, 8), userId, clientId, hasServiceRoleKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY, serviceRoleKeyPrefix: process.env.SUPABASE_SERVICE_ROLE_KEY?.substring(0, 10) }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'K' }) }).catch(() => { });
+  // #endregion
+
   const client = createServiceRoleClient();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
+  const insertData = {
+    code,
+    user_id: userId,
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    scope,
+    code_challenge: codeChallenge || null,
+    code_challenge_method: codeChallengeMethod || null,
+    expires_at: expiresAt.toISOString(),
+  };
+
+  // #region agent log
+  fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth.ts:188', message: 'Before Supabase client insert', data: { table: 'oauth_authorization_codes', hasUserId: !!insertData.user_id, userIdType: typeof insertData.user_id, userIdLength: insertData.user_id?.length }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'M' }) }).catch(() => { });
+  // #endregion
+
+  // Use Supabase client library with service role key - this properly bypasses RLS
   const { error } = await (client as any)
     .from('oauth_authorization_codes')
-    .insert({
-      code,
-      user_id: userId,
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      scope,
-      code_challenge: codeChallenge,
-      code_challenge_method: codeChallengeMethod,
-      expires_at: expiresAt.toISOString(),
-    });
+    .insert(insertData);
+
+  // #region agent log
+  fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth.ts:203', message: 'After Supabase client insert', data: { hasError: !!error, errorMessage: error?.message, errorCode: error?.code, errorDetails: error?.details, errorHint: error?.hint }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'M' }) }).catch(() => { });
+  // #endregion
 
   if (error) {
     throw new Error(`Failed to store authorization code: ${error.message}`);
@@ -196,6 +220,10 @@ export async function storeAuthorizationCode(
  * - Code has not been used before
  * 
  * Marks code as used (one-time use enforcement)
+ * 
+ * @deprecated This function is no longer used with Supabase OAuth 2.1 proxy.
+ * Supabase OAuth 2.1 server now manages authorization codes.
+ * Kept for backward compatibility only.
  */
 export async function getAuthorizationCode(code: string): Promise<{
   userId: string;
@@ -206,7 +234,7 @@ export async function getAuthorizationCode(code: string): Promise<{
   codeChallengeMethod?: string;
 } | null> {
   const client = createServiceRoleClient();
-  
+
   const { data, error } = await (client as any)
     .from('oauth_authorization_codes')
     .select('*')
@@ -241,18 +269,23 @@ export async function getAuthorizationCode(code: string): Promise<{
 
 /**
  * Validates PKCE code verifier against code challenge
+ * Implements PKCE validation according to RFC 7636
  */
 export function validatePKCE(codeVerifier: string, codeChallenge: string, method: string): boolean {
-  if (method === 'plain') {
-    return codeVerifier === codeChallenge;
-  }
+  try {
+    if (method === 'plain') {
+      return codeVerifier === codeChallenge;
+    }
 
-  if (method === 'S256') {
-    const crypto = require('crypto');
-    const hash = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
-    return hash === codeChallenge;
-  }
+    if (method === 'S256') {
+      // S256: SHA256 hash of verifier, base64url encoded
+      const hash = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
+      return hash === codeChallenge;
+    }
 
-  return false;
+    return false;
+  } catch {
+    return false;
+  }
 }
 

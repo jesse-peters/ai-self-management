@@ -14,6 +14,7 @@ import { listArtifacts } from '@projectflow/core';
 import { evaluateGates } from '@projectflow/core';
 import { getTaskEvents } from '@projectflow/core';
 import { getProjectEvents } from '@projectflow/core';
+import type { Task, Artifact, GateResult, Event, Checkpoint } from '@projectflow/core';
 
 /**
  * List of all available prompts
@@ -128,7 +129,7 @@ async function getTaskFocusModePrompt(
     : '\nConstraints: None specified';
 
   // Build artifacts summary
-  const artifactsByType = artifacts.reduce((acc, art) => {
+  const artifactsByType = artifacts.reduce((acc: Record<string, number>, art: Artifact) => {
     acc[art.type] = (acc[art.type] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
@@ -139,10 +140,10 @@ async function getTaskFocusModePrompt(
     : '  (No artifacts yet)';
 
   // Build gate status
-  const passedGates = gateResults.filter(g => g.passed);
-  const failedGates = gateResults.filter(g => !g.passed);
+  const passedGates = gateResults.filter((g: GateResult) => g.passed);
+  const failedGates = gateResults.filter((g: GateResult) => !g.passed);
   const gateStatus = gateResults.length > 0
-    ? `\nGate Status:\n  Passed: ${passedGates.length}/${gateResults.length}\n${failedGates.length > 0 ? `  Failed:\n${failedGates.map(g => `    - ${g.gate.type}: ${g.reason || 'Not met'}`).join('\n')}` : ''}`
+    ? `\nGate Status:\n  Passed: ${passedGates.length}/${gateResults.length}\n${failedGates.length > 0 ? `  Failed:\n${failedGates.map((g: GateResult) => `    - ${g.gate.type}: ${g.reason || 'Not met'}`).join('\n')}` : ''}`
     : '\nGate Status: No gates configured';
 
   const promptText = `# Task Focus Mode: ${task.title}
@@ -241,9 +242,9 @@ async function getResumeFromCheckpointPrompt(
   const snapshot = (checkpoint as any).snapshot || {};
 
   // Get next available tasks
-  const todoTasks = tasks.filter(t => t.status === 'todo');
-  const inProgressTasks = tasks.filter(t => t.status === 'in_progress');
-  const blockedTasks = tasks.filter(t => t.status === 'blocked');
+  const todoTasks = tasks.filter((t: Task) => t.status === 'todo');
+  const inProgressTasks = tasks.filter((t: Task) => t.status === 'in_progress');
+  const blockedTasks = tasks.filter((t: Task) => t.status === 'blocked');
 
   const promptText = `# Resume Work from Checkpoint
 
@@ -267,14 +268,14 @@ ${project.description ? `**Description:** ${project.description}` : ''}
 - **Todo:** ${todoTasks.length} tasks
 - **In Progress:** ${inProgressTasks.length} tasks
 - **Blocked:** ${blockedTasks.length} tasks
-- **Done:** ${tasks.filter(t => t.status === 'done').length} tasks
+- **Done:** ${tasks.filter((t: Task) => t.status === 'done').length} tasks
 
 ## Suggested Next Steps
 
 1. **Review the checkpoint snapshot** to understand the state at this point
 2. **Check for active tasks:**
    ${inProgressTasks.length > 0
-     ? inProgressTasks.map(t => `   - ${t.title} (ID: ${t.id})`).join('\n')
+     ? inProgressTasks.map((t: Task) => `   - ${t.title} (ID: ${t.id})`).join('\n')
      : '   - No tasks currently in progress'}
 3. **Pick the next task:**
    - Use pm.pick_next_task(projectId) to get the next available task
@@ -287,11 +288,11 @@ ${project.description ? `**Description:** ${project.description}` : ''}
 
 ## Available Tasks
 ${todoTasks.length > 0
-  ? todoTasks.slice(0, 10).map(t => `- **${t.title}** (ID: ${t.id})\n  ${t.description || 'No description'}`).join('\n\n')
+  ? todoTasks.slice(0, 10).map((t: Task) => `- **${t.title}** (ID: ${t.id})\n  ${t.description || 'No description'}`).join('\n\n')
   : 'No tasks available. Consider creating new tasks with pm.create_task.'}
 
 ${blockedTasks.length > 0
-  ? `\n## Blocked Tasks (may need attention)\n${blockedTasks.map(t => `- ${t.title} (ID: ${t.id})`).join('\n')}`
+  ? `\n## Blocked Tasks (may need attention)\n${blockedTasks.map((t: Task) => `- ${t.title} (ID: ${t.id})`).join('\n')}`
   : ''}
 
 ## Project Rules
@@ -366,7 +367,7 @@ ${Object.keys(constraints).length > 0
 
 ## Existing Tasks
 ${existingTasks.length > 0
-  ? `This project already has ${existingTasks.length} task(s). Consider dependencies and avoid duplication.\n\nExisting tasks:\n${existingTasks.slice(0, 10).map(t => `- ${t.title} (${t.status})`).join('\n')}`
+  ? `This project already has ${existingTasks.length} task(s). Consider dependencies and avoid duplication.\n\nExisting tasks:\n${existingTasks.slice(0, 10).map((t: Task) => `- ${t.title} (${t.status})`).join('\n')}`
   : 'This is a new project with no existing tasks.'}
 
 ## Task Breakdown Instructions
@@ -450,7 +451,7 @@ async function getWriteStatusUpdatePrompt(
   const checkpoints = await listCheckpoints(userId, projectId);
 
   // Organize tasks by status
-  const tasksByStatus = tasks.reduce((acc, task) => {
+  const tasksByStatus = tasks.reduce((acc: Record<string, number>, task: Task) => {
     const current = acc[task.status] || 0;
     acc[task.status] = current + 1;
     return acc;
@@ -458,13 +459,13 @@ async function getWriteStatusUpdatePrompt(
 
   // Get recent events (last 24 hours)
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const recentEvents = events.filter(e => new Date(e.created_at) > oneDayAgo);
+  const recentEvents = events.filter((e: Event) => new Date(e.created_at) > oneDayAgo);
 
   // Get active tasks
-  const activeTasks = tasks.filter(t => t.status === 'in_progress' || (t as any).locked_at);
-  const blockedTasks = tasks.filter(t => t.status === 'blocked');
-  const completedTasks = tasks.filter(t => t.status === 'done');
-  const todoTasks = tasks.filter(t => t.status === 'todo');
+  const activeTasks = tasks.filter((t: Task) => t.status === 'in_progress' || (t as any).locked_at);
+  const blockedTasks = tasks.filter((t: Task) => t.status === 'blocked');
+  const completedTasks = tasks.filter((t: Task) => t.status === 'done');
+  const todoTasks = tasks.filter((t: Task) => t.status === 'todo');
 
   // Get latest checkpoint
   const latestCheckpoint = checkpoints.length > 0 ? checkpoints[0] : null;
@@ -494,7 +495,7 @@ ${project.description ? `**Description:** ${project.description}` : ''}
 
 ### Active Tasks (In Progress)
 ${activeTasks.length > 0
-  ? activeTasks.map(t => {
+  ? activeTasks.map((t: Task) => {
       const lockedInfo = (t as any).locked_at ? ` (Locked since ${new Date((t as any).locked_at).toLocaleString()})` : '';
       return `- **${t.title}** (ID: ${t.id})${lockedInfo}\n  ${t.description || 'No description'}`;
     }).join('\n\n')
@@ -502,33 +503,33 @@ ${activeTasks.length > 0
 
 ### Blocked Tasks
 ${blockedTasks.length > 0
-  ? blockedTasks.map(t => `- **${t.title}** (ID: ${t.id})\n  ${t.description || 'No description'}`).join('\n\n')
+  ? blockedTasks.map((t: Task) => `- **${t.title}** (ID: ${t.id})\n  ${t.description || 'No description'}`).join('\n\n')
   : 'No blocked tasks.'}
 
 ### Recently Completed Tasks
 ${completedTasks.slice(0, 5).length > 0
   ? completedTasks
       .slice(0, 5)
-      .sort((a, b) => new Date((b as any).updated_at || b.created_at).getTime() - new Date((a as any).updated_at || a.created_at).getTime())
-      .map(t => `- **${t.title}** (ID: ${t.id})`).join('\n')
+      .sort((a: Task, b: Task) => new Date((b as any).updated_at || b.created_at).getTime() - new Date((a as any).updated_at || a.created_at).getTime())
+      .map((t: Task) => `- **${t.title}** (ID: ${t.id})`).join('\n')
   : 'No completed tasks yet.'}
 
 ### Next Available Tasks
 ${todoTasks.length > 0
-  ? todoTasks.slice(0, 5).map(t => `- **${t.title}** (ID: ${t.id})`).join('\n')
+  ? todoTasks.slice(0, 5).map((t: Task) => `- **${t.title}** (ID: ${t.id})`).join('\n')
   : 'No tasks available.'}
 
 ### Recent Events
 ${recentEvents.length > 0
   ? recentEvents
       .slice(0, 10)
-      .map(e => `- **${e.event_type}** at ${new Date(e.created_at).toLocaleString()}${e.task_id ? ` (Task: ${e.task_id})` : ''}`)
+      .map((e: Event) => `- **${e.event_type}** at ${new Date(e.created_at).toLocaleString()}${e.task_id ? ` (Task: ${e.task_id})` : ''}`)
       .join('\n')
   : 'No recent events.'}
 
 ### Checkpoints
 ${checkpoints.length > 0
-  ? checkpoints.slice(0, 3).map(c => `- **${c.label}** - ${new Date(c.created_at).toLocaleString()}`).join('\n')
+  ? checkpoints.slice(0, 3).map((c: Checkpoint) => `- **${c.label}** - ${new Date(c.created_at).toLocaleString()}`).join('\n')
   : 'No checkpoints created yet.'}
 
 ## Instructions

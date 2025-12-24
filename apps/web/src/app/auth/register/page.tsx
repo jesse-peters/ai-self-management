@@ -15,7 +15,14 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
-  const supabase = createBrowserClient();
+  
+  // Lazy create supabase client only in browser
+  const getSupabase = () => {
+    if (typeof window === 'undefined') {
+      throw new Error('Supabase client can only be used in the browser');
+    }
+    return createBrowserClient();
+  };
 
   const handleMagicLinkRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,6 +37,7 @@ export default function RegisterPage() {
     setIsLoading(true);
 
     try {
+      const supabase = getSupabase();
       // Supabase auto-creates account on first magic link click
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
@@ -98,6 +106,7 @@ export default function RegisterPage() {
     setIsLoading(true);
 
     try {
+      const supabase = getSupabase();
       const { error } = await supabase.auth.signUp({
         email,
         password,

@@ -1,21 +1,25 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 /**
- * OAuth 2.1 Protected Resource Metadata
- * RFC 8414: https://www.rfc-editor.org/rfc/rfc8414.html
+ * OAuth 2.0 Protected Resource Metadata endpoint (RFC 9728)
+ * https://www.rfc-editor.org/rfc/rfc9728.html
  * 
- * This endpoint provides protected resource metadata
- * that MCP clients use to discover resource server configuration
+ * This endpoint provides metadata about the protected resource (MCP server)
+ * and its relationship to authorization servers.
  */
-export async function GET(request: NextRequest): Promise<NextResponse> {
-  const url = request.nextUrl.toString();
-  console.log(`[OAuth Protected Resource Metadata] GET ${url}`);
-  
-  const apiUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+export async function GET() {
+  const apiUrl = process.env.NEXT_PUBLIC_APP_URL;
 
-  const metadata = {
+  if (!apiUrl) {
+    return NextResponse.json(
+      { error: 'NEXT_PUBLIC_APP_URL not configured' },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({
     resource: `${apiUrl}/api/mcp`,
-    authorization_servers: [`${apiUrl}/api/oauth/authorize`],
+    authorization_servers: [apiUrl],
     scopes_supported: [
       'projects:read',
       'projects:write',
@@ -25,13 +29,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       'sessions:write',
     ],
     bearer_methods_supported: ['header'],
-  };
-
-  return NextResponse.json(metadata, {
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'public, max-age=3600',
-    },
+    resource_documentation: `${apiUrl}/docs`,
   });
 }
-

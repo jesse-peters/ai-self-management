@@ -36,10 +36,10 @@ function generateTypes() {
 
     // Check if we're using local or remote Supabase
     const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const isLocal = !supabaseUrl || supabaseUrl.includes('localhost') || supabaseUrl.includes('127.0.0.1');
+    const isLocal = !supabaseUrl || supabaseUrl.includes('localhost') || supabaseUrl.includes('localhost');
 
     let command: string;
-    
+
     if (isLocal) {
       // Use local Supabase instance
       console.log('Using local Supabase instance...');
@@ -48,7 +48,7 @@ function generateTypes() {
       // Use remote Supabase project
       console.log('Using remote Supabase project...');
       const projectId = process.env.SUPABASE_PROJECT_ID;
-      
+
       if (projectId) {
         command = `npx supabase gen types typescript --project-id ${projectId}`;
       } else {

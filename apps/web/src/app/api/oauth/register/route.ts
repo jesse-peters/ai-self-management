@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createRequestLogger } from '@/lib/logger';
+import { getCorrelationId } from '@/lib/correlationId';
 
 /**
  * OAuth 2.0 Dynamic Client Registration Endpoint
@@ -10,17 +12,20 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const startTime = Date.now();
   const url = request.nextUrl.toString();
-  console.log(`[OAuth Register] POST ${url}`);
-  
+  const correlationId = getCorrelationId(request);
+  const logger = createRequestLogger(correlationId, 'oauth');
+
+  logger.info({ url, method: 'POST' }, 'OAuth client registration request received');
+
   try {
     const body = await request.json().catch(() => ({}));
-    console.log(`[OAuth Register] Request body:`, JSON.stringify(body, null, 2));
-    
+    logger.debug({ body }, 'Registration request body');
+
     // For MCP clients, we use a simplified registration
     // We accept any client registration and return a standard client_id
     const clientId = process.env.OAUTH_DEFAULT_CLIENT_ID || 'mcp-client';
     const apiUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
-    console.log(`[OAuth Register] Using client_id: ${clientId}, apiUrl: ${apiUrl}`);
+    logger.debug({ clientId, apiUrl }, 'Using default client configuration');
 
     // Return client registration response
     const response = {
@@ -35,10 +40,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       client_name: body.client_name || 'MCP Client',
       scope: body.scope || 'projects:read projects:write tasks:read tasks:write sessions:read sessions:write',
     };
-    
+
     const duration = Date.now() - startTime;
-    console.log(`[OAuth Register] Success (${duration}ms):`, JSON.stringify(response, null, 2));
-    
+    logger.info({
+      duration,
+      clientId,
+      clientName: response.client_name,
+      redirectUris: response.redirect_uris,
+      scope: response.scope,
+    }, 'Client registration successful');
+
     return NextResponse.json(response, {
       status: 201,
       headers: {
@@ -47,7 +58,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
   } catch (error) {
     const duration = Date.now() - startTime;
-    console.error(`[OAuth Register] Error (${duration}ms):`, error);
+    logger.error({
+      duration,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      errorType: error?.constructor?.name,
+      stack: error instanceof Error ? error.stack : undefined,
+    }, 'Client registration error');
     return NextResponse.json(
       {
         error: 'invalid_client_metadata',

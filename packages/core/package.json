@@ -11,13 +11,14 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc --build",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@projectflow/db": "workspace:*"
+    "@projectflow/db": "workspace:*",
+    "jose": "^5.9.6"
   },
   "devDependencies": {
     "@projectflow/config": "workspace:*"

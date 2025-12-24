@@ -19,37 +19,43 @@ export interface MCPErrorResponse {
  */
 export function mapErrorToMCP(error: unknown): MCPErrorResponse {
   if (error instanceof ValidationError) {
+    const field = error.field;
+    const message = error.message;
     return {
       code: 'INVALID_PARAMS',
-      message: `Validation error${error.field ? ` on field "${error.field}"` : ''}: ${error.message}`,
+      message: `Validation error${field ? ` on field "${field}"` : ''}: ${message}`,
     };
   }
 
   if (error instanceof NotFoundError) {
+    const message = error.message;
     return {
       code: 'NOT_FOUND',
-      message: error.message,
+      message: message,
     };
   }
 
   if (error instanceof UnauthorizedError) {
+    const message = error.message;
     return {
       code: 'UNAUTHORIZED',
-      message: error.message,
+      message: message,
     };
   }
 
   if (error instanceof ProjectFlowError) {
+    const message = error.message;
     return {
       code: 'INTERNAL_ERROR',
-      message: error.message,
+      message: message,
     };
   }
 
   if (error instanceof Error) {
+    const message = error.message;
     return {
       code: 'INTERNAL_ERROR',
-      message: error.message,
+      message: message,
     };
   }
 

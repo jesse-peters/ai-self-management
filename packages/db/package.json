@@ -11,7 +11,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc --build",
     "type-check": "tsc --noEmit",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:reset": "npx supabase db reset --local",

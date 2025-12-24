@@ -30,5 +30,4 @@ export type {
 
 // Export client functions
 export { createServerClient, createBrowserClient, createServiceRoleClient } from './client';
-export { createSessionClient, createOAuthScopedClient, isOAuthScopedClient } from './auth-client';
 

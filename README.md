@@ -1,8 +1,8 @@
 # ProjectFlow
 
-**MCP server for project/task management with persistent state**
+**AI-powered project and task management system with MCP server integration**
 
-AI-powered project and task management system with Supabase backend, built as an MCP (Model Context Protocol) server with a Next.js web interface.
+A secure, multi-tenant project management system built as an MCP (Model Context Protocol) server with a Next.js web interface. Features include task management, event sourcing, quality gates, and OAuth 2.1 authentication.
 
 ## 🎯 Features
 
@@ -10,12 +10,20 @@ AI-powered project and task management system with Supabase backend, built as an
 - ✅ **AI Integration** - Built as MCP server for LLM integration
 - ✅ **Authentication** - Magic link + OAuth2 with Supabase
 - ✅ **Row Level Security** - Database-enforced user data isolation
+- ✅ **Event Sourcing** - Complete audit trail of all actions
+- ✅ **Quality Gates** - Enforce testing and documentation requirements
 - ✅ **Type Safe** - Full TypeScript support across all packages
 - ✅ **Monorepo** - Organized with Turborepo for efficient builds
 
 ## 🚀 Quick Start
 
-### One-Command Setup (Recommended)
+### Prerequisites
+
+- Node.js ≥ 20.0.0
+- pnpm (install: `npm install -g pnpm`)
+- Supabase account (free tier works)
+
+### One-Command Setup
 
 ```bash
 pnpm setup
@@ -35,9 +43,7 @@ pnpm dev
 
 Visit http://localhost:3000/auth/login
 
-### Manual Setup
-
-See [QUICKSTART.md](./QUICKSTART.md) for detailed manual setup instructions.
+For detailed setup instructions, see [`docs/SETUP.md`](./docs/SETUP.md)
 
 ## 📦 Project Structure
 
@@ -50,11 +56,8 @@ projectflow/
 │   ├── core/                # Business logic & services
 │   ├── db/                  # Database client & migrations
 │   └── config/              # Shared TypeScript & ESLint config
-├── scripts/
-│   ├── setup.ts             # Idempotent setup script
-│   └── validate-config.ts   # Configuration validator
-├── docs/                    # Documentation
-└── .github/workflows/       # CI/CD pipelines
+├── scripts/                 # Setup and automation scripts
+└── docs/                    # Documentation
 ```
 
 ## 🛠️ Tech Stack
@@ -64,78 +67,108 @@ projectflow/
 - **Language**: TypeScript
 - **Build**: Turborepo, Turbopack
 - **Package Manager**: pnpm
-- **CI/CD**: GitHub Actions
+- **CI/CD**: GitHub Actions, Vercel
 
-## 📋 Environment Setup
+## 🎮 Common Commands
 
-### Quick Reference
-
-Copy from `.env.example`:
+### Development
 
 ```bash
-cp .env.example .env.local
-```
-
-Then fill in values from:
-- **Supabase**: https://supabase.com/dashboard → Settings → API
-- **GitHub**: https://github.com/settings/tokens (for CI)
-- **Vercel**: https://vercel.com (for production)
-
-### Full Documentation
-
-See detailed setup guides:
-- **Local Setup**: [QUICKSTART.md](./QUICKSTART.md)
-- **GitHub Configuration**: [docs/github-secrets.md](./docs/github-secrets.md)
-- **Vercel Deployment**: [docs/vercel-setup.md](./docs/vercel-setup.md)
-- **Supabase**: [SUPABASE_SETUP.md](./SUPABASE_SETUP.md)
-
-## 🚀 Development
-
-### Common Commands
-
-```bash
-# Setup
-pnpm setup              # Complete setup
-pnpm setup:check        # Check setup status only
-
-# Development
 pnpm dev                # Start all dev servers
 pnpm dev:web            # Start web app only
 pnpm dev:mcp            # Start MCP server only
+```
 
-# Building
+### Building
+
+```bash
 pnpm build              # Build all packages
 pnpm type-check         # Check types without building
+```
 
-# Quality
+### Quality
+
+```bash
 pnpm lint               # Check code style
 pnpm test               # Run tests
 pnpm test:watch        # Watch mode
+```
 
-# Database
+### Database
+
+```bash
 pnpm db:migrate         # Run migrations
 pnpm db:reset          # Reset local database
 pnpm db:generate-types # Generate TypeScript types
 pnpm db:status         # Show migration status
+```
 
-# Configuration
+### Setup & Maintenance
+
+```bash
+pnpm setup              # Complete setup
+pnpm setup:reset        # Clean slate, start over
 pnpm validate-config    # Validate all configuration
 ```
 
-### Monorepo Structure
+## 🏗️ Architecture
 
-This is a pnpm monorepo with Turborepo orchestration:
+### Authentication Flow
 
-```bash
-# Run command in all packages
-pnpm -r build
-
-# Run command in specific package
-pnpm --filter @projectflow/web build
-
-# Via Turborepo (with caching)
-pnpm build              # Uses turbo, caches results
 ```
+Web App                          MCP Client
+    ↓                               ↓
+Magic Link/Password          OAuth Authorization Code
+    ↓                               ↓
+Session Cookie              Bearer Token (in header)
+    ↓                               ↓
+Browser                      Authorization: Bearer token
+    ↓                               ↓
+Anonymous Key                    Anon Key
+    ↓                               ↓
+RLS Policies ←────────────────────→ RLS Policies
+    ↓
+Database enforces:
+  - User owns projects
+  - User owns tasks
+  - User owns sessions
+```
+
+### Event Sourcing
+
+ProjectFlow uses event sourcing for complete audit trails:
+
+- All state changes recorded as immutable events
+- Current state derived by replaying events
+- Complete history for debugging and compliance
+- Checkpoints for resumable sessions
+
+Event types include:
+- `ProjectCreated`, `TaskCreated`, `TaskStarted`
+- `TaskBlocked`, `TaskCompleted`, `TaskCancelled`
+- `ArtifactProduced`, `GateEvaluated`
+- `CheckpointCreated`, `DecisionRecorded`, `ScopeAsserted`
+
+### Quality Gates
+
+Tasks can have quality gates that must pass before completion:
+
+- `has_tests` - Must have test artifacts
+- `has_docs` - Must have documentation
+- `has_artifacts` - Minimum number of artifacts
+- `acceptance_met` - Acceptance criteria met
+
+### Task-Focused Workflow
+
+Agents work on one locked task at a time:
+1. Pick next task (based on dependencies/priority)
+2. Start task (locks it)
+3. Assert scope before making changes
+4. Do the work
+5. Append artifacts (diffs, PRs, test reports, docs)
+6. Evaluate gates
+7. Complete task (if gates pass)
+8. Create checkpoint for resumability
 
 ## 🔐 Security
 
@@ -145,70 +178,64 @@ pnpm build              # Uses turbo, caches results
 - ✅ Row Level Security (RLS) enforces data isolation
 - ✅ Session cookies secure (HttpOnly)
 - ✅ Environment variables encrypted in Vercel
+- ✅ JWT-based OAuth tokens signed with Supabase secret
 
 ## 📚 Documentation
 
-- **[QUICKSTART.md](./QUICKSTART.md)** - Getting started
-- **[SUPABASE_SETUP.md](./SUPABASE_SETUP.md)** - Supabase configuration
-- **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** - Common issues
-- **[RLS_IMPLEMENTATION_COMPLETION.md](./RLS_IMPLEMENTATION_COMPLETION.md)** - Security details
-- **[docs/github-secrets.md](./docs/github-secrets.md)** - CI/CD secrets
-- **[docs/vercel-setup.md](./docs/vercel-setup.md)** - Production deployment
+- **[docs/SETUP.md](./docs/SETUP.md)** - Complete setup guide (local, Vercel, GitHub)
+- **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** - Common issues and solutions
+- **[projectflow-plan.md](./projectflow-plan.md)** - Original implementation plan
 
 ## 🚀 Deployment
 
 ### Vercel (Recommended)
 
 ```bash
-vercel link              # Link Vercel project
-# Set environment variables in dashboard
+# Link to Vercel project
+pnpm vercel:link
+
+# Set environment variables in Vercel dashboard
+# (see docs/SETUP.md for details)
+
+# Deploy
 git push origin main     # Auto-deploys to production
 ```
 
-See [docs/vercel-setup.md](./docs/vercel-setup.md) for detailed instructions.
+### Environment Variables
 
-### GitHub Actions
+Required variables (set in Vercel dashboard or `.env.local`):
 
-CI/CD runs automatically on push:
-- Validates configuration
-- Type checks all packages
-- Lints code
-- Builds all packages
-- Runs tests
-- (Migrations run on main branch push)
+```bash
+# Supabase Configuration
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
-See `.github/workflows/` for workflow definitions.
+# JWT Secret (from Supabase Dashboard → Settings → API → JWT Keys → Legacy JWT Secret)
+SUPABASE_JWT_SECRET=your-legacy-jwt-secret
 
-## 🔧 Configuration Files
+# App URL
+NEXT_PUBLIC_APP_URL=https://your-domain.vercel.app  # Production
+NEXT_PUBLIC_APP_URL=http://localhost:3000            # Development
+```
 
-- `package.json` - Root scripts and workspace definition
-- `pnpm-workspace.yaml` - pnpm monorepo configuration
-- `turbo.json` - Turborepo build pipeline
-- `tsconfig.json` - TypeScript project references
-- `.env.example` - Environment variable template
-- `apps/web/vercel.json` - Vercel deployment config
-- `.github/workflows/` - CI/CD workflows
+For detailed deployment instructions, see [`docs/SETUP.md`](./docs/SETUP.md)
 
-## ❓ Troubleshooting
+## 🧪 Testing
 
-### Setup Issues
+### Web App Authentication
+1. Go to http://localhost:3000/auth/login
+2. Try magic link: Enter email and click "Send magic link"
+3. Check email or Supabase logs
+4. Or use password login if account exists
 
-1. **"Failed to install dependencies"**
-   - Ensure pnpm is installed: `npm install -g pnpm`
-   - Check Node version: `node --version` (need ≥20.0.0)
-   - Clear cache: `pnpm store prune && rm -rf node_modules`
-
-2. **"Database migration failed"**
-   - Check Supabase credentials in `.env.local`
-   - Verify Supabase project is active
-   - See [SUPABASE_SETUP.md](./SUPABASE_SETUP.md)
-
-3. **"Type generation failed"**
-   - Need `SUPABASE_ACCESS_TOKEN` for type generation
-   - See [docs/github-secrets.md](./docs/github-secrets.md)
-   - Can skip locally with `--non-interactive`
-
-See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for more issues.
+### MCP Client (OAuth)
+1. Configure MCP client with server URL: `http://localhost:3000/api/mcp`
+2. Client discovers metadata from `/.well-known/oauth-authorization-server`
+3. Follow OAuth flow (authorize → exchange code for token)
+4. Call MCP tools (e.g., `create_project`, `list_projects`)
+5. Verify RLS enforcement (users only see their own data)
 
 ## 🤝 Contributing
 
@@ -218,6 +245,24 @@ See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for more issues.
 4. CI checks run automatically
 5. Merge when approved
 
+## 🐛 Troubleshooting
+
+### Common Issues
+
+**"Failed to fetch" on login page**
+- Check `.env.local` has `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- Restart dev server after adding environment variables
+
+**"Database migration failed"**
+- Check Supabase credentials in `.env.local`
+- Verify Supabase project is active
+
+**"Type generation failed"**
+- Need `SUPABASE_ACCESS_TOKEN` for type generation
+- Can skip locally with `--non-interactive`
+
+See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for more solutions.
+
 ## 📄 License
 
 [Add your license here]
@@ -226,11 +271,10 @@ See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for more issues.
 
 - **Documentation**: See `docs/` folder
 - **Issues**: GitHub Issues
-- **Questions**: Check TROUBLESHOOTING.md first
+- **Questions**: Check [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) first
 
 ---
 
 **Built with TypeScript, Supabase, and Next.js**
 
 **Latest Status**: ✅ Production Ready
-

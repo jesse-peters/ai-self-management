@@ -12,7 +12,7 @@ interface TestResult {
 
 export function MCPSetup() {
   const { session } = useAuth();
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true); // Expanded by default to show manual token generation
   const [copied, setCopied] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [isTesting, setIsTesting] = useState(false);

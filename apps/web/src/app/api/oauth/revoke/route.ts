@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { revokeOAuthToken, revokeOAuthRefreshToken } from '@/lib/oauth';
+import { createRequestLogger } from '@/lib/logger';
+import { getCorrelationId } from '@/lib/correlationId';
 
 /**
- * OAuth 2.1 Token Revocation Endpoint
+ * OAuth 2.1 Token Revocation Endpoint (Proxy to Supabase OAuth)
  * Revokes access tokens or refresh tokens
+ * Per OAuth spec, revocation should be idempotent (always return 200)
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  const correlationId = getCorrelationId(request);
+  const logger = createRequestLogger(correlationId, 'oauth');
+
   try {
     // Parse request body
     let body: Record<string, unknown>;
     try {
       body = await request.json();
     } catch (error) {
+      logger.warn('Invalid JSON in revoke request');
       return NextResponse.json(
         {
           error: 'invalid_request',
@@ -25,6 +31,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const tokenTypeHint = body.token_type_hint as string | undefined;
 
     if (!token) {
+      logger.warn('Missing token parameter in revoke request');
       return NextResponse.json(
         {
           error: 'invalid_request',
@@ -35,43 +42,51 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     try {
-      // Try to revoke as access token first, then as refresh token
-      // OAuth spec says we should accept both and try to revoke
-      if (tokenTypeHint === 'access_token' || !tokenTypeHint) {
-        try {
-          await revokeOAuthToken(token);
-          return NextResponse.json({}, { status: 200 });
-        } catch {
-          // If it fails, try as refresh token
-        }
+      // Forward to Supabase revocation endpoint
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+      const revokeUrl = `${supabaseUrl}/auth/v1/oauth/revoke`;
+
+      const payload: Record<string, string> = {
+        token,
+      };
+
+      if (tokenTypeHint) {
+        payload.token_type_hint = tokenTypeHint;
       }
 
-      if (tokenTypeHint === 'refresh_token' || !tokenTypeHint) {
-        try {
-          await revokeOAuthRefreshToken(token);
-          return NextResponse.json({}, { status: 200 });
-        } catch {
-          // If both fail, still return 200 per OAuth spec
-          // (revocation should be idempotent)
-        }
+      logger.debug({
+        hasTokenTypeHint: !!tokenTypeHint,
+      }, 'Forwarding token revocation to Supabase');
+
+      const response = await fetch(revokeUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        logger.warn({
+          statusCode: response.status,
+        }, 'Supabase token revocation returned non-200');
+        // Per OAuth spec, still return 200 for idempotent operations
+        return NextResponse.json({}, { status: 200 });
       }
 
-      // Return success even if token wasn't found (idempotent operation)
+      logger.info('Token revoked successfully');
       return NextResponse.json({}, { status: 200 });
     } catch (error) {
-      console.error('Failed to revoke token:', error);
-      // Still return 200 per OAuth spec (revocation should be idempotent)
+      logger.warn({
+        error: error instanceof Error ? error.message : 'Unknown error',
+      }, 'Token revocation failed');
+      // Per OAuth spec, revocation should be idempotent - always return 200
       return NextResponse.json({}, { status: 200 });
     }
   } catch (error) {
-    console.error('OAuth revoke endpoint error:', error);
-    return NextResponse.json(
-      {
-        error: 'server_error',
-        error_description: error instanceof Error ? error.message : 'Internal server error',
-      },
-      { status: 500 }
-    );
+    logger.error({
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }, 'OAuth revoke endpoint error');
+    // Per OAuth spec, revocation should be idempotent - always return 200
+    return NextResponse.json({}, { status: 200 });
   }
 }
 
@@ -85,4 +100,3 @@ export async function OPTIONS(request: NextRequest): Promise<NextResponse> {
     },
   });
 }
-

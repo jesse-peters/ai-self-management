@@ -20,8 +20,15 @@ function CheckEmailContent() {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const supabase = createBrowserClient();
   const { isAuthenticated } = useAuth();
+  
+  // Lazy create supabase client only when needed (in browser)
+  const getSupabase = () => {
+    if (typeof window === 'undefined') {
+      throw new Error('Supabase client can only be used in the browser');
+    }
+    return createBrowserClient();
+  };
 
   useEffect(() => {
     const emailParam = searchParams.get('email');
@@ -48,6 +55,8 @@ function CheckEmailContent() {
     setIsResending(true);
 
     try {
+      const supabase = getSupabase();
+      
       if (emailType === 'magic-link') {
         const { error } = await supabase.auth.signInWithOtp({
           email,

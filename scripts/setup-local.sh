@@ -56,7 +56,7 @@ else
 fi
 
 # Get Supabase URLs for .env.local
-SUPABASE_URL=$(supabase status --output json 2>/dev/null | grep -o '"API URL":"[^"]*' | cut -d'"' -f4 || echo "http://127.0.0.1:54321")
+SUPABASE_URL=$(supabase status --output json 2>/dev/null | grep -o '"API URL":"[^"]*' | cut -d'"' -f4 || echo "http://localhost:54321")
 SUPABASE_ANON_KEY=$(supabase status --output json 2>/dev/null | grep -o '"anon key":"[^"]*' | cut -d'"' -f4 || echo "")
 SUPABASE_SERVICE_KEY=$(supabase status --output json 2>/dev/null | grep -o '"service_role key":"[^"]*' | cut -d'"' -f4 || echo "")
 

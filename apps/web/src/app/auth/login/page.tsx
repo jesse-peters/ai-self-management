@@ -22,7 +22,14 @@ function LoginContent() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const supabase = createBrowserClient();
+  
+  // Lazy create supabase client only in browser
+  const getSupabase = () => {
+    if (typeof window === 'undefined') {
+      throw new Error('Supabase client can only be used in the browser');
+    }
+    return createBrowserClient();
+  };
 
   useEffect(() => {
     const errorParam = searchParams.get('error');
@@ -49,6 +56,7 @@ function LoginContent() {
     setIsLoading(true);
 
     try {
+      const supabase = getSupabase();
       // Get redirect parameter from URL (for OAuth flow)
       const redirectParam = searchParams.get('redirect');
       const callbackUrl = redirectParam 
@@ -115,6 +123,7 @@ function LoginContent() {
     setIsLoading(true);
 
     try {
+      const supabase = getSupabase();
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
