@@ -63,7 +63,7 @@ export function createMCPServer(authProvider?: AuthContextProvider): Server {
             // For stdio transport, create a temporary access token
             // Get userId from auth provider or environment
             const userId = authProvider ? authProvider(extra) : process.env.MCP_USER_ID;
-            
+
             if (!userId) {
                 throw new Error('User ID not provided');
             }

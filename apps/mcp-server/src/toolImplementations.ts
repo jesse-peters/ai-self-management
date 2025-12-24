@@ -272,8 +272,8 @@ export async function implementAssertInScope(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<ScopeResult> {
-  const client = createOAuthScopedClient(accessToken);
+  const userId = await extractUserIdFromToken(accessToken);
   const changeset = params.changesetManifest as ChangesetManifest;
-  return assertInScope(client, params.taskId as string, changeset);
+  return assertInScope(userId, params.taskId as string, changeset);
 }
 
