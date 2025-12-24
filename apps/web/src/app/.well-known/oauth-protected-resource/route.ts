@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * OAuth 2.0 Protected Resource Metadata endpoint (RFC 9728)
@@ -7,15 +7,8 @@ import { NextResponse } from 'next/server';
  * This endpoint provides metadata about the protected resource (MCP server)
  * and its relationship to authorization servers.
  */
-export async function GET() {
-  const apiUrl = process.env.NEXT_PUBLIC_APP_URL;
-
-  if (!apiUrl) {
-    return NextResponse.json(
-      { error: 'NEXT_PUBLIC_APP_URL not configured' },
-      { status: 500 }
-    );
-  }
+export async function GET(request: NextRequest) {
+  const apiUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
 
   return NextResponse.json({
     resource: `${apiUrl}/api/mcp`,

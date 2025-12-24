@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * OAuth 2.0 Authorization Server Metadata endpoint (RFC 8414)
@@ -7,15 +7,8 @@ import { NextResponse } from 'next/server';
  * This endpoint provides discovery metadata for OAuth clients to learn
  * about the authorization server's capabilities and endpoints.
  */
-export async function GET() {
-  const apiUrl = process.env.NEXT_PUBLIC_APP_URL;
-
-  if (!apiUrl) {
-    return NextResponse.json(
-      { error: 'NEXT_PUBLIC_APP_URL not configured' },
-      { status: 500 }
-    );
-  }
+export async function GET(request: NextRequest) {
+  const apiUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
 
   // OAuth 2.1 with PKCE, backed by Supabase Auth
   return NextResponse.json({
