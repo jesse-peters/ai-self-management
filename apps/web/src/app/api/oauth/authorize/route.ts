@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
 
         // User not authenticated - redirect to login page with return URL
         const loginUrl = new URL('/auth/login', request.url);
-        loginUrl.searchParams.set('next', request.url);
+        loginUrl.searchParams.set('redirect', request.url);
         return NextResponse.redirect(loginUrl);
     }
 
@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
 
         // User authenticated but no session - redirect to login
         const loginUrl = new URL('/auth/login', request.url);
-        loginUrl.searchParams.set('next', request.url);
+        loginUrl.searchParams.set('redirect', request.url);
         return NextResponse.redirect(loginUrl);
     }
 
