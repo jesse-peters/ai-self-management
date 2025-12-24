@@ -31,11 +31,11 @@ export interface ToolCallResult {
  * Handles create_project tool calls
  */
 export async function handleCreateProject(
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  accessToken: string
 ): Promise<ToolCallResult> {
   try {
-    const userId = resolveUserId(params);
-    const project = await implementCreateProject(userId, params);
+    const project = await implementCreateProject(accessToken, params);
     return {
       content: [
         {
@@ -62,11 +62,11 @@ export async function handleCreateProject(
  * Handles list_projects tool calls
  */
 export async function handleListProjects(
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  accessToken: string
 ): Promise<ToolCallResult> {
   try {
-    const userId = resolveUserId(params);
-    const projects = await implementListProjects(userId);
+    const projects = await implementListProjects(accessToken);
     return {
       content: [
         {
@@ -93,11 +93,11 @@ export async function handleListProjects(
  * Handles create_task tool calls
  */
 export async function handleCreateTask(
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  accessToken: string
 ): Promise<ToolCallResult> {
   try {
-    const userId = resolveUserId(params);
-    const task = await implementCreateTask(userId, params);
+    const task = await implementCreateTask(accessToken, params);
     return {
       content: [
         {
@@ -124,11 +124,11 @@ export async function handleCreateTask(
  * Handles list_tasks tool calls
  */
 export async function handleListTasks(
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  accessToken: string
 ): Promise<ToolCallResult> {
   try {
-    const userId = resolveUserId(params);
-    const tasks = await implementListTasks(userId, params);
+    const tasks = await implementListTasks(accessToken, params);
     return {
       content: [
         {
@@ -155,11 +155,11 @@ export async function handleListTasks(
  * Handles update_task tool calls
  */
 export async function handleUpdateTask(
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  accessToken: string
 ): Promise<ToolCallResult> {
   try {
-    const userId = resolveUserId(params);
-    const task = await implementUpdateTask(userId, params);
+    const task = await implementUpdateTask(accessToken, params);
     return {
       content: [
         {
@@ -186,11 +186,11 @@ export async function handleUpdateTask(
  * Handles pm.get_context tool calls (renamed from get_project_context)
  */
 export async function handleGetContext(
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  accessToken: string
 ): Promise<ToolCallResult> {
   try {
-    const userId = resolveUserId(params);
-    const context = await implementGetContext(userId, params);
+    const context = await implementGetContext(accessToken, params);
     return {
       content: [
         {
@@ -217,11 +217,11 @@ export async function handleGetContext(
  * Handles pm.pick_next_task tool calls
  */
 export async function handlePickNextTask(
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  accessToken: string
 ): Promise<ToolCallResult> {
   try {
-    const userId = resolveUserId(params);
-    const task = await implementPickNextTask(userId, params);
+    const task = await implementPickNextTask(accessToken, params);
     return {
       content: [
         {
@@ -248,11 +248,11 @@ export async function handlePickNextTask(
  * Handles pm.start_task tool calls
  */
 export async function handleStartTask(
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  accessToken: string
 ): Promise<ToolCallResult> {
   try {
-    const userId = resolveUserId(params);
-    const task = await implementStartTask(userId, params);
+    const task = await implementStartTask(accessToken, params);
     return {
       content: [
         {
@@ -279,11 +279,11 @@ export async function handleStartTask(
  * Handles pm.block_task tool calls
  */
 export async function handleBlockTask(
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  accessToken: string
 ): Promise<ToolCallResult> {
   try {
-    const userId = resolveUserId(params);
-    const task = await implementBlockTask(userId, params);
+    const task = await implementBlockTask(accessToken, params);
     return {
       content: [
         {
@@ -310,11 +310,11 @@ export async function handleBlockTask(
  * Handles pm.append_artifact tool calls
  */
 export async function handleAppendArtifact(
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  accessToken: string
 ): Promise<ToolCallResult> {
   try {
-    const userId = resolveUserId(params);
-    const artifact = await implementAppendArtifact(userId, params);
+    const artifact = await implementAppendArtifact(accessToken, params);
     return {
       content: [
         {
@@ -341,11 +341,11 @@ export async function handleAppendArtifact(
  * Handles pm.evaluate_gates tool calls
  */
 export async function handleEvaluateGates(
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  accessToken: string
 ): Promise<ToolCallResult> {
   try {
-    const userId = resolveUserId(params);
-    const results = await implementEvaluateGates(userId, params);
+    const results = await implementEvaluateGates(accessToken, params);
     return {
       content: [
         {
@@ -372,11 +372,11 @@ export async function handleEvaluateGates(
  * Handles pm.complete_task tool calls
  */
 export async function handleCompleteTask(
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  accessToken: string
 ): Promise<ToolCallResult> {
   try {
-    const userId = resolveUserId(params);
-    const task = await implementCompleteTask(userId, params);
+    const task = await implementCompleteTask(accessToken, params);
     return {
       content: [
         {
@@ -403,11 +403,11 @@ export async function handleCompleteTask(
  * Handles pm.create_checkpoint tool calls
  */
 export async function handleCreateCheckpoint(
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  accessToken: string
 ): Promise<ToolCallResult> {
   try {
-    const userId = resolveUserId(params);
-    const checkpoint = await implementCreateCheckpoint(userId, params);
+    const checkpoint = await implementCreateCheckpoint(accessToken, params);
     return {
       content: [
         {
@@ -434,11 +434,11 @@ export async function handleCreateCheckpoint(
  * Handles pm.record_decision tool calls
  */
 export async function handleRecordDecision(
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  accessToken: string
 ): Promise<ToolCallResult> {
   try {
-    const userId = resolveUserId(params);
-    const decision = await implementRecordDecision(userId, params);
+    const decision = await implementRecordDecision(accessToken, params);
     return {
       content: [
         {
@@ -465,11 +465,11 @@ export async function handleRecordDecision(
  * Handles pm.assert_in_scope tool calls
  */
 export async function handleAssertInScope(
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  accessToken: string
 ): Promise<ToolCallResult> {
   try {
-    const userId = resolveUserId(params);
-    const result = await implementAssertInScope(userId, params);
+    const result = await implementAssertInScope(accessToken, params);
     return {
       content: [
         {
@@ -498,39 +498,40 @@ export async function handleAssertInScope(
  */
 export async function routeToolCall(
   toolName: string,
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  accessToken: string
 ): Promise<ToolCallResult> {
   switch (toolName) {
     case 'pm.create_project':
-      return handleCreateProject(params);
+      return handleCreateProject(params, accessToken);
     case 'pm.list_projects':
-      return handleListProjects(params);
+      return handleListProjects(params, accessToken);
     case 'pm.create_task':
-      return handleCreateTask(params);
+      return handleCreateTask(params, accessToken);
     case 'pm.list_tasks':
-      return handleListTasks(params);
+      return handleListTasks(params, accessToken);
     case 'pm.update_task':
-      return handleUpdateTask(params);
+      return handleUpdateTask(params, accessToken);
     case 'pm.get_context':
-      return handleGetContext(params);
+      return handleGetContext(params, accessToken);
     case 'pm.pick_next_task':
-      return handlePickNextTask(params);
+      return handlePickNextTask(params, accessToken);
     case 'pm.start_task':
-      return handleStartTask(params);
+      return handleStartTask(params, accessToken);
     case 'pm.block_task':
-      return handleBlockTask(params);
+      return handleBlockTask(params, accessToken);
     case 'pm.append_artifact':
-      return handleAppendArtifact(params);
+      return handleAppendArtifact(params, accessToken);
     case 'pm.evaluate_gates':
-      return handleEvaluateGates(params);
+      return handleEvaluateGates(params, accessToken);
     case 'pm.complete_task':
-      return handleCompleteTask(params);
+      return handleCompleteTask(params, accessToken);
     case 'pm.create_checkpoint':
-      return handleCreateCheckpoint(params);
+      return handleCreateCheckpoint(params, accessToken);
     case 'pm.record_decision':
-      return handleRecordDecision(params);
+      return handleRecordDecision(params, accessToken);
     case 'pm.assert_in_scope':
-      return handleAssertInScope(params);
+      return handleAssertInScope(params, accessToken);
     default:
       return {
         content: [

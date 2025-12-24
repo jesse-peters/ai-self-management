@@ -75,6 +75,7 @@ export {
   cleanupExpiredTokens,
   getTokenByAccessToken,
   generateAuthorizationCode,
+  verifyPKCE,
 } from './services';
 
 // Export task lifecycle types

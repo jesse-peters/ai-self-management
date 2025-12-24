@@ -51,6 +51,29 @@ export function generateAuthorizationCode(): string {
 }
 
 /**
+ * Verifies a PKCE code_verifier against a code_challenge
+ * @param codeVerifier The code verifier sent by the client
+ * @param codeChallenge The code challenge stored with the authorization code
+ * @param method The challenge method used (only S256 is supported)
+ * @returns true if verification succeeds
+ */
+export function verifyPKCE(
+  codeVerifier: string,
+  codeChallenge: string,
+  method: string = 'S256'
+): boolean {
+  if (method !== 'S256') {
+    throw new Error('Only S256 PKCE method is supported');
+  }
+
+  // Generate challenge from verifier
+  const hash = crypto.createHash('sha256').update(codeVerifier).digest();
+  const computedChallenge = hash.toString('base64url');
+
+  return computedChallenge === codeChallenge;
+}
+
+/**
  * Hash a token for secure storage
  */
 function hashToken(token: string): string {

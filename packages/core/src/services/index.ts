@@ -29,6 +29,7 @@ export {
   cleanupExpiredTokens,
   getTokenByAccessToken,
   generateAuthorizationCode,
+  verifyPKCE,
 } from './oauth';
 export type { OAuthToken, OAuthTokenInsert } from './oauth';
 

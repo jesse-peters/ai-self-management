@@ -140,7 +140,7 @@ async function handleMCPRequest(
             }
 
             case 'tools/call': {
-                if (!authContext.claims) {
+                if (!authContext.claims || !authContext.token) {
                     return createJsonRpcError(id, -32001, 'Unauthorized', {
                         oauth_required: true,
                         error_type: 'authentication_required',
@@ -164,12 +164,8 @@ async function handleMCPRequest(
 
                     const toolArguments = (toolParams.arguments as Record<string, unknown>) || {};
 
-                    // Inject userId into tool arguments if available
-                    if (authContext.userId) {
-                        toolArguments.userId = authContext.userId;
-                    }
-
-                    const result = await routeToolCall(toolName, toolArguments);
+                    // Pass the access token to routeToolCall
+                    const result = await routeToolCall(toolName, toolArguments, authContext.token);
                     return createJsonRpcResponse(id, result);
                 } catch (error) {
                     const msg = error instanceof Error ? error.message : 'Unknown error';

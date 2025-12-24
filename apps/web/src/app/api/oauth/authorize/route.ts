@@ -3,14 +3,15 @@ import { createServerClient } from '@/lib/supabaseClient';
 import { validateAuthorizationRequest } from '@/lib/oauth';
 import { createRequestLogger } from '@/lib/logger';
 import { getCorrelationId } from '@/lib/correlationId';
+import { generateAuthorizationCode } from '@projectflow/core';
 
 /**
- * OAuth 2.1 Authorization Endpoint
- * Generates and stores authorization codes for OAuth 2.1 flow
+ * OAuth 2.1 Authorization Endpoint (Self-Contained)
+ * Generates and stores authorization codes directly without proxying to Supabase OAuth
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   // #region agent log
-  fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:11', message: 'AUTHORIZE ENDPOINT CALLED - Function entry', data: { url: request.nextUrl.toString(), method: 'GET', hasQueryParams: request.nextUrl.searchParams.toString().length > 0 }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
+  fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:13', message: 'AUTHORIZE ENDPOINT CALLED - Function entry', data: { url: request.nextUrl.toString(), method: 'GET', hasQueryParams: request.nextUrl.searchParams.toString().length > 0 }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'A' }) }).catch(() => { });
   // #endregion
 
   const startTime = Date.now();
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const queryParams = Object.fromEntries(searchParams.entries());
 
     // #region agent log
-    fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:23', message: 'Authorization query parameters received', data: { queryParams, redirectUri: queryParams.redirect_uri, clientId: queryParams.client_id, hasCodeChallenge: !!queryParams.code_challenge }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'D' }) }).catch(() => { });
+    fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:23', message: 'Authorization query parameters received', data: { queryParams, redirectUri: queryParams.redirect_uri, clientId: queryParams.client_id, hasCodeChallenge: !!queryParams.code_challenge }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'A' }) }).catch(() => { });
     // #endregion
 
     logger.debug({ queryParams }, 'Authorization query parameters');
@@ -69,7 +70,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     // Check if user is authenticated
-    // Use getUser() instead of getSession() to verify token with Supabase Auth server
     const supabase = await createServerClient();
     const {
       data: { user },
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     } = await supabase.auth.getUser();
 
     // #region agent log
-    fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:67', message: 'User check result', data: { hasUser: !!user, hasUserError: !!userError, userError: userError?.message }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'E' }) }).catch(() => { });
+    fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:67', message: 'User check result', data: { hasUser: !!user, hasUserError: !!userError, userError: userError?.message }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
     // #endregion
 
     if (userError || !user) {
@@ -85,6 +85,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         hasUserError: !!userError,
         userError: userError?.message,
       }, 'User not authenticated, redirecting to login');
+
       // User not authenticated - redirect to login with return URL
       const loginUrl = new URL('/auth/login', request.nextUrl.origin);
       loginUrl.searchParams.set('redirect', request.url);
@@ -101,7 +102,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       });
 
       // #region agent log
-      fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:88', message: 'Redirecting to login page', data: { loginUrl: loginUrl.toString(), originalUrl: request.url }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'E' }) }).catch(() => { });
+      fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:88', message: 'Redirecting to login page', data: { loginUrl: loginUrl.toString(), originalUrl: request.url }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
       // #endregion
 
       return response;
@@ -109,6 +110,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     const userId = user.id;
     logger.info({ userId }, 'User authenticated');
+
+    // #region agent log
+    fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:112', message: 'User authenticated, checking client_id', data: { userId, clientId: authRequest.client_id }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
+    // #endregion
 
     // Validate client_id
     const clientId = authRequest.client_id;
@@ -128,113 +133,79 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       return NextResponse.redirect(errorUrl.toString());
     }
 
-    // Proxy to Supabase OAuth 2.1 server
-    // Convert cursor:// deep links to our callback endpoint for Supabase compatibility
-    let proxyRedirectUri = authRequest.redirect_uri;
-    if (authRequest.redirect_uri.startsWith('cursor://')) {
-      // Supabase doesn't support custom schemes, so use our callback endpoint
-      const apiUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
-      proxyRedirectUri = `${apiUrl}/api/oauth/callback`;
-      logger.info({
-        originalRedirectUri: authRequest.redirect_uri,
-        proxyRedirectUri,
-      }, 'Converting cursor:// deep link to callback endpoint for Supabase');
-    }
+    // Generate authorization code
+    const code = generateAuthorizationCode();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-    // Build Supabase OAuth authorize URL
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-    if (!supabaseUrl) {
+    // #region agent log
+    fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:138', message: 'Code generated, inserting to DB', data: { codePrefix: code.substring(0, 8), userId, clientId, hasCodeChallenge: !!authRequest.code_challenge }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run2', hypothesisId: 'FIX' }) }).catch(() => { });
+    // #endregion
+
+    // Store authorization code in database
+    // Use the authenticated session client instead of service role
+    // This uses the user's session token which should have proper permissions
+    const { error: insertError } = await supabase
+      .from('oauth_authorization_codes')
+      .insert({
+        code,
+        client_id: clientId,
+        user_id: userId,
+        redirect_uri: authRequest.redirect_uri,
+        scope: authRequest.scope || '',
+        code_challenge: authRequest.code_challenge,
+        code_challenge_method: authRequest.code_challenge_method || 'S256',
+        expires_at: expiresAt.toISOString(),
+      });
+
+    // #region agent log
+    fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:154', message: 'DB insert result', data: { hasError: !!insertError, errorMessage: insertError?.message, errorCode: insertError?.code, errorDetails: insertError?.details }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run2', hypothesisId: 'FIX' }) }).catch(() => { });
+    // #endregion
+
+    if (insertError) {
       logger.error({
-        hasSupabaseUrl: !!process.env.SUPABASE_URL,
-        hasNextPublicSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
-      }, 'Missing SUPABASE_URL environment variable');
+        error: insertError.message,
+        code: insertError.code,
+      }, 'Failed to store authorization code');
       const errorUrl = new URL(authRequest.redirect_uri);
       errorUrl.searchParams.set('error', 'server_error');
-      errorUrl.searchParams.set('error_description', 'OAuth server configuration error: SUPABASE_URL is not set');
+      errorUrl.searchParams.set('error_description', 'Failed to generate authorization code');
       if (authRequest.state) {
         errorUrl.searchParams.set('state', authRequest.state);
       }
       return NextResponse.redirect(errorUrl.toString());
-    }
-
-    // Validate Supabase URL format
-    try {
-      new URL(supabaseUrl);
-    } catch {
-      logger.error({
-        supabaseUrl,
-      }, 'Invalid SUPABASE_URL format');
-      const errorUrl = new URL(authRequest.redirect_uri);
-      errorUrl.searchParams.set('error', 'server_error');
-      errorUrl.searchParams.set('error_description', 'Invalid SUPABASE_URL configuration');
-      if (authRequest.state) {
-        errorUrl.searchParams.set('state', authRequest.state);
-      }
-      return NextResponse.redirect(errorUrl.toString());
-    }
-
-    // Warn if using localhost in production-like environment
-    if (supabaseUrl.includes('localhost') && process.env.NODE_ENV === 'production') {
-      logger.warn({
-        supabaseUrl,
-        nodeEnv: process.env.NODE_ENV,
-      }, 'Using localhost Supabase URL in production environment - this may indicate a configuration issue');
-    }
-
-    // Validate required parameters
-    if (!clientId) {
-      logger.error('Missing client_id in authorization request');
-      const errorUrl = new URL(authRequest.redirect_uri);
-      errorUrl.searchParams.set('error', 'invalid_request');
-      errorUrl.searchParams.set('error_description', 'Missing client_id parameter');
-      if (authRequest.state) {
-        errorUrl.searchParams.set('state', authRequest.state);
-      }
-      return NextResponse.redirect(errorUrl.toString());
-    }
-
-    if (!proxyRedirectUri) {
-      logger.error('Missing redirect_uri in authorization request');
-      const errorUrl = new URL(authRequest.redirect_uri);
-      errorUrl.searchParams.set('error', 'invalid_request');
-      errorUrl.searchParams.set('error_description', 'Missing redirect_uri parameter');
-      if (authRequest.state) {
-        errorUrl.searchParams.set('state', authRequest.state);
-      }
-      return NextResponse.redirect(errorUrl.toString());
-    }
-
-    const supabaseAuthorizeUrl = new URL(`${supabaseUrl}/auth/v1/oauth/authorize`);
-    supabaseAuthorizeUrl.searchParams.set('client_id', clientId);
-    supabaseAuthorizeUrl.searchParams.set('response_type', authRequest.response_type);
-    supabaseAuthorizeUrl.searchParams.set('redirect_uri', proxyRedirectUri);
-    if (authRequest.scope) {
-      supabaseAuthorizeUrl.searchParams.set('scope', authRequest.scope);
-    }
-    if (authRequest.state) {
-      supabaseAuthorizeUrl.searchParams.set('state', authRequest.state);
-    }
-    if (authRequest.code_challenge) {
-      supabaseAuthorizeUrl.searchParams.set('code_challenge', authRequest.code_challenge);
-    }
-    if (authRequest.code_challenge_method) {
-      supabaseAuthorizeUrl.searchParams.set('code_challenge_method', authRequest.code_challenge_method);
     }
 
     logger.info({
-      supabaseAuthorizeUrl: supabaseAuthorizeUrl.toString(),
-      supabaseUrl,
+      codePrefix: code.substring(0, 8),
+      userId,
       clientId,
-      redirectUri: proxyRedirectUri,
+      expiresAt: expiresAt.toISOString(),
       hasCodeChallenge: !!authRequest.code_challenge,
-      codeChallengeMethod: authRequest.code_challenge_method,
-      scope: authRequest.scope,
-      state: authRequest.state ? 'present' : 'missing',
-    }, 'Proxying authorization request to Supabase OAuth 2.1');
+    }, 'Authorization code generated and stored');
 
-    // Redirect to Supabase OAuth authorize endpoint
-    // Supabase will handle user authentication and authorization code generation
-    return NextResponse.redirect(supabaseAuthorizeUrl.toString());
+    // #region agent log
+    fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:160', message: 'Code generated, preparing redirect', data: { codePrefix: code.substring(0, 8), redirectUri: authRequest.redirect_uri, hasState: !!authRequest.state, isCursorScheme: authRequest.redirect_uri.startsWith('cursor://') }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
+    // #endregion
+
+    // Redirect to callback with authorization code
+    const callbackUrl = new URL(authRequest.redirect_uri);
+    callbackUrl.searchParams.set('code', code);
+    if (authRequest.state) {
+      callbackUrl.searchParams.set('state', authRequest.state);
+    }
+
+    const duration = Date.now() - startTime;
+    logger.info({
+      duration,
+      redirectUri: authRequest.redirect_uri,
+      codePrefix: code.substring(0, 8),
+    }, 'Redirecting to callback with authorization code');
+
+    // #region agent log
+    fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:177', message: 'About to redirect', data: { callbackUrl: callbackUrl.toString(), redirectUriLength: callbackUrl.toString().length }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
+    // #endregion
+
+    return NextResponse.redirect(callbackUrl.toString());
   } catch (error) {
     const duration = Date.now() - startTime;
     logger.error({

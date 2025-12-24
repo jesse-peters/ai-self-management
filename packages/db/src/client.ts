@@ -87,3 +87,41 @@ export function createBrowserClient() {
   });
 }
 
+/**
+ * Creates a Supabase client authenticated with an OAuth access token.
+ * The token must be a JWT signed with Supabase's secret and include:
+ * - sub: user ID
+ * - role: 'authenticated'
+ * 
+ * This client respects RLS policies using the token's user context.
+ *
+ * @param accessToken JWT access token from OAuth flow
+ * @returns Supabase client with user authentication context
+ * @throws Error if required environment variables are missing
+ */
+export function createOAuthScopedClient(accessToken: string) {
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl) {
+    throw new Error('Missing SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL environment variable');
+  }
+
+  if (!supabaseAnonKey) {
+    throw new Error('Missing SUPABASE_ANON_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable');
+  }
+
+  return createClient<Database>(supabaseUrl, supabaseAnonKey, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+

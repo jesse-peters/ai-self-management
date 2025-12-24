@@ -2,12 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateTokenRequest } from '@/lib/oauth';
 import { createRequestLogger } from '@/lib/logger';
 import { getCorrelationId } from '@/lib/correlationId';
+import { createOAuthToken, refreshAccessToken, verifyPKCE } from '@projectflow/core';
+import { createServiceRoleClient } from '@projectflow/db';
 
 /**
- * OAuth 2.1 Token Endpoint
+ * OAuth 2.1 Token Endpoint (Self-Contained)
  * Handles token exchange and refresh using our own OAuth implementation
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  // #region agent log
+  fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/token/route.ts:11', message: 'TOKEN ENDPOINT CALLED', data: { url: request.nextUrl.toString(), method: 'POST' }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'E' }) }).catch(() => { });
+  // #endregion
+
   const startTime = Date.now();
   const url = request.nextUrl.toString();
   const correlationId = getCorrelationId(request);
@@ -57,9 +63,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Handle different grant types
     logger.info({ grant_type: tokenRequest.grant_type }, 'Processing grant type');
     if (tokenRequest.grant_type === 'authorization_code') {
-      return handleAuthorizationCodeGrant(tokenRequest, logger);
+      return handleAuthorizationCodeGrant(tokenRequest, request, logger);
     } else if (tokenRequest.grant_type === 'refresh_token') {
-      return handleRefreshTokenGrant(tokenRequest, logger);
+      return handleRefreshTokenGrant(tokenRequest, request, logger);
     } else {
       logger.warn({ grant_type: tokenRequest.grant_type }, 'Unsupported grant type');
       return NextResponse.json(
@@ -90,6 +96,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
 async function handleAuthorizationCodeGrant(
   tokenRequest: Awaited<ReturnType<typeof validateTokenRequest>>,
+  request: NextRequest,
   logger: ReturnType<typeof createRequestLogger>
 ): Promise<NextResponse> {
   if (!tokenRequest.code) {
@@ -103,168 +110,207 @@ async function handleAuthorizationCodeGrant(
     );
   }
 
+  if (!tokenRequest.code_verifier) {
+    logger.warn('Missing code_verifier for PKCE');
+    return NextResponse.json(
+      {
+        error: 'invalid_request',
+        error_description: 'Missing code_verifier parameter (PKCE required)',
+      },
+      { status: 400 }
+    );
+  }
+
   try {
-    // Proxy token exchange to Supabase OAuth 2.1 server
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-    if (!supabaseUrl) {
-      logger.error({
-        hasSupabaseUrl: !!process.env.SUPABASE_URL,
-        hasNextPublicSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
-      }, 'Missing SUPABASE_URL environment variable');
-      return NextResponse.json(
-        {
-          error: 'server_error',
-          error_description: 'OAuth server configuration error: SUPABASE_URL is not set',
-        },
-        { status: 500 }
-      );
-    }
+    const supabase = createServiceRoleClient();
 
-    // Validate Supabase URL format
-    try {
-      new URL(supabaseUrl);
-    } catch {
-      logger.error({
-        supabaseUrl,
-      }, 'Invalid SUPABASE_URL format');
-      return NextResponse.json(
-        {
-          error: 'server_error',
-          error_description: 'Invalid SUPABASE_URL configuration',
-        },
-        { status: 500 }
-      );
-    }
+    // Look up authorization code in database
+    const { data: authCode, error: lookupError } = await supabase
+      .from('oauth_authorization_codes')
+      .select('*')
+      .eq('code', tokenRequest.code)
+      .single();
 
-    const supabaseTokenUrl = `${supabaseUrl}/auth/v1/oauth/token`;
-
-    // Build request body for Supabase
-    const requestBody: Record<string, string> = {
-      grant_type: 'authorization_code',
-      code: tokenRequest.code,
-      client_id: tokenRequest.client_id,
-    };
-
-    if (tokenRequest.redirect_uri) {
-      requestBody.redirect_uri = tokenRequest.redirect_uri;
-    }
-
-    if (tokenRequest.code_verifier) {
-      requestBody.code_verifier = tokenRequest.code_verifier;
-    }
-
-    logger.info({
-      supabaseTokenUrl,
-      supabaseUrl,
-      clientId: tokenRequest.client_id,
-      hasCodeVerifier: !!tokenRequest.code_verifier,
-      hasRedirectUri: !!tokenRequest.redirect_uri,
-      codePrefix: tokenRequest.code.substring(0, 8),
-    }, 'Proxying token exchange to Supabase OAuth 2.1');
-
-    // Forward request to Supabase
-    let response: Response;
-    let responseData: any;
-
-    try {
-      response = await fetch(supabaseTokenUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams(requestBody),
-      });
-
-      // Try to parse JSON response
-      try {
-        responseData = await response.json();
-      } catch (parseError) {
-        // If response is not JSON, read as text
-        const textResponse = await response.text();
-        logger.error({
-          statusCode: response.status,
-          statusText: response.statusText,
-          responseText: textResponse.substring(0, 500),
-        }, 'Supabase token endpoint returned non-JSON response');
-        return NextResponse.json(
-          {
-            error: 'server_error',
-            error_description: `Supabase OAuth 2.1 server returned invalid response. Status: ${response.status}. This may indicate OAuth Server is not enabled in Supabase Dashboard → Auth → OAuth Server.`,
-          },
-          { status: 500 }
-        );
-      }
-    } catch (fetchError) {
-      logger.error({
-        error: fetchError instanceof Error ? fetchError.message : 'Unknown error',
-        errorType: fetchError?.constructor?.name,
-        supabaseTokenUrl,
-      }, 'Failed to connect to Supabase OAuth 2.1 token endpoint');
-      return NextResponse.json(
-        {
-          error: 'server_error',
-          error_description: `Cannot reach Supabase OAuth 2.1 server. Please check if OAuth Server is enabled in Supabase Dashboard → Auth → OAuth Server and verify SUPABASE_URL is correct.`,
-        },
-        { status: 500 }
-      );
-    }
-
-    if (!response.ok) {
-      // Distinguish between configuration errors and invalid requests
-      const isConfigurationError = response.status === 500 || response.status === 503 ||
-        (responseData.error && (
-          responseData.error.includes('server') ||
-          responseData.error.includes('configuration') ||
-          responseData.error_description?.toLowerCase().includes('oauth server')
-        ));
-
-      if (isConfigurationError) {
-        logger.error({
-          statusCode: response.status,
-          error: responseData.error,
-          errorDescription: responseData.error_description,
-          supabaseTokenUrl,
-        }, 'Supabase OAuth 2.1 configuration error - OAuth Server may not be enabled');
-        return NextResponse.json(
-          {
-            error: responseData.error || 'server_error',
-            error_description: responseData.error_description || 'Supabase OAuth 2.1 server configuration error. Please check if OAuth Server is enabled in Supabase Dashboard → Auth → OAuth Server.',
-          },
-          { status: response.status }
-        );
-      }
-
+    if (lookupError || !authCode) {
       logger.warn({
-        statusCode: response.status,
-        error: responseData.error,
-        errorDescription: responseData.error_description,
+        error: lookupError?.message,
         codePrefix: tokenRequest.code.substring(0, 8),
-        clientId: tokenRequest.client_id,
-      }, 'Supabase token exchange failed - invalid request');
+      }, 'Authorization code not found');
       return NextResponse.json(
         {
-          error: responseData.error || 'invalid_grant',
-          error_description: responseData.error_description || 'Token exchange failed',
+          error: 'invalid_grant',
+          error_description: 'Invalid or expired authorization code',
         },
-        { status: response.status }
+        { status: 400 }
+      );
+    }
+
+    // Check if code is expired
+    const expiresAt = new Date(authCode.expires_at);
+    if (expiresAt < new Date()) {
+      logger.warn({
+        codePrefix: tokenRequest.code.substring(0, 8),
+        expiresAt: authCode.expires_at,
+      }, 'Authorization code expired');
+
+      // Delete expired code
+      await supabase
+        .from('oauth_authorization_codes')
+        .delete()
+        .eq('code', tokenRequest.code);
+
+      return NextResponse.json(
+        {
+          error: 'invalid_grant',
+          error_description: 'Authorization code has expired',
+        },
+        { status: 400 }
+      );
+    }
+
+    // Check if code has already been used
+    if (authCode.used_at) {
+      logger.warn({
+        codePrefix: tokenRequest.code.substring(0, 8),
+        usedAt: authCode.used_at,
+      }, 'Authorization code already used');
+      return NextResponse.json(
+        {
+          error: 'invalid_grant',
+          error_description: 'Authorization code has already been used',
+        },
+        { status: 400 }
+      );
+    }
+
+    // Verify client_id matches
+    if (authCode.client_id !== tokenRequest.client_id) {
+      logger.warn({
+        expectedClientId: authCode.client_id,
+        providedClientId: tokenRequest.client_id,
+      }, 'Client ID mismatch');
+      return NextResponse.json(
+        {
+          error: 'invalid_grant',
+          error_description: 'Client ID does not match authorization code',
+        },
+        { status: 400 }
+      );
+    }
+
+    // Verify redirect_uri matches (if provided)
+    if (tokenRequest.redirect_uri && authCode.redirect_uri !== tokenRequest.redirect_uri) {
+      logger.warn({
+        expectedRedirectUri: authCode.redirect_uri,
+        providedRedirectUri: tokenRequest.redirect_uri,
+      }, 'Redirect URI mismatch');
+      return NextResponse.json(
+        {
+          error: 'invalid_grant',
+          error_description: 'Redirect URI does not match authorization request',
+        },
+        { status: 400 }
+      );
+    }
+
+    // Verify PKCE code_verifier
+    if (!authCode.code_challenge) {
+      logger.error({
+        codePrefix: tokenRequest.code.substring(0, 8),
+      }, 'Authorization code missing code_challenge');
+      return NextResponse.json(
+        {
+          error: 'server_error',
+          error_description: 'Authorization code missing PKCE challenge',
+        },
+        { status: 500 }
+      );
+    }
+
+    try {
+      const pkceValid = verifyPKCE(
+        tokenRequest.code_verifier,
+        authCode.code_challenge,
+        authCode.code_challenge_method || 'S256'
+      );
+
+      if (!pkceValid) {
+        logger.warn({
+          codePrefix: tokenRequest.code.substring(0, 8),
+        }, 'PKCE verification failed');
+        return NextResponse.json(
+          {
+            error: 'invalid_grant',
+            error_description: 'PKCE verification failed',
+          },
+          { status: 400 }
+        );
+      }
+    } catch (error) {
+      logger.error({
+        error: error instanceof Error ? error.message : 'Unknown error',
+      }, 'PKCE verification error');
+      return NextResponse.json(
+        {
+          error: 'invalid_request',
+          error_description: 'Invalid PKCE verifier',
+        },
+        { status: 400 }
       );
     }
 
     logger.info({
-      hasAccessToken: !!responseData.access_token,
-      hasRefreshToken: !!responseData.refresh_token,
-      expiresIn: responseData.expires_in,
-      scope: responseData.scope,
-    }, 'Token exchange successful via Supabase');
+      codePrefix: tokenRequest.code.substring(0, 8),
+      userId: authCode.user_id,
+      clientId: authCode.client_id,
+    }, 'Authorization code verified, PKCE valid');
 
-    // Return Supabase's response (normalized)
-    return NextResponse.json({
-      access_token: responseData.access_token,
-      token_type: responseData.token_type || 'Bearer',
-      expires_in: responseData.expires_in,
-      refresh_token: responseData.refresh_token,
-      scope: responseData.scope,
-    });
+    // #region agent log
+    fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/token/route.ts:254', message: 'PKCE verified, creating token', data: { userId: authCode.user_id, clientId: authCode.client_id, scope: authCode.scope }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'F' }) }).catch(() => { });
+    // #endregion
+
+    // Mark code as used
+    const { error: updateError } = await supabase
+      .from('oauth_authorization_codes')
+      .update({ used_at: new Date().toISOString() })
+      .eq('code', tokenRequest.code);
+
+    if (updateError) {
+      logger.error({
+        error: updateError.message,
+      }, 'Failed to mark authorization code as used');
+      // Continue anyway - token generation is more important
+    }
+
+    // Generate OAuth token pair
+    const apiUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+    const audience = `${apiUrl}/api/mcp`;
+
+    const tokenResponse = await createOAuthToken(
+      authCode.user_id,
+      authCode.client_id,
+      authCode.scope || 'projects:read projects:write tasks:read tasks:write sessions:read sessions:write',
+      audience
+    );
+
+    logger.info({
+      userId: authCode.user_id,
+      clientId: authCode.client_id,
+      expiresIn: tokenResponse.expires_in,
+      scope: tokenResponse.scope,
+    }, 'OAuth token created successfully');
+
+    // #region agent log
+    fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/token/route.ts:289', message: 'Token response ready', data: { hasAccessToken: !!tokenResponse.access_token, hasRefreshToken: !!tokenResponse.refresh_token, expiresIn: tokenResponse.expires_in, tokenType: tokenResponse.token_type }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'F' }) }).catch(() => { });
+    // #endregion
+
+    // Delete authorization code (one-time use)
+    await supabase
+      .from('oauth_authorization_codes')
+      .delete()
+      .eq('code', tokenRequest.code);
+
+    return NextResponse.json(tokenResponse);
   } catch (error) {
     logger.error({
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -282,6 +328,7 @@ async function handleAuthorizationCodeGrant(
 
 async function handleRefreshTokenGrant(
   tokenRequest: Awaited<ReturnType<typeof validateTokenRequest>>,
+  request: NextRequest,
   logger: ReturnType<typeof createRequestLogger>
 ): Promise<NextResponse> {
   if (!tokenRequest.refresh_token) {
@@ -296,157 +343,17 @@ async function handleRefreshTokenGrant(
   }
 
   try {
-    // Proxy token refresh to Supabase OAuth 2.1 server
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-    if (!supabaseUrl) {
-      logger.error({
-        hasSupabaseUrl: !!process.env.SUPABASE_URL,
-        hasNextPublicSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
-      }, 'Missing SUPABASE_URL environment variable');
-      return NextResponse.json(
-        {
-          error: 'server_error',
-          error_description: 'OAuth server configuration error: SUPABASE_URL is not set',
-        },
-        { status: 500 }
-      );
-    }
+    const apiUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+    const audience = `${apiUrl}/api/mcp`;
 
-    // Validate Supabase URL format
-    try {
-      new URL(supabaseUrl);
-    } catch {
-      logger.error({
-        supabaseUrl,
-      }, 'Invalid SUPABASE_URL format');
-      return NextResponse.json(
-        {
-          error: 'server_error',
-          error_description: 'Invalid SUPABASE_URL configuration',
-        },
-        { status: 500 }
-      );
-    }
-
-    const supabaseTokenUrl = `${supabaseUrl}/auth/v1/oauth/token`;
-
-    // Build request body for Supabase
-    const requestBody: Record<string, string> = {
-      grant_type: 'refresh_token',
-      refresh_token: tokenRequest.refresh_token,
-      client_id: tokenRequest.client_id,
-    };
+    const tokenResponse = await refreshAccessToken(tokenRequest.refresh_token, audience);
 
     logger.info({
-      supabaseTokenUrl,
-      supabaseUrl,
-      clientId: tokenRequest.client_id,
       refreshTokenPrefix: tokenRequest.refresh_token.substring(0, 8),
-    }, 'Proxying token refresh to Supabase OAuth 2.1');
+      expiresIn: tokenResponse.expires_in,
+    }, 'Token refreshed successfully');
 
-    // Forward request to Supabase
-    let response: Response;
-    let responseData: any;
-
-    try {
-      response = await fetch(supabaseTokenUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams(requestBody),
-      });
-
-      // Try to parse JSON response
-      try {
-        responseData = await response.json();
-      } catch (parseError) {
-        // If response is not JSON, read as text
-        const textResponse = await response.text();
-        logger.error({
-          statusCode: response.status,
-          statusText: response.statusText,
-          responseText: textResponse.substring(0, 500),
-        }, 'Supabase token refresh endpoint returned non-JSON response');
-        return NextResponse.json(
-          {
-            error: 'server_error',
-            error_description: `Supabase OAuth 2.1 server returned invalid response. Status: ${response.status}. This may indicate OAuth Server is not enabled in Supabase Dashboard → Auth → OAuth Server.`,
-          },
-          { status: 500 }
-        );
-      }
-    } catch (fetchError) {
-      logger.error({
-        error: fetchError instanceof Error ? fetchError.message : 'Unknown error',
-        errorType: fetchError?.constructor?.name,
-        supabaseTokenUrl,
-      }, 'Failed to connect to Supabase OAuth 2.1 token endpoint');
-      return NextResponse.json(
-        {
-          error: 'server_error',
-          error_description: `Cannot reach Supabase OAuth 2.1 server. Please check if OAuth Server is enabled in Supabase Dashboard → Auth → OAuth Server and verify SUPABASE_URL is correct.`,
-        },
-        { status: 500 }
-      );
-    }
-
-    if (!response.ok) {
-      // Distinguish between configuration errors and invalid requests
-      const isConfigurationError = response.status === 500 || response.status === 503 ||
-        (responseData.error && (
-          responseData.error.includes('server') ||
-          responseData.error.includes('configuration') ||
-          responseData.error_description?.toLowerCase().includes('oauth server')
-        ));
-
-      if (isConfigurationError) {
-        logger.error({
-          statusCode: response.status,
-          error: responseData.error,
-          errorDescription: responseData.error_description,
-          supabaseTokenUrl,
-        }, 'Supabase OAuth 2.1 configuration error - OAuth Server may not be enabled');
-        return NextResponse.json(
-          {
-            error: responseData.error || 'server_error',
-            error_description: responseData.error_description || 'Supabase OAuth 2.1 server configuration error. Please check if OAuth Server is enabled in Supabase Dashboard → Auth → OAuth Server.',
-          },
-          { status: response.status }
-        );
-      }
-
-      logger.warn({
-        statusCode: response.status,
-        error: responseData.error,
-        errorDescription: responseData.error_description,
-        refreshTokenPrefix: tokenRequest.refresh_token.substring(0, 8),
-        clientId: tokenRequest.client_id,
-      }, 'Supabase token refresh failed - invalid request');
-      return NextResponse.json(
-        {
-          error: responseData.error || 'invalid_grant',
-          error_description: responseData.error_description || 'Token refresh failed',
-        },
-        { status: response.status }
-      );
-    }
-
-    logger.info({
-      hasAccessToken: !!responseData.access_token,
-      hasRefreshToken: !!responseData.refresh_token,
-      expiresIn: responseData.expires_in,
-      scope: responseData.scope,
-    }, 'Token refresh successful via Supabase');
-
-    // Return Supabase's response (normalized)
-    return NextResponse.json({
-      access_token: responseData.access_token,
-      token_type: responseData.token_type || 'Bearer',
-      expires_in: responseData.expires_in,
-      refresh_token: responseData.refresh_token,
-      scope: responseData.scope,
-    });
+    return NextResponse.json(tokenResponse);
   } catch (error) {
     logger.error({
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -456,10 +363,10 @@ async function handleRefreshTokenGrant(
 
     return NextResponse.json(
       {
-        error: 'server_error',
+        error: 'invalid_grant',
         error_description: 'Token refresh failed',
       },
-      { status: 500 }
+      { status: 400 }
     );
   }
 }
