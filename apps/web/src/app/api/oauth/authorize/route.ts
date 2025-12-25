@@ -56,13 +56,19 @@ export async function GET(request: NextRequest) {
 
     if (userError || !user) {
         // #region agent log - H-B
-        fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:noUser', message: 'User not authenticated, redirecting to login', data: { hasError: !!userError, errorMsg: userError?.message }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'B' }) }).catch(() => { });
+        fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:noUser', message: 'User not authenticated, redirecting to OAuth authorize page', data: { hasError: !!userError, errorMsg: userError?.message }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'B' }) }).catch(() => { });
         // #endregion
 
-        // User not authenticated - redirect to login page with return URL
-        const loginUrl = new URL('/auth/login', request.url);
-        loginUrl.searchParams.set('redirect', request.url);
-        return NextResponse.redirect(loginUrl);
+        // User not authenticated - redirect to OAuth authorize page with all OAuth parameters preserved
+        const oauthAuthorizeUrl = new URL('/oauth/authorize', request.url);
+        // Preserve all OAuth parameters
+        if (clientId) oauthAuthorizeUrl.searchParams.set('client_id', clientId);
+        if (redirectUri) oauthAuthorizeUrl.searchParams.set('redirect_uri', redirectUri);
+        if (state) oauthAuthorizeUrl.searchParams.set('state', state);
+        if (codeChallenge) oauthAuthorizeUrl.searchParams.set('code_challenge', codeChallenge);
+        if (codeChallengeMethod) oauthAuthorizeUrl.searchParams.set('code_challenge_method', codeChallengeMethod);
+        if (scope) oauthAuthorizeUrl.searchParams.set('scope', scope);
+        return NextResponse.redirect(oauthAuthorizeUrl);
     }
 
     // User is authenticated - get session tokens (safe after getUser() verification)
@@ -74,10 +80,16 @@ export async function GET(request: NextRequest) {
         fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:noSession', message: 'User authenticated but no session tokens available', data: { hasError: !!sessionError, errorMsg: sessionError?.message }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'B' }) }).catch(() => { });
         // #endregion
 
-        // User authenticated but no session - redirect to login
-        const loginUrl = new URL('/auth/login', request.url);
-        loginUrl.searchParams.set('redirect', request.url);
-        return NextResponse.redirect(loginUrl);
+        // User authenticated but no session - redirect to OAuth authorize page
+        const oauthAuthorizeUrl = new URL('/oauth/authorize', request.url);
+        // Preserve all OAuth parameters
+        if (clientId) oauthAuthorizeUrl.searchParams.set('client_id', clientId);
+        if (redirectUri) oauthAuthorizeUrl.searchParams.set('redirect_uri', redirectUri);
+        if (state) oauthAuthorizeUrl.searchParams.set('state', state);
+        if (codeChallenge) oauthAuthorizeUrl.searchParams.set('code_challenge', codeChallenge);
+        if (codeChallengeMethod) oauthAuthorizeUrl.searchParams.set('code_challenge_method', codeChallengeMethod);
+        if (scope) oauthAuthorizeUrl.searchParams.set('scope', scope);
+        return NextResponse.redirect(oauthAuthorizeUrl);
     }
 
     // User is authenticated - generate authorization code

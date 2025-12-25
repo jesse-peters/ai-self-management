@@ -27,6 +27,31 @@ import { prompts, getPrompt } from './prompts';
 export type AuthContextProvider = (extra: RequestHandlerExtra) => string | null;
 
 /**
+ * Extracts userId from request context using multiple fallback strategies
+ * @param authProvider Optional function to extract userId from request context
+ * @param extra Request handler extra context
+ * @returns userId or null if not found
+ */
+function extractUserIdFromContext(
+    authProvider: AuthContextProvider | undefined,
+    extra: RequestHandlerExtra
+): string | null {
+    // Try auth provider first
+    if (authProvider) {
+        const userId = authProvider(extra);
+        if (userId) return userId;
+    }
+
+    // Fallback to extra context (for backward compatibility)
+    if ((extra as any)?.userId) {
+        return (extra as any).userId;
+    }
+
+    // Fallback to environment variables
+    return process.env.MCP_USER_ID || process.env.USER_ID || null;
+}
+
+/**
  * Creates a configured MCP server instance
  * @param authProvider Optional function to extract userId from request context
  * @returns Configured Server instance ready to connect to a transport
@@ -96,22 +121,7 @@ export function createMCPServer(authProvider?: AuthContextProvider): Server {
     // Register ListResourcesRequest handler
     server.setRequestHandler(ListResourcesRequestSchema, async (request, extra) => {
         try {
-            // Extract userId from auth provider, extra context, or environment
-            let userId: string | null = null;
-
-            if (authProvider) {
-                userId = authProvider(extra);
-            }
-
-            // Fallback to extra context (for backward compatibility)
-            if (!userId && (extra as any)?.userId) {
-                userId = (extra as any).userId;
-            }
-
-            // Fallback to environment variable
-            if (!userId) {
-                userId = process.env.MCP_USER_ID || process.env.USER_ID || null;
-            }
+            const userId = extractUserIdFromContext(authProvider, extra);
 
             if (!userId) {
                 // Return empty resources if no user context
@@ -130,23 +140,7 @@ export function createMCPServer(authProvider?: AuthContextProvider): Server {
     server.setRequestHandler(ReadResourceRequestSchema, async (request, extra) => {
         try {
             const uri = request.params.uri;
-
-            // Extract userId from auth provider, extra context, or environment
-            let userId: string | null = null;
-
-            if (authProvider) {
-                userId = authProvider(extra);
-            }
-
-            // Fallback to extra context (for backward compatibility)
-            if (!userId && (extra as any)?.userId) {
-                userId = (extra as any).userId;
-            }
-
-            // Fallback to environment variable
-            if (!userId) {
-                userId = process.env.MCP_USER_ID || process.env.USER_ID || null;
-            }
+            const userId = extractUserIdFromContext(authProvider, extra);
 
             if (!userId) {
                 return {
@@ -187,23 +181,7 @@ export function createMCPServer(authProvider?: AuthContextProvider): Server {
         try {
             const promptName = request.params.name;
             const args = (request.params.arguments as Record<string, unknown>) || {};
-
-            // Extract userId from auth provider, extra context, or environment
-            let userId: string | null = null;
-
-            if (authProvider) {
-                userId = authProvider(extra);
-            }
-
-            // Fallback to extra context (for backward compatibility)
-            if (!userId && (extra as any)?.userId) {
-                userId = (extra as any).userId;
-            }
-
-            // Fallback to environment variable
-            if (!userId) {
-                userId = process.env.MCP_USER_ID || process.env.USER_ID || null;
-            }
+            const userId = extractUserIdFromContext(authProvider, extra);
 
             if (!userId) {
                 throw new Error('User authentication required for prompts');
