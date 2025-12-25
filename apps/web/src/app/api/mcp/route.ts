@@ -69,9 +69,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
                 reason: authContext.token ? 'token_validation_failed' : 'no_token_provided',
             }, 'Authentication required but not provided');
 
-            // Build authorization URI - use cursor:// redirect_uri that Cursor registered with
+            // Build authorization URI - point to user-friendly OAuth page instead of API endpoint
+            // This ensures that when users manually click the URL, they see a proper page instead of redirects
             const cursorRedirectUri = 'cursor://anysphere.cursor-mcp/oauth/callback';
-            const authUri = `${apiUrl}/api/oauth/authorize?client_id=mcp-client&response_type=code&scope=projects:read+projects:write+tasks:read+tasks:write+sessions:read+sessions:write&redirect_uri=${encodeURIComponent(cursorRedirectUri)}`;
+            // Point to /oauth/authorize page which will handle the OAuth flow and redirect to /api/oauth/authorize
+            // The API endpoint will then handle PKCE and return the authorization code
+            const authUri = `${apiUrl}/oauth/authorize?client_id=mcp-client&response_type=code&scope=projects:read+projects:write+tasks:read+tasks:write+sessions:read+sessions:write&redirect_uri=${encodeURIComponent(cursorRedirectUri)}`;
 
             // #region agent log
             fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'mcp/route.ts:46', message: 'Building OAuth authorization URI for 401 response', data: { apiUrl, authUri, cursorRedirectUri, method }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'A' }) }).catch(() => { });

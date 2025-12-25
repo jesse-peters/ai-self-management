@@ -31,6 +31,10 @@ function OAuthAuthorizeContent() {
   const codeChallenge = searchParams.get('code_challenge');
   const codeChallengeMethod = searchParams.get('code_challenge_method');
   const scope = searchParams.get('scope');
+  const responseType = searchParams.get('response_type');
+
+  // Check if we have OAuth parameters - if not, this is a manual visit
+  const hasOAuthParams = !!(clientId || redirectUri || codeChallenge);
 
   // Build the API authorize URL to redirect to after login
   // Memoized with useCallback to avoid recreating on every render
@@ -42,9 +46,10 @@ function OAuthAuthorizeContent() {
     if (state) url.searchParams.set('state', state);
     if (codeChallenge) url.searchParams.set('code_challenge', codeChallenge);
     if (codeChallengeMethod) url.searchParams.set('code_challenge_method', codeChallengeMethod);
+    if (responseType) url.searchParams.set('response_type', responseType);
     if (scope) url.searchParams.set('scope', scope);
     return url.toString();
-  }, [clientId, redirectUri, state, codeChallenge, codeChallengeMethod, scope]);
+  }, [clientId, redirectUri, state, codeChallenge, codeChallengeMethod, responseType, scope]);
 
   // Lazy create supabase client only in browser
   const getSupabase = useCallback(() => {
@@ -193,6 +198,49 @@ function OAuthAuthorizeContent() {
     );
   }
 
+  // If no OAuth parameters, show manual setup instructions
+  if (!hasOAuthParams) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-md w-full space-y-8">
+          <div>
+            <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+              ProjectFlow MCP Authorization
+            </h2>
+            <p className="mt-2 text-center text-sm text-gray-600">
+              Manual OAuth Authorization Setup
+            </p>
+          </div>
+
+          <div className="rounded-md bg-yellow-50 p-4 border border-yellow-200">
+            <h3 className="text-sm font-medium text-yellow-900 mb-2">Authorization in Progress</h3>
+            <p className="text-sm text-yellow-700">
+              If you're seeing this page, you likely clicked an authorization URL from Cursor. 
+              Please ensure you're logged in below, and we'll complete the authorization process.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              const loginUrl = new URL('/auth/login', window.location.origin);
+              window.location.href = loginUrl.toString();
+            }}
+            className="w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            Go to Login
+          </button>
+
+          <div className="text-center">
+            <p className="text-xs text-gray-500">
+              If you're already logged in, please contact support or try the authorization process again from Cursor.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
@@ -213,9 +261,15 @@ function OAuthAuthorizeContent() {
             you'll be redirected back to Cursor to complete the connection.
           </p>
           {redirectUri?.startsWith('cursor://') && (
-            <p className="text-xs text-blue-600 italic">
-              Note: If Cursor doesn't automatically open, you may need to manually complete the authorization.
-            </p>
+            <div className="mt-3 pt-3 border-t border-blue-200">
+              <p className="text-xs text-blue-600 font-medium mb-2">How this works:</p>
+              <ol className="text-xs text-blue-600 space-y-1 list-decimal list-inside">
+                <li>You clicked an authorization link from Cursor</li>
+                <li>Sign in with your credentials below</li>
+                <li>We'll generate an authorization code</li>
+                <li>Cursor will receive the code and complete setup automatically</li>
+              </ol>
+            </div>
           )}
         </div>
 
