@@ -73,6 +73,7 @@ export async function GET(request: NextRequest) {
         codeChallenge,
         codeChallengeMethod: codeChallengeMethod || 'S256',
         scope: scope || '',
+        redirectUri: redirectUri, // Store for validation during token exchange
         accessToken: session.access_token,
         refreshToken: session.refresh_token,
         expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
