@@ -118,6 +118,14 @@ async function handleAuthorizationCodeGrant(
 ): Promise<NextResponse> {
     const { code, redirect_uri, code_verifier } = body;
 
+    logger.info({
+        hasCode: !!code,
+        hasRedirectUri: !!redirect_uri,
+        hasCodeVerifier: !!code_verifier,
+        codeLength: code?.length,
+        codeVerifierLength: code_verifier?.length,
+    }, 'Processing authorization code grant');
+
     // Validate required parameters with specific error messages
     if (!code) {
         logger.warn('Missing code parameter');
@@ -261,6 +269,13 @@ async function handleAuthorizationCodeGrant(
         }
 
         // Verify code challenge (PKCE)
+        logger.info({
+            hasCodeChallenge: !!codeData.codeChallenge,
+            codeChallengeLength: codeData.codeChallenge?.length,
+            codeVerifierLength: code_verifier.length,
+            codeChallengeMethod: codeData.codeChallengeMethod || 'S256',
+        }, 'Starting PKCE verification');
+
         const codeChallengeMethod = codeData.codeChallengeMethod || 'S256';
         let computedChallenge: string;
 
@@ -270,8 +285,8 @@ async function handleAuthorizationCodeGrant(
             computedChallenge = code_verifier;
         }
 
-        // Enhanced logging for PKCE debugging
-        logger.debug({
+        // Enhanced logging for PKCE debugging - use info level so it shows in production
+        logger.info({
             method: codeChallengeMethod,
             codeVerifierLength: code_verifier.length,
             codeVerifierPreview: code_verifier.substring(0, 20) + '...',
