@@ -270,18 +270,42 @@ async function handleAuthorizationCodeGrant(
             computedChallenge = code_verifier;
         }
 
+        // Enhanced logging for PKCE debugging
         logger.debug({
             method: codeChallengeMethod,
-            storedChallenge: codeData.codeChallenge?.substring(0, 20) + '...',
-            computedChallenge: computedChallenge.substring(0, 20) + '...',
+            codeVerifierLength: code_verifier.length,
+            codeVerifierPreview: code_verifier.substring(0, 20) + '...',
+            storedChallengeLength: codeData.codeChallenge?.length,
+            storedChallengeFull: codeData.codeChallenge, // Log full value for comparison
+            computedChallengeLength: computedChallenge.length,
+            computedChallengeFull: computedChallenge, // Log full value for comparison
+            challengesMatch: computedChallenge === codeData.codeChallenge,
         }, 'Verifying PKCE code challenge');
 
         if (computedChallenge !== codeData.codeChallenge) {
+            // Find where they differ
+            const stored = codeData.codeChallenge || '';
+            const computed = computedChallenge;
+            let diffIndex = -1;
+            for (let i = 0; i < Math.max(stored.length, computed.length); i++) {
+                if (stored[i] !== computed[i]) {
+                    diffIndex = i;
+                    break;
+                }
+            }
+
             logger.warn({
                 method: codeChallengeMethod,
-                storedLength: codeData.codeChallenge?.length,
-                computedLength: computedChallenge.length,
+                storedLength: stored.length,
+                computedLength: computed.length,
+                diffIndex,
+                storedAtDiff: diffIndex >= 0 ? stored.substring(Math.max(0, diffIndex - 5), diffIndex + 10) : null,
+                computedAtDiff: diffIndex >= 0 ? computed.substring(Math.max(0, diffIndex - 5), diffIndex + 10) : null,
+                storedChallenge: stored,
+                computedChallenge: computed,
+                codeVerifier: code_verifier, // Log the verifier for debugging
             }, 'PKCE code challenge verification failed');
+
             return NextResponse.json(
                 {
                     error: 'invalid_grant',

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabaseClient';
+import { createRequestLogger } from '@/lib/logger';
+import { getCorrelationId } from '@/lib/correlationId';
 
 /**
  * OAuth 2.1 Authorization Endpoint
@@ -9,6 +11,9 @@ import { createServerClient } from '@/lib/supabaseClient';
  * If not, redirects to login page.
  */
 export async function GET(request: NextRequest) {
+    const correlationId = getCorrelationId(request);
+    const logger = createRequestLogger(correlationId, 'oauth');
+
     const searchParams = request.nextUrl.searchParams;
     const clientId = searchParams.get('client_id');
     const redirectUri = searchParams.get('redirect_uri');
@@ -16,6 +21,18 @@ export async function GET(request: NextRequest) {
     const codeChallenge = searchParams.get('code_challenge');
     const codeChallengeMethod = searchParams.get('code_challenge_method');
     const scope = searchParams.get('scope');
+
+    // Enhanced logging for code challenge
+    logger.info({
+        clientId,
+        redirectUri,
+        hasCodeChallenge: !!codeChallenge,
+        codeChallengeLength: codeChallenge?.length,
+        codeChallengeFull: codeChallenge, // Log full value
+        codeChallengeMethod,
+        hasState: !!state,
+        scope,
+    }, 'Authorization request received');
 
     // #region agent log - H-B
     fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:GET', message: 'Authorize endpoint received request', data: { clientId, redirectUri, codeChallenge: codeChallenge?.substring(0, 20) + '...', hasState: !!state, scope }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'B' }) }).catch(() => { });
@@ -78,6 +95,14 @@ export async function GET(request: NextRequest) {
         refreshToken: session.refresh_token,
         expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
     };
+
+    // Log code challenge storage
+    logger.debug({
+        codeChallenge,
+        codeChallengeLength: codeChallenge?.length,
+        codeChallengeMethod: codeChallengeMethod || 'S256',
+        userId: user.id,
+    }, 'Storing code challenge in authorization code');
 
     // Base64 encode the code data
     const encodedCode = Buffer.from(JSON.stringify(codeData)).toString('base64url');

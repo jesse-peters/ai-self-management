@@ -10,17 +10,31 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const correlationId = getCorrelationId(request);
     const logger = createRequestLogger(correlationId, 'mcp');
 
-    logger.info({ url, method: 'POST' }, 'MCP request received');
+    logger.info({ 
+        url, 
+        method: 'POST',
+        hasAuthHeader: request.headers.has('Authorization'),
+        authHeaderPreview: request.headers.get('Authorization')?.substring(0, 30) || 'none',
+    }, 'MCP request received');
 
     try {
         // Extract and verify OAuth token
         const apiUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
         const audience = `${apiUrl}/api/mcp`;
+        
+        logger.debug({
+            apiUrl,
+            expectedAudience: audience,
+            requestOrigin: request.nextUrl.origin,
+        }, 'Extracting auth context');
+        
         const authContext = await extractAuthContext(request, audience);
 
         logger.debug({
             hasAuth: authContext.claims !== null,
+            hasToken: !!authContext.token,
             userId: authContext.userId,
+            tokenLength: authContext.token?.length || 0,
         }, 'Auth context extracted');
 
         // Parse request body to check method
@@ -28,6 +42,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         try {
             body = await request.json();
         } catch {
+            logger.warn('Failed to parse request body as JSON');
             return NextResponse.json(
                 { success: false, error: 'Invalid JSON in request body' },
                 { status: 400 }
@@ -36,11 +51,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
         const jsonRpcRequest = body as any;
         const method = jsonRpcRequest?.method;
+        
+        logger.debug({
+            method,
+            requestId: jsonRpcRequest?.id,
+            requiresAuth: method ? methodRequiresAuth(method) : false,
+            hasAuth: !!authContext.claims,
+        }, 'Processing MCP method');
 
         // Check if method requires authentication
         if (method && methodRequiresAuth(method) && !authContext.claims) {
             // Authentication is required but not provided
-            logger.warn({ method }, 'Authentication required but not provided');
+            logger.warn({ 
+                method,
+                hasToken: !!authContext.token,
+                tokenLength: authContext.token?.length || 0,
+                reason: authContext.token ? 'token_validation_failed' : 'no_token_provided',
+            }, 'Authentication required but not provided');
 
             // Build authorization URI - use cursor:// redirect_uri that Cursor registered with
             const cursorRedirectUri = 'cursor://anysphere.cursor-mcp/oauth/callback';
@@ -88,6 +115,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         logger.info({
             method,
             duration,
+            status: response.status,
             hasError: !response.ok,
         }, 'MCP response sent');
 
