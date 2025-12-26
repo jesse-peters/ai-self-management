@@ -83,13 +83,13 @@ echo -e "${GREEN}✓${NC} Packages built"
 echo ""
 
 # Step 6: Create .env.local if it doesn't exist
-ENV_FILE="apps/web/.env.local"
+ENV_FILE=".env.local"
 if [ ! -f "$ENV_FILE" ]; then
     echo "📝 Creating .env.local file..."
     cat > "$ENV_FILE" << EOF
 # Supabase Local Configuration
-NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}
-NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+SUPABASE_URL=${SUPABASE_URL}
+SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
 SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_KEY}
 
 # App URL

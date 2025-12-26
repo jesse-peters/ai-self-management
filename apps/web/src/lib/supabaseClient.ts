@@ -12,15 +12,16 @@ import type { Database } from '@projectflow/db';
  * Can be used in client components and browser code
  */
 export function createBrowserClient(): ReturnType<typeof createSupabaseBrowserClient<Database>> {
+    // Next.js auto-exposes SUPABASE_URL as NEXT_PUBLIC_SUPABASE_URL via next.config.ts
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
     if (!supabaseUrl) {
-        throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL environment variable');
+        throw new Error('Missing SUPABASE_URL environment variable (exposed as NEXT_PUBLIC_SUPABASE_URL)');
     }
 
     if (!supabaseAnonKey) {
-        throw new Error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable');
+        throw new Error('Missing SUPABASE_ANON_KEY environment variable (exposed as NEXT_PUBLIC_SUPABASE_ANON_KEY)');
     }
 
     return createSupabaseBrowserClient<Database>(supabaseUrl, supabaseAnonKey);
@@ -30,15 +31,16 @@ export function createBrowserClient(): ReturnType<typeof createSupabaseBrowserCl
  * Create a Supabase client for middleware
  */
 export function createMiddlewareClient(): ReturnType<typeof createSupabaseBrowserClient<Database>> {
+    // Next.js auto-exposes SUPABASE_URL as NEXT_PUBLIC_SUPABASE_URL via next.config.ts
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
     if (!supabaseUrl) {
-        throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL environment variable');
+        throw new Error('Missing SUPABASE_URL environment variable (exposed as NEXT_PUBLIC_SUPABASE_URL)');
     }
 
     if (!supabaseAnonKey) {
-        throw new Error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable');
+        throw new Error('Missing SUPABASE_ANON_KEY environment variable (exposed as NEXT_PUBLIC_SUPABASE_ANON_KEY)');
     }
 
     return createSupabaseBrowserClient<Database>(supabaseUrl, supabaseAnonKey);
@@ -51,15 +53,17 @@ export function createMiddlewareClient(): ReturnType<typeof createSupabaseBrowse
  * Required for server components and API routes
  */
 export async function createServerClient(): Promise<ReturnType<typeof createSupabaseServerClient<Database>>> {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    // Next.js auto-exposes SUPABASE_URL as NEXT_PUBLIC_SUPABASE_URL via next.config.ts
+    // For server-side, we can also use SUPABASE_URL directly
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
     if (!supabaseUrl) {
-        throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL environment variable');
+        throw new Error('Missing SUPABASE_URL environment variable');
     }
 
     if (!supabaseAnonKey) {
-        throw new Error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable');
+        throw new Error('Missing SUPABASE_ANON_KEY environment variable');
     }
 
     // Dynamic import to avoid build-time evaluation

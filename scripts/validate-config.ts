@@ -54,19 +54,14 @@ function log(message: string, color = RESET) {
 // Required environment variables for different contexts
 const REQUIRED_ENV_VARS = {
     // Supabase - always required
-    NEXT_PUBLIC_SUPABASE_URL: {
+    SUPABASE_URL: {
         description: 'Supabase project URL',
         where: 'Settings → API → Project URL',
         required: true,
     },
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: {
+    SUPABASE_ANON_KEY: {
         description: 'Supabase anonymous key',
         where: 'Settings → API → Anon key',
-        required: true,
-    },
-    SUPABASE_URL: {
-        description: 'Supabase project URL (server-side)',
-        where: 'Settings → API → Project URL',
         required: true,
     },
     SUPABASE_SERVICE_ROLE_KEY: {
@@ -135,8 +130,8 @@ function validateFiles(root: string): ValidationResult {
 async function validateSupabaseConnection(): Promise<ValidationResult> {
     const result: ValidationResult = { passed: true, errors: [], warnings: [] };
 
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const url = process.env.SUPABASE_URL;
+    const anonKey = process.env.SUPABASE_ANON_KEY;
 
     if (!url || !anonKey || url.includes('your-') || anonKey.includes('your-')) {
         result.warnings.push('Skipping Supabase connection test (credentials not set)');
@@ -165,7 +160,7 @@ async function validateSupabaseConnection(): Promise<ValidationResult> {
 async function validateOAuthTables(): Promise<ValidationResult> {
     const result: ValidationResult = { passed: true, errors: [], warnings: [] };
 
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+    const url = process.env.SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!url || !serviceKey || url.includes('your-') || serviceKey.includes('your-')) {
@@ -279,9 +274,8 @@ function validateVercel(): ValidationResult {
         result.warnings.push(
             'Not deployed on Vercel. Skipping Vercel validation.\n' +
             '  Required environment variables in Vercel dashboard:\n' +
-            '  - NEXT_PUBLIC_SUPABASE_URL\n' +
-            '  - NEXT_PUBLIC_SUPABASE_ANON_KEY\n' +
             '  - SUPABASE_URL\n' +
+            '  - SUPABASE_ANON_KEY\n' +
             '  - SUPABASE_SERVICE_ROLE_KEY\n' +
             '  See docs/vercel-setup.md for setup instructions.'
         );

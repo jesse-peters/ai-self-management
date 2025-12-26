@@ -3,9 +3,11 @@
 /**
  * Global Error Boundary Component
  * Catches React rendering errors and sends them to Sentry
+ * Uses centralized error handling utilities
  */
 
 import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { captureError } from '@/lib/errors';
 
 interface Props {
   children: ReactNode;
@@ -28,24 +30,19 @@ export class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
-  async componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Log the error to Sentry (dynamic import to avoid bundling Node.js modules)
-    try {
-      const Sentry = await import('@sentry/nextjs');
-      Sentry.captureException(error, {
-        contexts: {
-          react: {
-            componentStack: errorInfo.componentStack,
-          },
-        },
-        tags: {
-          errorBoundary: true,
-        },
-      });
-    } catch (sentryError) {
-      // Sentry not available or failed to load, just log to console
-      console.error('Failed to send error to Sentry:', sentryError);
-    }
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    // Capture error to Sentry using centralized utilities
+    captureError(error, {
+      component: 'react-error-boundary',
+    }, {
+      level: 'error',
+      tags: {
+        errorBoundary: 'true',
+      },
+      extra: {
+        componentStack: errorInfo.componentStack,
+      },
+    });
 
     // Also log to console in development
     if (process.env.NODE_ENV === 'development') {

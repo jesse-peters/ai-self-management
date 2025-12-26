@@ -9,13 +9,14 @@ export const tools: Tool[] = [
   // ========== CORE (2 tools) ==========
   {
     name: 'pm.init',
-    description: 'Initializes a new project with sensible defaults (basic gates: tests, lint, review). Quick start for new projects.',
+    description: 'Initializes a new project with sensible defaults (basic gates: tests, lint, review). Quick start for new projects. If repoRoot is provided, creates .pm/project.json and .pm/local.json manifest files.',
     inputSchema: {
       type: 'object' as const,
       properties: {
         name: { type: 'string', description: 'Project name' },
         description: { type: 'string', description: 'Optional project description' },
         skipGates: { type: 'boolean', description: 'Skip creating default gates' },
+        repoRoot: { type: 'string', description: 'Optional path to repository root for manifest creation (defaults to current directory)' },
       },
       required: ['name'],
     },
@@ -277,6 +278,89 @@ export const tools: Tool[] = [
         workItemId: { type: 'string', description: 'Optional work item ID' },
       },
       required: ['projectId', 'type', 'content'],
+    },
+  },
+
+  // ========== MANIFEST (3 tools) ==========
+  {
+    name: 'pm.manifest_discover',
+    description: 'Discovers the .pm directory by walking up from the current directory. Returns the project ID and user ID if manifests exist.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        startDir: { type: 'string', description: 'Optional starting directory (defaults to current directory)' },
+      },
+    },
+  },
+  {
+    name: 'pm.manifest_validate',
+    description: 'Validates that .pm/project.json and .pm/local.json exist and are properly formatted. Returns validation errors and warnings.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        startDir: { type: 'string', description: 'Optional starting directory (defaults to current directory)' },
+      },
+    },
+  },
+  {
+    name: 'pm.manifest_read',
+    description: 'Reads the project and local manifests from the .pm directory. Returns full manifest data.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        startDir: { type: 'string', description: 'Optional starting directory (defaults to current directory)' },
+      },
+    },
+  },
+
+  // ========== INTERVIEW (3 tools) ==========
+  {
+    name: 'pm.interview_questions',
+    description: 'Gets the list of questions for the project init interview. Use to guide the agent through capturing project conventions (stack, commands, environments, etc.).',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+    },
+  },
+  {
+    name: 'pm.init_with_interview',
+    description: 'Initializes a project and runs the setup interview. Takes interview responses and stores project conventions for recon/primer generation.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        name: { type: 'string', description: 'Project name' },
+        description: { type: 'string', description: 'Optional project description' },
+        repoRoot: { type: 'string', description: 'Optional path to repository root for manifest creation' },
+        interviewResponses: {
+          type: 'object',
+          description: 'Answers to interview questions. Keys should match question IDs.',
+          additionalProperties: true,
+        },
+      },
+      required: ['name', 'interviewResponses'],
+    },
+  },
+  {
+    name: 'pm.project_conventions_get',
+    description: 'Gets the stored project conventions (from a previous interview) for a project.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        projectId: { type: 'string', description: 'Project ID' },
+      },
+      required: ['projectId'],
+    },
+  },
+  {
+    name: 'pm.conventions_sync_to_primer',
+    description: 'Syncs stored project conventions from SaaS to local .pm/primer.md file. Updates machine-generated section while preserving user edits.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        projectId: { type: 'string', description: 'Project ID' },
+        repoRoot: { type: 'string', description: 'Optional path to repository root (defaults to current directory)' },
+      },
+      required: ['projectId'],
     },
   },
 ];

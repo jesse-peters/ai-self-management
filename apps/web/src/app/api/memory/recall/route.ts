@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabaseClient';
-import { recall } from '@projectflow/core';
+import { recall, UnauthorizedError, ValidationError } from '@projectflow/core';
+import { withErrorHandler } from '@/lib/api/withErrorHandler';
+import { createSuccessResponse } from '@/lib/errors/responses';
 
 /**
  * GET /api/memory/recall
@@ -14,49 +16,41 @@ import { recall } from '@projectflow/core';
  * - files: string (optional) - JSON array of file paths
  * - keywords: string (optional) - JSON array of keywords
  */
-export async function GET(request: NextRequest) {
-  try {
-    const supabase = await createServerClient();
+export const GET = withErrorHandler(async (request: NextRequest): Promise<NextResponse> => {
+  const supabase = await createServerClient();
 
-    // Get authenticated user
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+  // Get authenticated user
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
 
-    if (userError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const userId = user.id;
-    const searchParams = request.nextUrl.searchParams;
-    const projectId = searchParams.get('projectId');
-
-    if (!projectId) {
-      return NextResponse.json({ error: 'projectId is required' }, { status: 400 });
-    }
-
-    // Parse optional parameters
-    const query = searchParams.get('query') || undefined;
-    const tags = searchParams.get('tags') ? JSON.parse(searchParams.get('tags')!) : undefined;
-    const files = searchParams.get('files') ? JSON.parse(searchParams.get('files')!) : undefined;
-    const keywords = searchParams.get('keywords') ? JSON.parse(searchParams.get('keywords')!) : undefined;
-
-    // Call memory recall service
-    const result = await recall(userId, projectId, {
-      query,
-      tags,
-      files,
-      keywords,
-    });
-
-    return NextResponse.json(result);
-  } catch (error) {
-    console.error('Error recalling memory:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to recall memory' },
-      { status: 500 }
-    );
+  if (userError || !user) {
+    throw new UnauthorizedError('Authentication required');
   }
-}
+
+  const userId = user.id;
+  const searchParams = request.nextUrl.searchParams;
+  const projectId = searchParams.get('projectId');
+
+  if (!projectId) {
+    throw new ValidationError('projectId is required');
+  }
+
+  // Parse optional parameters
+  const query = searchParams.get('query') || undefined;
+  const tags = searchParams.get('tags') ? JSON.parse(searchParams.get('tags')!) : undefined;
+  const files = searchParams.get('files') ? JSON.parse(searchParams.get('files')!) : undefined;
+  const keywords = searchParams.get('keywords') ? JSON.parse(searchParams.get('keywords')!) : undefined;
+
+  // Call memory recall service
+  const result = await recall(userId, projectId, {
+    query,
+    tags,
+    files,
+    keywords,
+  });
+
+  return createSuccessResponse(result, 200);
+}, 'memory-api');
 

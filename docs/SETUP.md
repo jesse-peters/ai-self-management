@@ -58,8 +58,8 @@ Once your project is ready:
 1. Go to **Settings** → **API**
 2. Copy these values:
 
-   - **Project URL** → `NEXT_PUBLIC_SUPABASE_URL`
-   - **Anonymous Key (anon)** → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - **Project URL** → `SUPABASE_URL`
+   - **Anonymous Key (anon)** → `SUPABASE_ANON_KEY`
    - **Service Role Key** → `SUPABASE_SERVICE_ROLE_KEY`
 
 3. Go to **Settings** → **API** → **JWT Keys**
@@ -110,9 +110,8 @@ Create `.env.local` in the project root:
 
 ```bash
 # Supabase Configuration
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
 # JWT Secret (CRITICAL - from Supabase Dashboard → Settings → API → JWT Keys → Legacy JWT Secret)
@@ -180,9 +179,8 @@ Add these variables for **all environments** (Production, Preview, Development):
 
 ```bash
 # Supabase Configuration
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
 # JWT Secret (CRITICAL)
@@ -255,9 +253,8 @@ Set these in GitHub repository: **Settings** → **Secrets and variables** → *
 
 | Secret                          | Where to Get                                  |
 | ------------------------------- | --------------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`      | Settings → API → Project URL                  |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Settings → API → Anon key                     |
-| `SUPABASE_URL`                  | Same as above                                 |
+| `SUPABASE_URL`                  | Settings → API → Project URL                  |
+| `SUPABASE_ANON_KEY`             | Settings → API → Anon key                     |
 | `SUPABASE_SERVICE_ROLE_KEY`     | Settings → API → Service role key             |
 | `SUPABASE_JWT_SECRET`           | Settings → API → JWT Keys → Legacy JWT Secret |
 
@@ -267,9 +264,8 @@ Set these in GitHub repository: **Settings** → **Secrets and variables** → *
 gh secret set SUPABASE_ACCESS_TOKEN --body "YOUR_TOKEN_VALUE"
 gh secret set SUPABASE_PROJECT_ID --body "YOUR_PROJECT_ID"
 gh secret set SUPABASE_DB_PASSWORD --body "YOUR_DB_PASSWORD"
-gh secret set NEXT_PUBLIC_SUPABASE_URL --body "YOUR_URL"
-gh secret set NEXT_PUBLIC_SUPABASE_ANON_KEY --body "YOUR_KEY"
 gh secret set SUPABASE_URL --body "YOUR_URL"
+gh secret set SUPABASE_ANON_KEY --body "YOUR_KEY"
 gh secret set SUPABASE_SERVICE_ROLE_KEY --body "YOUR_KEY"
 gh secret set SUPABASE_JWT_SECRET --body "YOUR_JWT_SECRET"
 ```
@@ -429,8 +425,8 @@ Before going to production:
 
 | Variable                        | Purpose              | Example                   |
 | ------------------------------- | -------------------- | ------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`      | Supabase project URL | `https://abc.supabase.co` |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public anon key      | `eyJhbG...`               |
+| `SUPABASE_URL`                  | Supabase project URL | `https://abc.supabase.co` |
+| `SUPABASE_ANON_KEY`             | Supabase anon key    | `eyJhbG...`               |
 | `NEXT_PUBLIC_APP_URL`           | Your app URL         | `https://app.vercel.app`  |
 | `LOG_LEVEL`                     | Log verbosity        | `info`, `debug`, `trace`  |
 | `NEXT_PUBLIC_SENTRY_DSN`        | Sentry DSN (client-side) | `https://xxx@xxx.ingest.sentry.io/xxx` |

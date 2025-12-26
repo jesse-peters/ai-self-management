@@ -8,6 +8,7 @@ A secure, multi-tenant project management system built as an MCP (Model Context 
 
 - ✅ **Task Management** - Create, organize, and track projects and tasks
 - ✅ **AI Integration** - Built as MCP server for LLM integration
+- ✅ **Repo Linking** - `.pm/` manifest system links local repos to SaaS projects
 - ✅ **Authentication** - Magic link + OAuth2 with Supabase
 - ✅ **Row Level Security** - Database-enforced user data isolation
 - ✅ **Event Sourcing** - Complete audit trail of all actions
@@ -207,9 +208,8 @@ Required variables (set in Vercel dashboard or `.env.local`):
 
 ```bash
 # Supabase Configuration
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
 # JWT Secret (from Supabase Dashboard → Settings → API → JWT Keys → Legacy JWT Secret)
@@ -221,6 +221,34 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000            # Development
 ```
 
 For detailed deployment instructions, see [`docs/SETUP.md`](./docs/SETUP.md)
+
+## 📂 Repo Linking & Manifests
+
+ProjectFlow uses a `.pm/` directory to link local repositories to SaaS projects:
+
+```bash
+# Initialize project with manifests
+pm.init --name "My Project" --repoRoot .
+
+# Creates:
+# .pm/project.json    (checked in) - Project ID and config
+# .pm/local.json      (gitignored) - User-specific settings
+# .pm/.gitignore      (auto-created) - Protects local.json
+```
+
+**Key Features:**
+- Auto-discovery: Works from any subdirectory
+- Team-friendly: `project.json` is shared, `local.json` is personal
+- Validation: Built-in integrity checks
+
+**MCP Tools:**
+- `pm.manifest_discover` - Find and read manifests
+- `pm.manifest_validate` - Check integrity
+- `pm.manifest_read` - Read full manifest data
+
+For complete documentation, see:
+- [Repo Linking Guide](./docs/repo-linking-manifests.md)
+- [Usage Examples](./docs/manifest-examples.md)
 
 ## 🧪 Testing
 
@@ -250,7 +278,7 @@ For detailed deployment instructions, see [`docs/SETUP.md`](./docs/SETUP.md)
 ### Common Issues
 
 **"Failed to fetch" on login page**
-- Check `.env.local` has `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- Check `.env.local` has `SUPABASE_URL` and `SUPABASE_ANON_KEY`
 - Restart dev server after adding environment variables
 
 **"Database migration failed"**

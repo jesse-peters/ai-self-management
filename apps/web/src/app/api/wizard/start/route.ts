@@ -1,30 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabaseClient';
-import { startWizard } from '@projectflow/core';
+import { startWizard, UnauthorizedError } from '@projectflow/core';
+import { withErrorHandler } from '@/lib/api/withErrorHandler';
+import { createSuccessResponse } from '@/lib/errors/responses';
 
-export async function POST(request: NextRequest) {
-  try {
+export const POST = withErrorHandler(async (request: NextRequest): Promise<NextResponse> => {
     const supabase = await createServerClient();
-    
+
     // Check authentication
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+        throw new UnauthorizedError('Authentication required');
     }
 
     // Start wizard session
     const sessionId = await startWizard(supabase);
 
-    return NextResponse.json({ sessionId, step: 1 });
-  } catch (error) {
-    console.error('Error starting wizard:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to start wizard' },
-      { status: 500 }
-    );
-  }
-}
+    return createSuccessResponse({ sessionId, step: 1 }, 200);
+}, 'wizard-api');
 

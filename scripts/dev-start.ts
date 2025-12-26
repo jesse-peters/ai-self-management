@@ -57,94 +57,18 @@ function checkSupabaseRunning(): boolean {
 async function startSupabase(): Promise<boolean> {
   log('\n🚀 Starting Supabase...', BLUE);
   const dbPath = join(process.cwd(), 'packages/db');
-  
+
   if (!runCommand('supabase start', dbPath)) {
     log('❌ Failed to start Supabase', RED);
     log('   Make sure Docker is running', YELLOW);
     return false;
   }
-  
+
   // Wait a moment for Supabase to fully start
   log('⏳ Waiting for Supabase to be ready...', BLUE);
   await new Promise(resolve => setTimeout(resolve, 3000));
-  
-  return checkSupabaseRunning();
-}
 
-function updateEnvLocal(): boolean {
-  const dbPath = join(process.cwd(), 'packages/db');
-  const envFile = join(process.cwd(), '.env.local');
-  
-  try {
-    const output = execSync('supabase status --output json', {
-      cwd: dbPath,
-      encoding: 'utf-8',
-      stdio: 'pipe',
-    });
-    
-    const status = JSON.parse(output);
-    if (!status?.API) {
-      log('⚠️  Could not get Supabase credentials', YELLOW);
-      return false;
-    }
-    
-    const apiUrl = status.API.URL;
-    const anonKey = status.API.anon_key;
-    const serviceKey = status.API.service_role_key;
-    const jwtSecret = status.API.jwt_secret;
-    
-    let envContent = '';
-    
-    // Read existing .env.local if it exists
-    if (existsSync(envFile)) {
-      envContent = readFileSync(envFile, 'utf-8');
-    }
-    
-    // Update or add Supabase variables
-    const updates: Record<string, string> = {
-      'NEXT_PUBLIC_SUPABASE_URL': apiUrl,
-      'NEXT_PUBLIC_SUPABASE_ANON_KEY': anonKey,
-      'SUPABASE_URL': apiUrl,
-      'SUPABASE_SERVICE_ROLE_KEY': serviceKey,
-      'SUPABASE_JWT_SECRET': jwtSecret,
-      'NEXT_PUBLIC_APP_URL': 'http://localhost:3000',
-    };
-    
-    // Parse existing content
-    const lines = envContent.split('\n');
-    const existing: Record<string, boolean> = {};
-    
-    const newLines = lines.map(line => {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) {
-        return line;
-      }
-      
-      const [key] = trimmed.split('=');
-      if (key && updates[key]) {
-        existing[key] = true;
-        return `${key}="${updates[key]}"`;
-      }
-      
-      return line;
-    });
-    
-    // Add missing variables
-    for (const [key, value] of Object.entries(updates)) {
-      if (!existing[key]) {
-        newLines.push(`${key}="${value}"`);
-      }
-    }
-    
-    // Write back
-    writeFileSync(envFile, newLines.join('\n') + '\n');
-    
-    log('✅ Updated .env.local with Supabase credentials', GREEN);
-    return true;
-  } catch (error) {
-    log(`⚠️  Failed to update .env.local: ${error instanceof Error ? error.message : String(error)}`, YELLOW);
-    return false;
-  }
+  return checkSupabaseRunning();
 }
 
 function runMigrations(): boolean {
@@ -173,20 +97,20 @@ async function runHealthCheck(): Promise<boolean> {
 function startDevServers(): void {
   log('\n🚀 Starting dev servers...', BLUE);
   log('   Press Ctrl+C to stop all servers\n', YELLOW);
-  
+
   // Start turbo dev which will start all apps
   const devProcess = spawn('pnpm', ['dev'], {
     stdio: 'inherit',
     shell: true,
   });
-  
+
   // Handle cleanup
   process.on('SIGINT', () => {
     log('\n\n🛑 Stopping dev servers...', YELLOW);
     devProcess.kill();
     process.exit(0);
   });
-  
+
   devProcess.on('exit', (code) => {
     if (code !== 0 && code !== null) {
       log(`\n❌ Dev server exited with code ${code}`, RED);
@@ -198,14 +122,14 @@ function startDevServers(): void {
 async function main() {
   log('🚀 ProjectFlow Dev Startup', BLUE);
   log('==========================\n');
-  
+
   // Step 1: Check if Supabase is running
   log('📋 Step 1: Checking Supabase...', BLUE);
   const supabaseRunning = checkSupabaseRunning();
-  
+
   if (!supabaseRunning) {
     log('   Supabase is not running', YELLOW);
-    
+
     // Check if Supabase CLI is installed
     try {
       execSync('supabase --version', { stdio: 'pipe' });
@@ -214,7 +138,7 @@ async function main() {
       log('   Install with: brew install supabase/tap/supabase', YELLOW);
       process.exit(1);
     }
-    
+
     // Try to start it
     if (!(await startSupabase())) {
       log('❌ Failed to start Supabase', RED);
@@ -224,19 +148,15 @@ async function main() {
   } else {
     log('✅ Supabase is already running', GREEN);
   }
-  
-  // Step 2: Update .env.local
-  log('\n📋 Step 2: Updating environment...', BLUE);
-  updateEnvLocal();
-  
-  // Step 3: Run migrations
-  log('\n📋 Step 3: Checking database...', BLUE);
+
+  // Step 2: Run migrations
+  log('\n📋 Step 2: Checking database...', BLUE);
   runMigrations();
-  
-  // Step 4: Run health check (non-blocking)
+
+  // Step 3: Run health check (non-blocking)
   await runHealthCheck();
-  
-  // Step 5: Start dev servers
+
+  // Step 4: Start dev servers
   startDevServers();
 }
 

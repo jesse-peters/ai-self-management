@@ -85,7 +85,7 @@ export async function verifyAccessToken(
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
         const errorMsg = lastError.message;
-        
+
         // Check for key type mismatch error
         if (errorMsg.includes('No suitable key') || errorMsg.includes('wrong key type')) {
           if (debug) console.log('[JWT] HS256 verification failed - key type mismatch, token may be ES256/RS256', { error: errorMsg });
@@ -154,9 +154,9 @@ export async function verifyAccessToken(
       } else {
         // Production: Try to use JWKS
         try {
-          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+          const supabaseUrl = process.env.SUPABASE_URL;
           if (!supabaseUrl) {
-            throw new Error('NEXT_PUBLIC_SUPABASE_URL is required for ES256/RS256 token verification');
+            throw new Error('SUPABASE_URL is required for ES256/RS256 token verification');
           }
 
           // Try different possible JWKS endpoints
@@ -187,8 +187,8 @@ export async function verifyAccessToken(
               jwksError = err instanceof Error ? err : new Error(String(err));
               const errorMsg = jwksError.message;
               if (debug) {
-                console.log('[JWT] JWKS endpoint failed', { 
-                  jwksUrl, 
+                console.log('[JWT] JWKS endpoint failed', {
+                  jwksUrl,
                   error: errorMsg,
                   isKeyTypeError: errorMsg.includes('No suitable key') || errorMsg.includes('wrong key type')
                 });

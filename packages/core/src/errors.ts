@@ -1,38 +1,9 @@
 /**
  * Custom error classes for ProjectFlow domain
+ * 
+ * Note: Error classes are kept pure (no side effects like Sentry capture).
+ * Use centralized error handling utilities to capture errors to Sentry.
  */
-
-// Lazy load Sentry to avoid initialization issues if DSN is not set
-// Only works in Node.js environment (server-side)
-let Sentry: any = null;
-
-function getSentry(): any {
-  // Skip Sentry in browser environments (client-side)
-  // Check for browser globals that don't exist in Node.js
-  if (typeof process === 'undefined' || (globalThis as any).window !== undefined) {
-    return null;
-  }
-
-  if (Sentry !== null) {
-    return Sentry;
-  }
-
-  // Only try to load Sentry if DSN is available and we're in Node.js
-  // Use extremely dynamic require to prevent Turbopack/webpack static analysis
-  if (process.env.SENTRY_DSN && typeof require !== 'undefined') {
-    try {
-      // Use Function constructor to make require truly dynamic and prevent static analysis
-      const requireFunc = new Function('moduleName', 'return require(moduleName)');
-      Sentry = requireFunc('@sentry/node');
-      return Sentry;
-    } catch {
-      // Sentry not available, return null
-      return null;
-    }
-  }
-
-  return null;
-}
 
 /**
  * Base error class for all domain errors
@@ -41,24 +12,36 @@ export class ProjectFlowError extends Error {
   constructor(message: string, public code: string = 'INTERNAL_ERROR') {
     super(message);
     this.name = this.constructor.name;
-    Error.captureStackTrace(this, this.constructor);
-
-    // Capture to Sentry if available (graceful degradation)
-    const sentry = getSentry();
-    if (sentry) {
-      sentry.captureException(this, {
-        level: 'error',
-        tags: {
-          error_type: 'domain_error',
-          error_code: this.code,
-          error_class: this.constructor.name,
-        },
-        extra: {
-          errorCode: this.code,
-          errorMessage: message,
-        },
-      });
+    // Ensure stack trace is captured
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, this.constructor);
     }
+  }
+
+  /**
+   * Gets the HTTP status code for this error
+   * Can be overridden by subclasses
+   */
+  getHttpStatus(): number {
+    return 500; // Default to 500 for internal errors
+  }
+
+  /**
+   * Serializes the error to JSON
+   * Useful for API responses and logging
+   */
+  toJSON(): {
+    name: string;
+    message: string;
+    code: string;
+    stack?: string;
+  } {
+    return {
+      name: this.name,
+      message: this.message,
+      code: this.code,
+      ...(this.stack && { stack: this.stack }),
+    };
   }
 }
 
@@ -69,6 +52,10 @@ export class NotFoundError extends ProjectFlowError {
   constructor(message: string = 'Entity not found') {
     super(message, 'NOT_FOUND');
   }
+
+  getHttpStatus(): number {
+    return 404;
+  }
 }
 
 /**
@@ -78,6 +65,10 @@ export class UnauthorizedError extends ProjectFlowError {
   constructor(message: string = 'User does not have permission to access this resource') {
     super(message, 'UNAUTHORIZED');
   }
+
+  getHttpStatus(): number {
+    return 401;
+  }
 }
 
 /**
@@ -86,9 +77,23 @@ export class UnauthorizedError extends ProjectFlowError {
 export class ValidationError extends ProjectFlowError {
   constructor(message: string, public field?: string) {
     super(message, 'VALIDATION_ERROR');
+  }
 
-    // Validation errors are expected, so we don't capture them to Sentry
-    // They're handled by the application logic
+  getHttpStatus(): number {
+    return 400;
+  }
+
+  toJSON(): {
+    name: string;
+    message: string;
+    code: string;
+    field?: string;
+    stack?: string;
+  } {
+    return {
+      ...super.toJSON(),
+      ...(this.field && { field: this.field }),
+    };
   }
 }
 

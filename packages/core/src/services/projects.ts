@@ -24,25 +24,58 @@ type SupabaseClient<T = any> = any;
  * 
  * @param client Authenticated Supabase client (session or OAuth)
  * @param data Project data to create
+ * @param userId Optional user ID (if not provided, will try to get from auth context)
  * @returns The created project
  * @throws NotFoundError if project creation fails
  * 
- * RLS automatically sets user_id from authenticated context.
- * No need to pass userId - it's implicit in the auth context.
+ * RLS requires user_id to be set explicitly in the insert.
  */
 export async function createProject(
   client: SupabaseClient<Database>,
-  data: ProjectInsert
+  data: ProjectInsert,
+  userId?: string
 ): Promise<Project> {
   try {
     validateProjectData(data);
 
+    // Get userId from parameter or auth context - required for RLS
+    // If userId is provided, use it directly (for OAuth-scoped clients)
+    // Otherwise, try to get from auth context (for session-based clients)
+    let finalUserId: string | undefined = userId;
+
+    // Validate provided userId if present
+    if (finalUserId !== undefined && finalUserId !== null) {
+      if (typeof finalUserId !== 'string' || finalUserId.trim() === '') {
+        throw new ValidationError('Invalid userId provided: must be a non-empty string');
+      }
+      finalUserId = finalUserId.trim();
+    }
+
+    // Only try to get from auth context if userId wasn't provided
+    // Skip this for OAuth-scoped clients where getUser() may not work
+    if (!finalUserId) {
+      try {
+        const { data: { user }, error: userError } = await client.auth.getUser();
+        if (!userError && user?.id) {
+          finalUserId = user.id;
+        }
+      } catch (authError) {
+        // If getUser() fails (e.g., on OAuth-scoped clients), that's okay
+        // We'll throw the validation error below if userId is still missing
+      }
+    }
+
+    if (!finalUserId) {
+      throw new ValidationError('User authentication required');
+    }
+
     // Build insert data with rules if provided
     const insertData: any = {
+      user_id: finalUserId, // Explicitly set user_id for RLS policy
       name: data.name,
       description: data.description || null,
     };
-    
+
     // Add rules if present in data
     if ((data as any).rules !== undefined) {
       insertData.rules = (data as any).rules;
@@ -62,16 +95,11 @@ export async function createProject(
       throw new NotFoundError('Failed to retrieve created project');
     }
 
-    // Get userId from auth context for event
-    // We'll fetch it again to use in event
-    const { data: { user }, error: userError } = await client.auth.getUser();
-    const userId = user?.id;
-
-    // Emit ProjectCreated event (if we have userId)
-    if (userId) {
+    // Emit ProjectCreated event (userId already fetched above)
+    if (finalUserId) {
       await emitEvent({
         project_id: project.id,
-        user_id: userId,
+        user_id: finalUserId,
         event_type: 'ProjectCreated',
         payload: {
           project_id: project.id,

@@ -14,7 +14,7 @@ pnpm validate-config
 pnpm db:status
 
 # Check environment variables
-node -e "console.log(process.env.NEXT_PUBLIC_SUPABASE_URL ? '✅ URL set' : '❌ URL missing')"
+node -e "console.log(process.env.SUPABASE_URL ? '✅ URL set' : '❌ URL missing')"
 ```
 
 ### Common Symptoms
@@ -23,7 +23,7 @@ node -e "console.log(process.env.NEXT_PUBLIC_SUPABASE_URL ? '✅ URL set' : '❌
 | -------------------------- | -------------------- | --------------------------------- |
 | "Failed to fetch" on login | Missing env vars     | Check `.env.local`                |
 | 401 Unauthorized           | Invalid anon key     | Copy correct key from Supabase    |
-| CORS error                 | Wrong URL            | Verify `NEXT_PUBLIC_SUPABASE_URL` |
+| CORS error                 | Wrong URL            | Verify `SUPABASE_URL` |
 | "Migration failed"         | DB credentials wrong | Check `SUPABASE_SERVICE_ROLE_KEY` |
 | Build fails                | Missing dependencies | Run `pnpm install`                |
 | TypeScript errors          | Out of sync types    | Run `pnpm build`                  |
@@ -47,8 +47,8 @@ The most common cause. Browser client needs Supabase configuration.
 **Check your `.env.local` file:**
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key-here
 ```
 
 **To get these values:**
@@ -135,7 +135,7 @@ fetch('https://your-project.supabase.co/rest/v1/')
 2. Copy the **anon key** (not service role key)
 3. Update `.env.local`:
    ```bash
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-correct-anon-key
+   SUPABASE_ANON_KEY=your-correct-anon-key
    ```
 4. Restart dev server
 
@@ -398,8 +398,8 @@ nvm use 20
 
 Required variables:
 
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `SUPABASE_JWT_SECRET`
@@ -469,8 +469,8 @@ gh secret list
 - `SUPABASE_ACCESS_TOKEN`
 - `SUPABASE_PROJECT_ID`
 - `SUPABASE_DB_PASSWORD`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `SUPABASE_JWT_SECRET`
@@ -630,8 +630,8 @@ Check Supabase Dashboard → Logs for:
 In browser console (F12):
 
 ```javascript
-console.log("URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
-console.log("Key:", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+console.log("URL:", process.env.SUPABASE_URL);
+console.log("Key:", process.env.SUPABASE_ANON_KEY);
 // Should show values, not undefined
 ```
 

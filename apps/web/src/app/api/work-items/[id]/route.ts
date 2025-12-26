@@ -1,39 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabaseClient';
-import { getWorkItem, updateWorkItem, updateWorkItemStatus } from '@projectflow/core';
+import { getWorkItem, updateWorkItem, updateWorkItemStatus, UnauthorizedError } from '@projectflow/core';
+import { withErrorHandler } from '@/lib/api/withErrorHandler';
+import { createSuccessResponse } from '@/lib/errors/responses';
 
 /**
  * GET /api/work-items/[id]
  * Gets a single work item with summary data
  */
-export async function GET(
+export const GET = withErrorHandler(async (
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  try {
-    const supabase = await createServerClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+  context?: { params?: Promise<Record<string, string>> }
+): Promise<NextResponse> => {
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
 
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { id } = await params;
-
-    const workItem = await getWorkItem(supabase, id);
-
-    return NextResponse.json({ workItem }, { status: 200 });
-  } catch (error) {
-    console.error('Error fetching work item:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
-      { status: 500 }
-    );
+  if (authError || !user) {
+    throw new UnauthorizedError('Authentication required');
   }
-}
+
+  const params = await context!.params!;
+  const id = params.id;
+
+  const workItem = await getWorkItem(supabase, id);
+
+  return createSuccessResponse({ workItem }, 200);
+}, 'work-items-api');
 
 /**
  * PATCH /api/work-items/[id]
@@ -46,40 +41,33 @@ export async function GET(
  *   status?: 'open' | 'in_progress' | 'done'
  * }
  */
-export async function PATCH(
+export const PATCH = withErrorHandler(async (
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  try {
-    const supabase = await createServerClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+  context?: { params?: Promise<Record<string, string>> }
+): Promise<NextResponse> => {
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
 
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { id } = await params;
-    const body = await request.json();
-
-    // If only status is being updated, use the specific status update function
-    // to enforce gate rules
-    if (body.status && Object.keys(body).length === 1) {
-      const workItem = await updateWorkItemStatus(supabase, id, body.status);
-      return NextResponse.json({ workItem }, { status: 200 });
-    }
-
-    const workItem = await updateWorkItem(supabase, id, body);
-
-    return NextResponse.json({ workItem }, { status: 200 });
-  } catch (error) {
-    console.error('Error updating work item:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
-      { status: 500 }
-    );
+  if (authError || !user) {
+    throw new UnauthorizedError('Authentication required');
   }
-}
+
+  const params = await context!.params!;
+  const id = params.id;
+  const body = await request.json();
+
+  // If only status is being updated, use the specific status update function
+  // to enforce gate rules
+  if (body.status && Object.keys(body).length === 1) {
+    const workItem = await updateWorkItemStatus(supabase, id, body.status);
+    return createSuccessResponse({ workItem }, 200);
+  }
+
+  const workItem = await updateWorkItem(supabase, id, body);
+
+  return createSuccessResponse({ workItem }, 200);
+}, 'work-items-api');
 

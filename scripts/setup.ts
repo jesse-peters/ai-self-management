@@ -102,8 +102,8 @@ async function setupEnvLocal(root: string, nonInteractive: boolean): Promise<boo
   let envContent = '';
 
   // Try to get Supabase keys from environment or local Supabase
-  let supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  let anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  let supabaseUrl = process.env.SUPABASE_URL || '';
+  let anonKey = process.env.SUPABASE_ANON_KEY || '';
   let serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
   let jwtSecret = process.env.SUPABASE_JWT_SECRET || '';
 
@@ -130,12 +130,10 @@ async function setupEnvLocal(root: string, nonInteractive: boolean): Promise<boo
   for (const [key, defaultValue] of Object.entries(template)) {
     let value = defaultValue;
 
-    if (key === 'NEXT_PUBLIC_SUPABASE_URL' && supabaseUrl) {
+    if (key === 'SUPABASE_URL' && supabaseUrl) {
       value = supabaseUrl;
-    } else if (key === 'NEXT_PUBLIC_SUPABASE_ANON_KEY' && anonKey) {
+    } else if (key === 'SUPABASE_ANON_KEY' && anonKey) {
       value = anonKey;
-    } else if (key === 'SUPABASE_URL' && supabaseUrl) {
-      value = supabaseUrl;
     } else if (key === 'SUPABASE_SERVICE_ROLE_KEY' && serviceRoleKey) {
       value = serviceRoleKey;
     } else if (key === 'SUPABASE_JWT_SECRET' && jwtSecret) {
@@ -158,8 +156,8 @@ async function setupEnvLocal(root: string, nonInteractive: boolean): Promise<boo
     log('⚠️  .env.local created with placeholder values', YELLOW);
     log('   Please update with values from: https://supabase.com/dashboard', YELLOW);
     log('   Required values:', YELLOW);
-    log('     - NEXT_PUBLIC_SUPABASE_URL (Project Settings > API)', YELLOW);
-    log('     - NEXT_PUBLIC_SUPABASE_ANON_KEY (Project Settings > API)', YELLOW);
+    log('     - SUPABASE_URL (Project Settings > API)', YELLOW);
+    log('     - SUPABASE_ANON_KEY (Project Settings > API)', YELLOW);
     log('     - SUPABASE_SERVICE_ROLE_KEY (Project Settings > API)', YELLOW);
     log('     - SUPABASE_JWT_SECRET (Project Settings > API > JWT Settings)', YELLOW);
 
@@ -277,9 +275,8 @@ async function setupVercel(root: string, options: SetupOptions): Promise<void> {
   }
 
   log('  Not deployed on Vercel. Set these env vars:', BLUE);
-  log('     - NEXT_PUBLIC_SUPABASE_URL', BLUE);
-  log('     - NEXT_PUBLIC_SUPABASE_ANON_KEY', BLUE);
   log('     - SUPABASE_URL', BLUE);
+  log('     - SUPABASE_ANON_KEY', BLUE);
   log('     - SUPABASE_SERVICE_ROLE_KEY', BLUE);
   log('');
 

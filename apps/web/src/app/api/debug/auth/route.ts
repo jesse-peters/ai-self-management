@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken } from '@projectflow/core';
+import { verifyAccessToken, ValidationError } from '@projectflow/core';
 import * as jose from 'jose';
+import { withErrorHandler } from '@/lib/api/withErrorHandler';
+import { createSuccessResponse } from '@/lib/errors/responses';
 
 /**
  * Debug endpoint for testing token verification
@@ -8,18 +10,12 @@ import * as jose from 'jose';
  * 
  * Returns detailed information about token verification
  */
-export async function GET(request: NextRequest) {
+export const GET = withErrorHandler(async (request: NextRequest): Promise<NextResponse> => {
     const token = request.nextUrl.searchParams.get('token');
 
     if (!token) {
-        return NextResponse.json({
-            error: 'Missing token parameter',
-            usage: 'GET /api/debug/auth?token=<jwt>',
-            example: 'Get a token from /api/mcp/token and paste it as the token query parameter',
-        }, { status: 400 });
+        throw new ValidationError('Missing token parameter');
     }
-
-    try {
         const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
         const audience = `${appUrl}/api/mcp`;
 
@@ -44,7 +40,7 @@ export async function GET(request: NextRequest) {
         const expiresAt = decoded.exp ? (decoded.exp as number) * 1000 : null;
         const isExpired = expiresAt ? Date.now() > expiresAt : false;
 
-        return NextResponse.json({
+        return createSuccessResponse({
             token_preview: `${token.substring(0, 30)}...${token.substring(token.length - 30)}`,
             token_length: token.length,
             header: {
@@ -88,14 +84,6 @@ export async function GET(request: NextRequest) {
                 verificationStatus === 'failed' ? `Verification failed: ${verificationError}` : 'Token verification successful',
                 header.alg === 'ES256' && process.env.NODE_ENV === 'development' ? 'ES256 in dev mode: claims extracted without signature verification' : '',
             ].filter(Boolean),
-        });
-    } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        return NextResponse.json({
-            error: 'Failed to debug token',
-            message: errorMessage,
-            token_preview: token.substring(0, 30),
-        }, { status: 500 });
-    }
-}
+        }, 200);
+}, 'debug-auth-api');
 

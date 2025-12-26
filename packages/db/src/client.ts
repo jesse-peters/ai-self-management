@@ -13,7 +13,7 @@ import type { Database } from './types';
  * @throws Error if required environment variables are missing
  */
 export function createServiceRoleClient() {
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (supabaseUrl && supabaseServiceRoleKey) {
@@ -28,13 +28,12 @@ export function createServiceRoleClient() {
   }
 
   // Fall back to anon key only if service role is not available
-  const nextPublicUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const nextPublicAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 
-  if (nextPublicUrl && nextPublicAnonKey) {
+  if (supabaseUrl && supabaseAnonKey) {
     // Use browser client for Next.js contexts (client components, etc.)
     // Note: This respects RLS policies
-    return createClient<Database>(nextPublicUrl, nextPublicAnonKey, {
+    return createClient<Database>(supabaseUrl, supabaseAnonKey, {
       auth: {
         autoRefreshToken: true,
         persistSession: true,
@@ -44,10 +43,10 @@ export function createServiceRoleClient() {
   }
 
   if (!supabaseUrl) {
-    throw new Error('Missing SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL environment variable');
+    throw new Error('Missing SUPABASE_URL environment variable');
   }
 
-  throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable');
+  throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY environment variable');
 }
 
 /**
@@ -67,15 +66,15 @@ export function createServerClient() {
  * @throws Error if required environment variables are missing
  */
 export function createBrowserClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 
   if (!supabaseUrl) {
-    throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL environment variable');
+    throw new Error('Missing SUPABASE_URL environment variable');
   }
 
   if (!supabaseAnonKey) {
-    throw new Error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable');
+    throw new Error('Missing SUPABASE_ANON_KEY environment variable');
   }
 
   return createClient<Database>(supabaseUrl, supabaseAnonKey, {
@@ -100,29 +99,21 @@ export function createBrowserClient() {
  * @throws Error if required environment variables are missing
  */
 export function createOAuthScopedClient(accessToken: string) {
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 
   if (!supabaseUrl) {
-    throw new Error('Missing SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL environment variable');
+    throw new Error('Missing SUPABASE_URL environment variable');
   }
 
   if (!supabaseAnonKey) {
-    throw new Error('Missing SUPABASE_ANON_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable');
-  }
-
-  // Validate that we're using anon key, not service role key
-  // Service role keys typically start with "eyJ" but have different structure
-  // Anon keys are the correct type for OAuth-scoped clients
-  if (supabaseAnonKey.length < 100) {
-    throw new Error(
-      `Invalid SUPABASE_ANON_KEY: Key appears to be too short or incorrect format. ` +
-      `Expected anon key (starts with eyJ and is ~200+ chars), but got key of length ${supabaseAnonKey.length}. ` +
-      `Make sure you're using the anon/public key, not the service role key.`
-    );
+    throw new Error('Missing SUPABASE_ANON_KEY environment variable');
   }
 
   try {
+    // Create client with token in Authorization header
+    // Supabase PostgREST will extract the JWT from the Authorization header
+    // and use it for RLS policy evaluation via auth.uid()
     return createClient<Database>(supabaseUrl, supabaseAnonKey, {
       global: {
         headers: {
@@ -133,6 +124,8 @@ export function createOAuthScopedClient(accessToken: string) {
         autoRefreshToken: false,
         persistSession: false,
         detectSessionInUrl: false,
+        // Don't try to parse the token as a session - we're passing it as a header
+        storage: undefined,
       },
     });
   } catch (error) {

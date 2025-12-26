@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceRoleClient } from '@projectflow/db';
 import { createRequestLogger } from '@/lib/logger';
 import { getCorrelationId } from '@/lib/correlationId';
+import { withErrorHandler } from '@/lib/api/withErrorHandler';
+import { createSuccessResponse } from '@/lib/errors/responses';
 
 /**
  * Debug Status Endpoint
@@ -13,7 +15,7 @@ import { getCorrelationId } from '@/lib/correlationId';
  * - Environment variable checks
  * - Service health indicators
  */
-export async function GET(request: NextRequest): Promise<NextResponse> {
+export const GET = withErrorHandler(async (request: NextRequest): Promise<NextResponse> => {
     const correlationId = getCorrelationId(request);
     const logger = createRequestLogger(correlationId, 'debug');
 
@@ -51,7 +53,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     logger.info({ overall: status.overall, httpStatus }, 'Debug status check completed');
 
     return NextResponse.json(status, { status: httpStatus });
-}
+}, 'debug-status-api');
 
 /**
  * Check database connectivity
@@ -149,13 +151,12 @@ function checkEnvironment(logger: ReturnType<typeof createRequestLogger>) {
 
     const requiredVars = [
         'SUPABASE_URL',
+        'SUPABASE_ANON_KEY',
         'SUPABASE_SERVICE_ROLE_KEY',
-        'NEXT_PUBLIC_SUPABASE_URL',
-        'NEXT_PUBLIC_SUPABASE_ANON_KEY',
     ];
 
     const missingVars = requiredVars.filter(v => !process.env[v]);
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseUrl = process.env.SUPABASE_URL;
 
     result.details = {
         nodeEnv: process.env.NODE_ENV,

@@ -3,6 +3,8 @@ import { createServiceRoleClient } from '@projectflow/db';
 import { verifyAccessToken, type MCPTokenClaims } from '@projectflow/core';
 import { createRequestLogger } from '@/lib/logger';
 import { getCorrelationId } from '@/lib/correlationId';
+import { withErrorHandler } from '@/lib/api/withErrorHandler';
+import { createSuccessResponse } from '@/lib/errors/responses';
 
 /**
  * Debug Context Endpoint
@@ -15,7 +17,7 @@ import { getCorrelationId } from '@/lib/correlationId';
  * - MCP connection state
  * - System diagnostics
  */
-export async function GET(request: NextRequest): Promise<NextResponse> {
+export const GET = withErrorHandler(async (request: NextRequest): Promise<NextResponse> => {
     const correlationId = getCorrelationId(request);
     const logger = createRequestLogger(correlationId, 'debug');
 
@@ -40,14 +42,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     logger.info('Debug context generated successfully');
 
-    return NextResponse.json(context, {
-        status: 200,
-        headers: {
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-store, no-cache, must-revalidate',
-        },
-    });
-}
+    const response = createSuccessResponse(context, 200);
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    return response;
+}, 'debug-context-api');
 
 /**
  * Get non-sensitive environment information
@@ -58,7 +56,7 @@ function getEnvironmentInfo() {
         platform: process.platform,
         nodeVersion: process.version,
         appUrl: process.env.NEXT_PUBLIC_APP_URL || '[not-configured]',
-        supabaseConfigured: !!(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL),
+        supabaseConfigured: !!process.env.SUPABASE_URL,
         jwtConfigured: !!process.env.JWT_SECRET,
         logLevel: process.env.LOG_LEVEL || 'info',
     };
@@ -176,55 +174,46 @@ function getSystemInfo() {
  * POST endpoint for submitting error reports
  * Allows clients to submit errors they encounter for debugging
  */
-export async function POST(request: NextRequest): Promise<NextResponse> {
+export const POST = withErrorHandler(async (request: NextRequest): Promise<NextResponse> => {
     const correlationId = getCorrelationId(request);
     const logger = createRequestLogger(correlationId, 'debug');
 
     logger.info('Error report submission received');
 
+    const body = await request.json();
+
+    // Log the error report
+    logger.error({
+        userAgent: request.headers.get('user-agent'),
+        referer: request.headers.get('referer'),
+        report: body,
+    }, 'User-submitted error report');
+
+    // Optionally store in database (requires project_id and user_id, so skip if not available)
+    // Note: This is a debug endpoint, so we don't always have project/user context
     try {
-        const body = await request.json();
-
-        // Log the error report
-        logger.error({
-            userAgent: request.headers.get('user-agent'),
-            referer: request.headers.get('referer'),
-            report: body,
-        }, 'User-submitted error report');
-
-        // Optionally store in database (requires project_id and user_id, so skip if not available)
-        // Note: This is a debug endpoint, so we don't always have project/user context
-        try {
-            const client = createServiceRoleClient();
-            // Only insert if we have the required fields - for now, skip the insert
-            // as this is a debug endpoint without project/user context
-            // await client.from('events').insert({
-            //     event_type: 'debug.error_report',
-            //     project_id: '...', // Would need to be provided
-            //     user_id: '...', // Would need to be provided
-            //     payload: {
-            //         correlationId,
-            //         userAgent: request.headers.get('user-agent'),
-            //         report: body,
-            //     },
-            // });
-        } catch (dbError) {
-            // Silently fail - this is optional
-            logger.debug({ error: dbError }, 'Skipped optional event insert');
-        }
-
-        return NextResponse.json({
-            success: true,
-            correlationId,
-            message: 'Error report received',
-        });
-    } catch (error) {
-        logger.error({ error: error instanceof Error ? error.message : 'Unknown' }, 'Failed to process error report');
-
-        return NextResponse.json({
-            success: false,
-            error: error instanceof Error ? error.message : 'Failed to process error report',
-        }, { status: 500 });
+        const client = createServiceRoleClient();
+        // Only insert if we have the required fields - for now, skip the insert
+        // as this is a debug endpoint without project/user context
+        // await client.from('events').insert({
+        //     event_type: 'debug.error_report',
+        //     project_id: '...', // Would need to be provided
+        //     user_id: '...', // Would need to be provided
+        //     payload: {
+        //         correlationId,
+        //         userAgent: request.headers.get('user-agent'),
+        //         report: body,
+        //     },
+        // });
+    } catch (dbError) {
+        // Silently fail - this is optional
+        logger.debug({ error: dbError }, 'Skipped optional event insert');
     }
-}
+
+    return createSuccessResponse({
+        success: true,
+        correlationId,
+        message: 'Error report received',
+    }, 200);
+}, 'debug-context-api');
 

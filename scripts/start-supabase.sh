@@ -45,9 +45,8 @@ if [ -f "$ENV_FILE" ]; then
     cp "$ENV_FILE" "${ENV_FILE}.backup"
     
     # Update or add environment variables
-    sed -i '' "s|NEXT_PUBLIC_SUPABASE_URL=.*|NEXT_PUBLIC_SUPABASE_URL=\"$API_URL\"|g" "$ENV_FILE"
-    sed -i '' "s|NEXT_PUBLIC_SUPABASE_ANON_KEY=.*|NEXT_PUBLIC_SUPABASE_ANON_KEY=\"$ANON_KEY\"|g" "$ENV_FILE"
     sed -i '' "s|SUPABASE_URL=.*|SUPABASE_URL=\"$API_URL\"|g" "$ENV_FILE"
+    sed -i '' "s|SUPABASE_ANON_KEY=.*|SUPABASE_ANON_KEY=\"$ANON_KEY\"|g" "$ENV_FILE"
     sed -i '' "s|SUPABASE_SERVICE_ROLE_KEY=.*|SUPABASE_SERVICE_ROLE_KEY=\"$SERVICE_ROLE_KEY\"|g" "$ENV_FILE"
     sed -i '' "s|SUPABASE_JWT_SECRET=.*|SUPABASE_JWT_SECRET=\"$JWT_SECRET\"|g" "$ENV_FILE"
     
@@ -57,9 +56,8 @@ else
     echo "⚠️  $ENV_FILE not found. Creating new file..."
     cat > "$ENV_FILE" << EOF
 # Auto-generated local Supabase credentials
-NEXT_PUBLIC_SUPABASE_URL="$API_URL"
-NEXT_PUBLIC_SUPABASE_ANON_KEY="$ANON_KEY"
 SUPABASE_URL="$API_URL"
+SUPABASE_ANON_KEY="$ANON_KEY"
 SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY"
 SUPABASE_JWT_SECRET="$JWT_SECRET"
 NEXT_PUBLIC_APP_URL=http://localhost:3000

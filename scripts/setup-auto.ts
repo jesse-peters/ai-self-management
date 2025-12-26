@@ -95,9 +95,8 @@ async function fetchFromLocalSupabase(): Promise<EnvVars | null> {
     if (status?.API) {
       log('✅ Got credentials from local Supabase', GREEN);
       return {
-        NEXT_PUBLIC_SUPABASE_URL: status.API.URL,
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: status.API.anon_key,
         SUPABASE_URL: status.API.URL,
+        SUPABASE_ANON_KEY: status.API.anon_key,
         SUPABASE_SERVICE_ROLE_KEY: status.API.service_role_key,
         SUPABASE_JWT_SECRET: status.API.jwt_secret,
         NEXT_PUBLIC_APP_URL: 'http://localhost:3000',
@@ -150,9 +149,8 @@ async function fetchFromSupabaseAPI(projectRef: string, accessToken: string): Pr
     log('✅ Fetched credentials from Supabase API', GREEN);
     
     return {
-      NEXT_PUBLIC_SUPABASE_URL: `https://${projectRef}.supabase.co`,
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: data.find((k: any) => k.name === 'anon')?.api_key || '',
       SUPABASE_URL: `https://${projectRef}.supabase.co`,
+      SUPABASE_ANON_KEY: data.find((k: any) => k.name === 'anon')?.api_key || '',
       SUPABASE_SERVICE_ROLE_KEY: data.find((k: any) => k.name === 'service_role')?.api_key || '',
       SUPABASE_JWT_SECRET: jwtData.jwt_secret || '',
     };
@@ -213,9 +211,8 @@ async function interactiveFallback(envVars: EnvVars): Promise<EnvVars> {
     const jwtSecret = await prompt('JWT secret (optional, press Enter to skip): ');
     
     if (url && anonKey && serviceKey) {
-      envVars.NEXT_PUBLIC_SUPABASE_URL = url;
-      envVars.NEXT_PUBLIC_SUPABASE_ANON_KEY = anonKey;
       envVars.SUPABASE_URL = url;
+      envVars.SUPABASE_ANON_KEY = anonKey;
       envVars.SUPABASE_SERVICE_ROLE_KEY = serviceKey;
       if (jwtSecret) {
         envVars.SUPABASE_JWT_SECRET = jwtSecret;
@@ -287,8 +284,8 @@ async function main() {
   
   // Check if we have everything
   const required = [
-    'NEXT_PUBLIC_SUPABASE_URL',
-    'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+    'SUPABASE_URL',
+    'SUPABASE_ANON_KEY',
     'SUPABASE_SERVICE_ROLE_KEY',
   ];
   

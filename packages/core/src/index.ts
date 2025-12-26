@@ -129,8 +129,14 @@ export {
   listEvidence,
   getEvidenceCount,
   getEvidence,
-  // Gates - Note: Server-only functions moved to '@projectflow/core/server'
-  // For functions that execute commands (like runGate), import from '@projectflow/core/server'
+  // Interview
+  getInterviewQuestions,
+  processInterviewResponses,
+  generateConventionsMarkdown,
+  generateReconProfile,
+  saveProjectConventions,
+  // Manifest, Recon, Primer, and server-only functions are in './server'
+  // For functions that execute commands or do file I/O, import from '@projectflow/core/server'
 } from './services';
 
 // Export task lifecycle types
@@ -190,6 +196,24 @@ export type {
   GateStatusSummary,
 } from './services';
 
+// Export manifest types
+export type {
+  ProjectManifest,
+  LocalManifest,
+  ManifestData,
+} from './services';
+
+// Export interview types
+export type {
+  InterviewQuestion,
+  InterviewSession,
+  InterviewResult,
+  ProjectConventions,
+  ReconProfile,
+  ReconCommand,
+  ReconFilePattern,
+} from './services';
+
 // Note: Gate execution functions (configureGates, runGate, etc.) are server-only
 // Import from '@projectflow/core/server' if you need them on the server-side
 
@@ -207,6 +231,21 @@ export {
   ValidationError,
   mapSupabaseError,
 } from './errors';
+
+// Export error handling utilities (server-side only)
+export {
+  captureError,
+  setRequestContext,
+  setUserContext,
+  type ErrorContext,
+  type CaptureOptions,
+} from './errors/sentry';
+
+// Export service error handler
+export {
+  withServiceErrorHandler,
+  handleServiceError,
+} from './errors/serviceHandler';
 
 // Export event sourcing
 export {

@@ -11,6 +11,7 @@ import { NotFoundError, ValidationError, mapSupabaseError } from '../errors';
 import { validateUUID } from '../validation';
 import { getProject } from './projects';
 import { emitEvent } from '../events';
+import { analyzeCommand } from './dangerousCommands';
 // Import types from separate file (safe for client-side)
 import type {
   GateRunnerMode,
@@ -72,6 +73,19 @@ export async function configureGates(
 
       if (gate.command && gate.command.length > 1000) {
         throw new ValidationError('command must be less than 1000 characters', 'command');
+      }
+
+      // Check for dangerous commands when configuring gates
+      if (gate.command) {
+        const analysis = analyzeCommand(gate.command);
+        if (analysis.isDangerous) {
+          const severity = analysis.severity || 'high';
+          const recommendations = analysis.recommendations.join('; ');
+          throw new ValidationError(
+            `Dangerous command detected (${severity}): ${analysis.message}. ${recommendations}`,
+            'command'
+          );
+        }
       }
     }
 
@@ -321,6 +335,60 @@ export async function runGate(
     let exitCode: number | null = null;
 
     if (gate.runner_mode === 'command' && gate.command) {
+      // Check for dangerous commands before execution
+      const analysis = analyzeCommand(gate.command);
+      if (analysis.isDangerous) {
+        const severity = analysis.severity || 'high';
+        const recommendations = analysis.recommendations.join('; ');
+
+        // Store gate run with blocked status
+        const { data: gateRun, error: runError } = await (supabase as any)
+          .from('gate_runs')
+          .insert([
+            {
+              project_id: projectId,
+              gate_id: gate.id,
+              user_id: userId,
+              task_id: options?.task_id || null,
+              work_item_id: options?.work_item_id || null,
+              status: 'failing' as GateRunStatus,
+              stdout: null,
+              stderr: `Command blocked: ${analysis.message}. ${recommendations}`,
+              exit_code: null,
+            },
+          ] as any)
+          .select()
+          .single();
+
+        if (runError) {
+          throw mapSupabaseError(runError);
+        }
+
+        // Emit GateExecuted event for blocked command
+        if (gateRun) {
+          await emitEvent({
+            project_id: projectId,
+            user_id: userId,
+            event_type: 'GateExecuted',
+            payload: {
+              gate_run_id: gateRun.id,
+              gate_id: gate.id,
+              gate_name: gate.name,
+              status: 'failing',
+              task_id: options?.task_id || null,
+              work_item_id: options?.work_item_id || null,
+              blocked: true,
+              reason: analysis.message,
+            },
+          }, supabase);
+        }
+
+        throw new ValidationError(
+          `Dangerous command blocked (${severity}): ${analysis.message}. ${recommendations}`,
+          'command'
+        );
+      }
+
       // Execute the command (only available on server)
       // Use dynamic import with string concatenation to prevent static analysis
       if (!execAsync) {
@@ -345,14 +413,14 @@ export async function runGate(
           );
         }
       }
-      
+
       if (!execAsync) {
         throw new ValidationError(
           'Command execution is not available in this environment. Gate commands can only be run on the server.',
           'runner_mode'
         );
       }
-      
+
       try {
         const result = await execAsync(gate.command, {
           cwd: options?.cwd || process.cwd(),
@@ -469,13 +537,13 @@ export async function getGateStatus(
         runner_mode: gate.runner_mode,
         latest_run: latestRun
           ? {
-              id: latestRun.id,
-              status: latestRun.status,
-              created_at: latestRun.created_at,
-              stdout: latestRun.stdout,
-              stderr: latestRun.stderr,
-              exit_code: latestRun.exit_code,
-            }
+            id: latestRun.id,
+            status: latestRun.status,
+            created_at: latestRun.created_at,
+            stdout: latestRun.stdout,
+            stderr: latestRun.stderr,
+            exit_code: latestRun.exit_code,
+          }
           : null,
       });
     }

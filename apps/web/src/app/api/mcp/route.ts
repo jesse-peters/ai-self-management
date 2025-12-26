@@ -5,7 +5,7 @@ import { handleHttpRequest, createJsonRpcError } from '@/lib/mcp/httpAdapter';
 import { createRequestLogger } from '@/lib/logger';
 import { getCorrelationId } from '@/lib/correlationId';
 import { verifyAccessToken } from '@projectflow/core';
-import * as Sentry from '@sentry/nextjs';
+import { captureError } from '@/lib/errors';
 
 /**
  * Extracts and verifies authentication from the request
@@ -229,26 +229,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             stack: error instanceof Error ? error.stack : undefined,
         }, 'MCP request error');
 
-        // Capture error to Sentry with context
-        Sentry.captureException(error, {
+        // Capture error to Sentry with context using centralized utilities
+        captureError(error, {
+            component: 'mcp-api-route',
+            correlationId,
+            method: jsonRpcRequest?.method,
+            userId: authInfo?.extra?.userId as string | undefined,
+        }, {
             level: 'error',
-            tags: {
-                component: 'mcp-api-route',
-                correlationId,
-            },
             extra: {
                 duration,
-                method: jsonRpcRequest?.method,
                 hasAuth: !!authInfo,
-                userId: authInfo?.extra?.userId as string | undefined,
             },
         });
 
-        // Set user context if available
-        if (authInfo?.extra?.userId) {
-            Sentry.setUser({ id: authInfo.extra.userId as string });
-        }
-
+        // Return JSON-RPC error format (required by MCP protocol)
         return NextResponse.json(
             {
                 jsonrpc: '2.0',

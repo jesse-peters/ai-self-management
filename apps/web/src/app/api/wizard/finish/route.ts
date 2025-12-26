@@ -1,40 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabaseClient';
-import { finishWizard } from '@projectflow/core';
+import { finishWizard, UnauthorizedError, ValidationError } from '@projectflow/core';
+import { withErrorHandler } from '@/lib/api/withErrorHandler';
+import { createSuccessResponse } from '@/lib/errors/responses';
 
-export async function POST(request: NextRequest) {
-  try {
+export const POST = withErrorHandler(async (request: NextRequest): Promise<NextResponse> => {
     const supabase = await createServerClient();
-    
+
     // Check authentication
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+        throw new UnauthorizedError('Authentication required');
     }
 
     const body = await request.json();
     const { sessionId } = body;
 
     if (!sessionId) {
-      return NextResponse.json(
-        { error: 'Missing required field: sessionId' },
-        { status: 400 }
-      );
+        throw new ValidationError('Missing required field: sessionId', 'sessionId');
     }
 
     // Finish wizard and create project
     const result = await finishWizard(supabase, sessionId);
 
-    return NextResponse.json(result);
-  } catch (error) {
-    console.error('Error finishing wizard:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to finish wizard' },
-      { status: 500 }
-    );
-  }
-}
+    return createSuccessResponse(result, 200);
+}, 'wizard-api');
 

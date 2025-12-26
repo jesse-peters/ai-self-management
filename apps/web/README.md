@@ -53,17 +53,18 @@ The app will be available at `http://localhost:3000`
 
 If you prefer to set up manually:
 
-1. Copy environment variables:
+1. From the project root, create `.env.local`:
 
 ```bash
-cp .env.local.example .env.local
+# From project root
+touch .env.local
 ```
 
-2. Fill in your Supabase credentials in `.env.local`:
+2. Fill in your Supabase credentials in `.env.local` (at project root):
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 OAUTH_ALLOWED_CLIENT_IDS=mcp-client
@@ -702,8 +703,8 @@ curl -X POST http://localhost:3000/api/mcp \
 
 ### Public Variables (visible to browser)
 
-- `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase project URL
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase anonymous key
+- `SUPABASE_URL`: Your Supabase project URL (auto-exposed as `NEXT_PUBLIC_SUPABASE_URL` by Next.js config)
+- `SUPABASE_ANON_KEY`: Supabase anonymous key (auto-exposed as `NEXT_PUBLIC_SUPABASE_ANON_KEY` by Next.js config)
 - `NEXT_PUBLIC_APP_URL`: Your app's public URL (optional, defaults to current origin) - Used for generating MCP configuration URLs
 
 ### Server-side Variables
@@ -808,8 +809,8 @@ pnpm --filter @projectflow/web build
 2. Import repository in Vercel
 3. Set root to `.` (monorepo)
 4. Configure environment variables in Vercel project settings:
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_URL` (auto-exposed as `NEXT_PUBLIC_SUPABASE_URL` for browser)
+   - `SUPABASE_ANON_KEY` (auto-exposed as `NEXT_PUBLIC_SUPABASE_ANON_KEY` for browser)
    - `SUPABASE_SERVICE_ROLE_KEY`
 5. Deploy!
 

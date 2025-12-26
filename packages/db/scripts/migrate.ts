@@ -33,7 +33,7 @@ function runMigrations() {
     }
 
     // Check if we're using local or remote Supabase
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseUrl = process.env.SUPABASE_URL;
     const isLocal = !supabaseUrl || supabaseUrl.includes('localhost') || supabaseUrl.includes('localhost');
 
     let command: string;

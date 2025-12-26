@@ -4,7 +4,7 @@ import { createHash } from 'crypto';
 import { createRequestLogger } from '@/lib/logger';
 import { getCorrelationId } from '@/lib/correlationId';
 import { createServiceRoleClient } from '@projectflow/db';
-import * as Sentry from '@sentry/nextjs';
+import { captureError } from '@/lib/errors';
 
 /**
  * OAuth 2.1 Token Endpoint
@@ -102,6 +102,15 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         const duration = Date.now() - startTime;
         logger.error({ error, duration }, 'OAuth token error');
+
+        // Capture error to Sentry using centralized utilities
+        captureError(error, {
+            component: 'oauth-token-route',
+            correlationId,
+        }, {
+            level: 'error',
+        });
+
         return NextResponse.json(
             {
                 error: 'server_error',
@@ -658,13 +667,14 @@ async function handleAuthorizationCodeGrant(
     } catch (error) {
         logger.error({ error, codeLength: code?.length }, 'Error handling authorization code grant');
 
-        // Capture error to Sentry
-        Sentry.captureException(error, {
+        // Capture error to Sentry using centralized utilities
+        captureError(error, {
+            component: 'oauth-token-route',
+            correlationId,
+        }, {
             level: 'error',
             tags: {
-                component: 'oauth-token-route',
                 grant_type: 'authorization_code',
-                correlationId,
             },
             extra: {
                 codeLength: code?.length,
@@ -731,13 +741,14 @@ async function handleRefreshTokenGrant(
     } catch (error) {
         logger.error({ error }, 'Error refreshing token');
 
-        // Capture error to Sentry
-        Sentry.captureException(error, {
+        // Capture error to Sentry using centralized utilities
+        captureError(error, {
+            component: 'oauth-token-route',
+            correlationId,
+        }, {
             level: 'error',
             tags: {
-                component: 'oauth-token-route',
                 grant_type: 'refresh_token',
-                correlationId,
             },
         });
 

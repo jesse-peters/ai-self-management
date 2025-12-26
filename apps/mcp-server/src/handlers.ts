@@ -20,24 +20,13 @@ import {
   implementCreateConstraint,
   implementEvaluateConstraints,
   implementEvidenceAdd,
-  implementCreateProject,
-  implementListProjects,
-  implementCreateTask,
-  implementListTasks,
-  implementUpdateTask,
-  implementGetContext,
-  implementPickNextTask,
-  implementStartTask,
-  implementBlockTask,
-  implementAppendArtifact,
-  implementEvaluateGates,
-  implementCompleteTask,
-  implementCreateCheckpoint,
-  implementListConstraints,
-  implementAssertInScope,
-  implementWizardStart,
-  implementWizardStep,
-  implementWizardFinish,
+  implementManifestDiscover,
+  implementManifestValidate,
+  implementManifestRead,
+  implementInterviewQuestions,
+  implementInitWithInterview,
+  implementProjectConventionsGet,
+  implementConventionsSyncToPrimer,
 } from './toolImplementations';
 
 export interface ToolCallResult {
@@ -210,262 +199,6 @@ export async function handleMemoryRecall(
 }
 
 /**
- * Handles pm.get_context tool calls (renamed from get_project_context)
- */
-export async function handleGetContext(
-  params: Record<string, unknown>,
-  accessToken: string
-): Promise<ToolCallResult> {
-  try {
-    const context = await implementGetContext(accessToken, params);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(context, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    // Context already set in routeToolCall
-    const mcpError = mapErrorToMCP(error);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(mcpError),
-        },
-      ],
-      isError: true,
-    };
-  }
-}
-
-/**
- * Handles pm.pick_next_task tool calls
- */
-export async function handlePickNextTask(
-  params: Record<string, unknown>,
-  accessToken: string
-): Promise<ToolCallResult> {
-  try {
-    const task = await implementPickNextTask(accessToken, params);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(task, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    // Context already set in routeToolCall
-    const mcpError = mapErrorToMCP(error);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(mcpError),
-        },
-      ],
-      isError: true,
-    };
-  }
-}
-
-/**
- * Handles pm.start_task tool calls
- */
-export async function handleStartTask(
-  params: Record<string, unknown>,
-  accessToken: string
-): Promise<ToolCallResult> {
-  try {
-    const task = await implementStartTask(accessToken, params);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(task, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    // Context already set in routeToolCall
-    const mcpError = mapErrorToMCP(error);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(mcpError),
-        },
-      ],
-      isError: true,
-    };
-  }
-}
-
-/**
- * Handles pm.block_task tool calls
- */
-export async function handleBlockTask(
-  params: Record<string, unknown>,
-  accessToken: string
-): Promise<ToolCallResult> {
-  try {
-    const task = await implementBlockTask(accessToken, params);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(task, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    // Context already set in routeToolCall
-    const mcpError = mapErrorToMCP(error);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(mcpError),
-        },
-      ],
-      isError: true,
-    };
-  }
-}
-
-/**
- * Handles pm.append_artifact tool calls
- */
-export async function handleAppendArtifact(
-  params: Record<string, unknown>,
-  accessToken: string
-): Promise<ToolCallResult> {
-  try {
-    const artifact = await implementAppendArtifact(accessToken, params);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(artifact, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    // Context already set in routeToolCall
-    const mcpError = mapErrorToMCP(error);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(mcpError),
-        },
-      ],
-      isError: true,
-    };
-  }
-}
-
-/**
- * Handles pm.evaluate_gates tool calls
- */
-export async function handleEvaluateGates(
-  params: Record<string, unknown>,
-  accessToken: string
-): Promise<ToolCallResult> {
-  try {
-    const results = await implementEvaluateGates(accessToken, params);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(results, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    // Context already set in routeToolCall
-    const mcpError = mapErrorToMCP(error);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(mcpError),
-        },
-      ],
-      isError: true,
-    };
-  }
-}
-
-/**
- * Handles pm.complete_task tool calls
- */
-export async function handleCompleteTask(
-  params: Record<string, unknown>,
-  accessToken: string
-): Promise<ToolCallResult> {
-  try {
-    const task = await implementCompleteTask(accessToken, params);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(task, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    // Context already set in routeToolCall
-    const mcpError = mapErrorToMCP(error);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(mcpError),
-        },
-      ],
-      isError: true,
-    };
-  }
-}
-
-/**
- * Handles pm.create_checkpoint tool calls
- */
-export async function handleCreateCheckpoint(
-  params: Record<string, unknown>,
-  accessToken: string
-): Promise<ToolCallResult> {
-  try {
-    const checkpoint = await implementCreateCheckpoint(accessToken, params);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(checkpoint, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    // Context already set in routeToolCall
-    const mcpError = mapErrorToMCP(error);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(mcpError),
-        },
-      ],
-      isError: true,
-    };
-  }
-}
-
-/**
  * Handles pm.record_decision tool calls
  */
 export async function handleRecordDecision(
@@ -544,38 +277,6 @@ export async function handleCreateConstraint(
         {
           type: 'text',
           text: JSON.stringify(constraint, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    // Context already set in routeToolCall
-    const mcpError = mapErrorToMCP(error);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(mcpError),
-        },
-      ],
-      isError: true,
-    };
-  }
-}
-
-/**
- * Handles pm.list_constraints tool calls
- */
-export async function handleListConstraints(
-  params: Record<string, unknown>,
-  accessToken: string
-): Promise<ToolCallResult> {
-  try {
-    const constraints = await implementListConstraints(accessToken, params);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(constraints, null, 2),
         },
       ],
     };
@@ -723,14 +424,14 @@ export async function handleEvidenceAdd(
 }
 
 /**
- * Handles pm.create_project tool calls
+ * Handles pm.manifest_discover tool calls
  */
-export async function handleCreateProject(
+export async function handleManifestDiscover(
   params: Record<string, unknown>,
   accessToken: string
 ): Promise<ToolCallResult> {
   try {
-    const result = await implementCreateProject(accessToken, params);
+    const result = await implementManifestDiscover(accessToken, params);
     return {
       content: [
         {
@@ -754,14 +455,14 @@ export async function handleCreateProject(
 }
 
 /**
- * Handles pm.list_projects tool calls
+ * Handles pm.manifest_validate tool calls
  */
-export async function handleListProjects(
+export async function handleManifestValidate(
   params: Record<string, unknown>,
   accessToken: string
 ): Promise<ToolCallResult> {
   try {
-    const result = await implementListProjects(accessToken);
+    const result = await implementManifestValidate(accessToken, params);
     return {
       content: [
         {
@@ -785,14 +486,14 @@ export async function handleListProjects(
 }
 
 /**
- * Handles pm.create_task tool calls
+ * Handles pm.manifest_read tool calls
  */
-export async function handleCreateTask(
+export async function handleManifestRead(
   params: Record<string, unknown>,
   accessToken: string
 ): Promise<ToolCallResult> {
   try {
-    const result = await implementCreateTask(accessToken, params);
+    const result = await implementManifestRead(accessToken, params);
     return {
       content: [
         {
@@ -816,14 +517,14 @@ export async function handleCreateTask(
 }
 
 /**
- * Handles pm.list_tasks tool calls
+ * Handles interview_questions tool calls
  */
-export async function handleListTasks(
+export async function handleInterviewQuestions(
   params: Record<string, unknown>,
   accessToken: string
 ): Promise<ToolCallResult> {
   try {
-    const result = await implementListTasks(accessToken, params);
+    const result = await implementInterviewQuestions(accessToken, params);
     return {
       content: [
         {
@@ -847,14 +548,14 @@ export async function handleListTasks(
 }
 
 /**
- * Handles pm.update_task tool calls
+ * Handles init_with_interview tool calls
  */
-export async function handleUpdateTask(
+export async function handleInitWithInterview(
   params: Record<string, unknown>,
   accessToken: string
 ): Promise<ToolCallResult> {
   try {
-    const result = await implementUpdateTask(accessToken, params);
+    const result = await implementInitWithInterview(accessToken, params);
     return {
       content: [
         {
@@ -878,14 +579,14 @@ export async function handleUpdateTask(
 }
 
 /**
- * Handles pm.assert_in_scope tool calls
+ * Handles project_conventions_get tool calls
  */
-export async function handleAssertInScope(
+export async function handleProjectConventionsGet(
   params: Record<string, unknown>,
   accessToken: string
 ): Promise<ToolCallResult> {
   try {
-    const result = await implementAssertInScope(accessToken, params);
+    const result = await implementProjectConventionsGet(accessToken, params);
     return {
       content: [
         {
@@ -909,76 +610,14 @@ export async function handleAssertInScope(
 }
 
 /**
- * Handles pm.wizard_start tool calls
+ * Handles conventions_sync_to_primer tool calls
  */
-export async function handleWizardStart(
+export async function handleConventionsSyncToPrimer(
   params: Record<string, unknown>,
   accessToken: string
 ): Promise<ToolCallResult> {
   try {
-    const result = await implementWizardStart(accessToken);
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    const mcpError = mapErrorToMCP(error);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(mcpError),
-        },
-      ],
-      isError: true,
-    };
-  }
-}
-
-/**
- * Handles pm.wizard_step tool calls
- */
-export async function handleWizardStep(
-  params: Record<string, unknown>,
-  accessToken: string
-): Promise<ToolCallResult> {
-  try {
-    const result = await implementWizardStep(accessToken, params);
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    const mcpError = mapErrorToMCP(error);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(mcpError),
-        },
-      ],
-      isError: true,
-    };
-  }
-}
-
-/**
- * Handles pm.wizard_finish tool calls
- */
-export async function handleWizardFinish(
-  params: Record<string, unknown>,
-  accessToken: string
-): Promise<ToolCallResult> {
-  try {
-    const result = await implementWizardFinish(accessToken, params);
+    const result = await implementConventionsSyncToPrimer(accessToken, params);
     return {
       content: [
         {
@@ -1037,44 +676,20 @@ export async function routeToolCall(
   try {
     let result: ToolCallResult;
     switch (toolName) {
-      case 'pm.create_project':
-        result = await handleCreateProject(params, accessToken);
+      case 'pm.init':
+        result = await handleInit(params, accessToken);
         break;
-      case 'pm.list_projects':
-        result = await handleListProjects(params, accessToken);
+      case 'pm.status':
+        result = await handleStatus(params, accessToken);
         break;
-      case 'pm.create_task':
-        result = await handleCreateTask(params, accessToken);
+      case 'pm.task_create':
+        result = await handleTaskCreate(params, accessToken);
         break;
-      case 'pm.list_tasks':
-        result = await handleListTasks(params, accessToken);
+      case 'pm.task_set_status':
+        result = await handleTaskSetStatus(params, accessToken);
         break;
-      case 'pm.update_task':
-        result = await handleUpdateTask(params, accessToken);
-        break;
-      case 'pm.get_context':
-        result = await handleGetContext(params, accessToken);
-        break;
-      case 'pm.pick_next_task':
-        result = await handlePickNextTask(params, accessToken);
-        break;
-      case 'pm.start_task':
-        result = await handleStartTask(params, accessToken);
-        break;
-      case 'pm.block_task':
-        result = await handleBlockTask(params, accessToken);
-        break;
-      case 'pm.append_artifact':
-        result = await handleAppendArtifact(params, accessToken);
-        break;
-      case 'pm.evaluate_gates':
-        result = await handleEvaluateGates(params, accessToken);
-        break;
-      case 'pm.complete_task':
-        result = await handleCompleteTask(params, accessToken);
-        break;
-      case 'pm.create_checkpoint':
-        result = await handleCreateCheckpoint(params, accessToken);
+      case 'pm.memory_recall':
+        result = await handleMemoryRecall(params, accessToken);
         break;
       case 'pm.record_decision':
         result = await handleRecordDecision(params, accessToken);
@@ -1082,29 +697,41 @@ export async function routeToolCall(
       case 'pm.record_outcome':
         result = await handleRecordOutcome(params, accessToken);
         break;
+      case 'pm.gate_run':
+        result = await handleGateRun(params, accessToken);
+        break;
+      case 'pm.gate_status':
+        result = await handleGateStatus(params, accessToken);
+        break;
       case 'pm.create_constraint':
         result = await handleCreateConstraint(params, accessToken);
-        break;
-      case 'pm.list_constraints':
-        result = await handleListConstraints(params, accessToken);
         break;
       case 'pm.evaluate_constraints':
         result = await handleEvaluateConstraints(params, accessToken);
         break;
-      case 'pm.assert_in_scope':
-        result = await handleAssertInScope(params, accessToken);
+      case 'pm.evidence_add':
+        result = await handleEvidenceAdd(params, accessToken);
         break;
-      case 'pm.memory_recall':
-        result = await handleMemoryRecall(params, accessToken);
+      case 'pm.manifest_discover':
+        result = await handleManifestDiscover(params, accessToken);
         break;
-      case 'pm.wizard_start':
-        result = await handleWizardStart(params, accessToken);
+      case 'pm.manifest_validate':
+        result = await handleManifestValidate(params, accessToken);
         break;
-      case 'pm.wizard_step':
-        result = await handleWizardStep(params, accessToken);
+      case 'pm.manifest_read':
+        result = await handleManifestRead(params, accessToken);
         break;
-      case 'pm.wizard_finish':
-        result = await handleWizardFinish(params, accessToken);
+      case 'pm.interview_questions':
+        result = await handleInterviewQuestions(params, accessToken);
+        break;
+      case 'pm.init_with_interview':
+        result = await handleInitWithInterview(params, accessToken);
+        break;
+      case 'pm.project_conventions_get':
+        result = await handleProjectConventionsGet(params, accessToken);
+        break;
+      case 'pm.conventions_sync_to_primer':
+        result = await handleConventionsSyncToPrimer(params, accessToken);
         break;
       default:
         result = {

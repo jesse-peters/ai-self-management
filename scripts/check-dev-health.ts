@@ -82,14 +82,14 @@ function checkSupabaseCLI(): HealthCheckResult {
 
 function checkSupabaseRunning(): HealthCheckResult {
   const dbPath = join(process.cwd(), 'packages/db');
-  
+
   try {
     const output = execSync('supabase status --output json', {
       cwd: dbPath,
       encoding: 'utf-8',
       stdio: 'pipe',
     });
-    
+
     const status = JSON.parse(output);
     if (status?.API?.URL) {
       return {
@@ -102,7 +102,7 @@ function checkSupabaseRunning(): HealthCheckResult {
         ],
       };
     }
-    
+
     return {
       name: 'Supabase Local',
       status: 'warn',
@@ -110,7 +110,7 @@ function checkSupabaseRunning(): HealthCheckResult {
     };
   } catch {
     // Check if using remote Supabase
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+    const url = process.env.SUPABASE_URL;
     if (url && !url.includes('localhost') && !url.includes('127.0.0.1')) {
       return {
         name: 'Supabase Remote',
@@ -119,7 +119,7 @@ function checkSupabaseRunning(): HealthCheckResult {
         details: [`URL: ${url}`],
       };
     }
-    
+
     return {
       name: 'Supabase Local',
       status: 'fail',
@@ -133,8 +133,8 @@ function checkSupabaseRunning(): HealthCheckResult {
 }
 
 async function checkDatabaseConnection(): Promise<HealthCheckResult> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = process.env.SUPABASE_URL;
+  const anonKey = process.env.SUPABASE_ANON_KEY;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !anonKey) {
@@ -143,7 +143,7 @@ async function checkDatabaseConnection(): Promise<HealthCheckResult> {
       status: 'fail',
       message: 'Missing Supabase credentials',
       details: [
-        'Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY',
+        'Set SUPABASE_URL and SUPABASE_ANON_KEY',
         'Run: pnpm setup',
       ],
     };
@@ -183,7 +183,7 @@ async function checkDatabaseConnection(): Promise<HealthCheckResult> {
 }
 
 async function checkOAuthTables(): Promise<HealthCheckResult> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const url = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceKey) {
@@ -254,8 +254,8 @@ async function checkOAuthTables(): Promise<HealthCheckResult> {
 
 function checkEnvironmentVariables(): HealthCheckResult {
   const required = [
-    'NEXT_PUBLIC_SUPABASE_URL',
-    'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+    'SUPABASE_URL',
+    'SUPABASE_ANON_KEY',
     'SUPABASE_SERVICE_ROLE_KEY',
   ];
 
@@ -378,24 +378,24 @@ async function main() {
 
   // Display results
   log('Results:\n');
-  
+
   let hasFailures = false;
   let hasWarnings = false;
 
   for (const result of results) {
     const icon = result.status === 'pass' ? '✅' : result.status === 'fail' ? '❌' : '⚠️';
     const color = result.status === 'pass' ? GREEN : result.status === 'fail' ? RED : YELLOW;
-    
+
     log(`${icon} ${result.name}: ${result.message}`, color);
-    
+
     if (result.details && result.details.length > 0) {
       result.details.forEach(detail => {
         log(`   ${detail}`, YELLOW);
       });
     }
-    
+
     log('');
-    
+
     if (result.status === 'fail') {
       hasFailures = true;
     } else if (result.status === 'warn') {
@@ -408,7 +408,7 @@ async function main() {
   const passed = results.filter(r => r.status === 'pass').length;
   const failed = results.filter(r => r.status === 'fail').length;
   const warned = results.filter(r => r.status === 'warn').length;
-  
+
   log(`  ✅ Passed: ${passed}`, GREEN);
   if (warned > 0) {
     log(`  ⚠️  Warnings: ${warned}`, YELLOW);

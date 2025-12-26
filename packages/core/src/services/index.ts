@@ -92,3 +92,40 @@ export type {
   GateConfigInput,
   GateStatusSummary,
 } from './gatesTypes';
+// Manifest functions moved to server.ts (server-only) to avoid Node.js file system modules in browser
+// Types are safe to export
+export type {
+  ProjectManifest,
+  LocalManifest,
+  ManifestData,
+} from './manifest';
+export {
+  getInterviewQuestions,
+  processInterviewResponses,
+  generateConventionsMarkdown,
+  generateReconProfile,
+  saveProjectConventions,
+  type InterviewQuestion,
+  type InterviewSession,
+  type InterviewResult,
+  type ProjectConventions,
+  type ReconProfile,
+  type ReconCommand,
+  type ReconFilePattern,
+} from './interview';
+// Recon functions moved to server.ts (server-only) to avoid Node.js modules in browser
+export {
+  analyzeCommand,
+  isSafeCommand,
+  redactSecrets,
+  getAllDangerousPatterns,
+  SAFE_COMMAND_CATEGORIES,
+  type DangerousPattern,
+  type CommandAnalysis,
+} from './dangerousCommands';
+// Primer functions moved to server.ts (server-only) to avoid Node.js file system modules in browser
+// Types are safe to export
+export type {
+  PrimerGenerationResult,
+  PrimerContent,
+} from './primer';

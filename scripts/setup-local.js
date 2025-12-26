@@ -164,7 +164,7 @@ async function main() {
   log("✓ Packages built\n", GREEN);
 
   // Step 6: Create .env.local if it doesn't exist
-  const envFile = path.join(process.cwd(), "apps/web/.env.local");
+  const envFile = path.join(process.cwd(), ".env.local");
   if (!fs.existsSync(envFile)) {
     log("📝 Creating .env.local file...");
 
@@ -194,8 +194,8 @@ async function main() {
     }
 
     const envContent = `# Supabase Local Configuration
-NEXT_PUBLIC_SUPABASE_URL=${supabaseStatus.apiUrl}
-NEXT_PUBLIC_SUPABASE_ANON_KEY=${supabaseStatus.anonKey || "YOUR_ANON_KEY_HERE"}
+SUPABASE_URL=${supabaseStatus.apiUrl}
+SUPABASE_ANON_KEY=${supabaseStatus.anonKey || "YOUR_ANON_KEY_HERE"}
 SUPABASE_SERVICE_ROLE_KEY=${
       supabaseStatus.serviceKey || "YOUR_SERVICE_ROLE_KEY_HERE"
     }
@@ -207,10 +207,10 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 CRON_SECRET=local-dev-secret
 `;
     fs.writeFileSync(envFile, envContent);
-    log("✓ Created apps/web/.env.local", GREEN);
+    log("✓ Created .env.local", GREEN);
     if (!supabaseStatus.anonKey || !supabaseStatus.serviceKey) {
       log(
-        "⚠️  Supabase keys not detected. Please update apps/web/.env.local with keys from:",
+        "⚠️  Supabase keys not detected. Please update .env.local with keys from:",
         YELLOW
       );
       log("   Run: cd packages/db && supabase status", YELLOW);

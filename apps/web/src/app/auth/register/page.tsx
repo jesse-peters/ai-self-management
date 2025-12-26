@@ -56,7 +56,7 @@ export default function RegisterPage() {
         } else if (errorMsg.includes('email signups disabled') || errorMsg.includes('provider')) {
           setError(`Email authentication is not enabled. Please check your Supabase configuration. Original error: ${error.message}`);
         } else if (errorMsg.includes('failed to fetch') || errorMsg.includes('fetch')) {
-          setError('Cannot reach Supabase. Check your internet connection and NEXT_PUBLIC_SUPABASE_URL environment variable.');
+          setError('Cannot reach Supabase. Check your internet connection and SUPABASE_URL environment variable.');
         } else if (errorMsg.includes('email') && (errorMsg.includes('send') || errorMsg.includes('confirmation') || errorMsg.includes('otp'))) {
           setError(
             `Error sending email: ${error.message}\n\n` +
@@ -119,7 +119,7 @@ export default function RegisterPage() {
         if (errorMsg.includes('email signups disabled') || errorMsg.includes('provider')) {
           setError(`Email authentication is not enabled. Please check your Supabase configuration. Original error: ${error.message}`);
         } else if (errorMsg.includes('failed to fetch') || errorMsg.includes('fetch')) {
-          setError('Cannot reach Supabase. Check your internet connection and NEXT_PUBLIC_SUPABASE_URL environment variable.');
+          setError('Cannot reach Supabase. Check your internet connection and SUPABASE_URL environment variable.');
         } else if (errorMsg.includes('email') && (errorMsg.includes('send') || errorMsg.includes('confirmation'))) {
           setError(
             `Error sending confirmation email: ${error.message}\n\n` +

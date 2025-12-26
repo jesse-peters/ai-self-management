@@ -1,7 +1,27 @@
 import { withSentryConfig } from '@sentry/nextjs';
 import type { NextConfig } from "next";
+import { resolve } from 'path';
+
+// Load .env.local from project root ONLY in development
+// In production, Vercel's system env vars take precedence automatically
+if (process.env.NODE_ENV !== 'production') {
+  try {
+    // Use dynamic require to avoid bundling dotenv in production
+    const { config } = require('dotenv');
+    const rootEnvPath = resolve(__dirname, '../../.env.local');
+    config({ path: rootEnvPath });
+  } catch (error) {
+    // dotenv not available or file doesn't exist - that's okay
+    // Next.js will use system env vars or its own .env files
+  }
+}
 
 const nextConfig: NextConfig = {
+  // Auto-expose shorter env var names as NEXT_PUBLIC_* for browser access
+  env: {
+    NEXT_PUBLIC_SUPABASE_URL: process.env.SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
+  },
   transpilePackages: ['@projectflow/core', '@projectflow/db', '@projectflow/mcp-server'],
   // Exclude Node.js-only packages from server components (updated API name)
   serverExternalPackages: [

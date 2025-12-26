@@ -25,7 +25,10 @@
     "db:status": "pnpm --filter @projectflow/db db:status",
     "supabase:start": "cd packages/db && supabase start",
     "supabase:stop": "cd packages/db && supabase stop",
-    "supabase:status": "cd packages/db && supabase status"
+    "supabase:status": "cd packages/db && supabase status",
+    "vercel:link": "tsx scripts/link-vercel.ts",
+    "vercel:env:pull": "tsx scripts/env-pull.ts",
+    "vercel:env:push": "tsx scripts/env-push.ts"
   },
   "engines": {
     "node": ">=20.0.0"

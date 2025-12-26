@@ -4,78 +4,46 @@
  */
 
 import {
-  createProject,
-  listProjects,
   initProject,
   getProjectStatus,
-  createTask,
-  listTasks,
-  updateTask,
-  getProjectContext,
-  pickNextTask,
-  startTask,
-  blockTask,
-  completeTask,
-  appendArtifact,
-  evaluateGates,
-  createCheckpoint,
   recordDecision,
   recordOutcome,
-  assertInScope,
-  emitEvent,
   createConstraint,
-  listConstraints,
   evaluateConstraints,
   recall,
-  startWizard,
-  submitWizardStep,
-  finishWizard,
-  createWorkItem,
-  listWorkItems,
-  getWorkItem,
-  updateWorkItemStatus,
   createAgentTask,
-  listAgentTasks,
-  getAgentTask,
   updateTaskStatus,
-  addDependency,
   addEvidence,
-  listEvidence,
-  type WorkItemSummary,
-  type AgentTaskWithDetails,
+  getInterviewQuestions,
   type AgentTaskFilters,
-  type GateStatusSummary,
-  type GateConfigInput,
   type InitResult,
   type ProjectStatus,
+  type ManifestData,
 } from '@projectflow/core';
-// Import server-only gate functions from server module
+// Import server-only functions from server module
 import {
-  configureGates,
+  readManifests,
+  validateManifests,
+  parseConventionsMarkdown,
+  syncConventionsToPrimer,
+  initProjectWithManifests,
   runGate,
   getGateStatus,
+  type InitProjectWithManifestsResult,
 } from '@projectflow/core/server';
 import type {
-  Project,
-  Task,
-  ProjectContext,
-  Artifact,
-  LegacyGateResult,
-  Checkpoint,
-  Decision,
-  Outcome,
-  ScopeResult,
-  TaskPickingStrategy,
-  ChangesetManifest,
+  AgentTask,
   Constraint,
   ConstraintContext,
   ConstraintEvaluationResult,
   DecisionRecordResult,
+  Evidence,
+  GateRun,
+  GateStatusSummary,
   MemoryRecallContext,
   MemoryRecallResult,
-  WizardSession,
+  Outcome,
 } from '@projectflow/core';
-import type { WorkItem, AgentTask, Evidence, Gate, GateRun } from '@projectflow/db';
 import { createServiceRoleClient, createOAuthScopedClient } from '@projectflow/db';
 import { verifyAccessToken } from '@projectflow/core';
 
@@ -103,6 +71,75 @@ async function getUserFromToken(accessToken: string): Promise<string> {
 }
 
 /**
+ * Authentication context returned by authenticateTool
+ */
+export interface AuthContext {
+  userId: string;
+  client: ReturnType<typeof createOAuthScopedClient>;
+}
+
+/**
+ * Client type preference for authentication
+ */
+export type ClientType = 'oauth' | 'service-role';
+
+/**
+ * Consolidated authentication helper for all tool implementations
+ * Extracts userId from token and creates appropriate Supabase client
+ * 
+ * This function standardizes authentication across all tools and ensures
+ * consistent error handling and validation.
+ * 
+ * @param accessToken OAuth access token from MCP request
+ * @param clientType Type of client to create ('oauth' for RLS-respecting, 'service-role' for admin)
+ * @returns AuthContext with validated userId and Supabase client
+ * @throws Error if token is invalid or userId cannot be extracted
+ */
+export async function authenticateTool(
+  accessToken: string,
+  clientType: ClientType = 'oauth'
+): Promise<AuthContext> {
+  // Extract and validate userId from token
+  let userId: string;
+  try {
+    userId = await getUserFromToken(accessToken);
+  } catch (error) {
+    throw new Error(
+      `Authentication failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
+
+  // Validate userId is not empty
+  if (!userId || userId.trim() === '') {
+    throw new Error('Authentication failed: User ID is empty or invalid');
+  }
+
+  const validatedUserId = userId.trim();
+  if (!validatedUserId) {
+    throw new Error('Authentication failed: User ID validation failed');
+  }
+
+  // Create appropriate client based on type
+  let client: ReturnType<typeof createOAuthScopedClient> | ReturnType<typeof createServiceRoleClient>;
+  try {
+    if (clientType === 'service-role') {
+      client = createServiceRoleClient();
+    } else {
+      client = createOAuthScopedClient(accessToken);
+    }
+  } catch (error) {
+    throw new Error(
+      `Failed to create Supabase client: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
+
+  return {
+    userId: validatedUserId,
+    client: client as ReturnType<typeof createOAuthScopedClient>,
+  };
+}
+
+/**
  * Implements pm.init tool
  * Quick project bootstrap with sensible defaults
  */
@@ -110,8 +147,7 @@ export async function implementInit(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<InitResult> {
-  const userId = await getUserFromToken(accessToken);
-  const client = createOAuthScopedClient(accessToken);
+  const { userId, client } = await authenticateTool(accessToken, 'oauth');
 
   const result = await initProject(client, {
     name: params.name as string,
@@ -130,8 +166,7 @@ export async function implementStatus(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<ProjectStatus> {
-  const userId = await getUserFromToken(accessToken);
-  const client = createOAuthScopedClient(accessToken);
+  const { userId, client } = await authenticateTool(accessToken, 'oauth');
 
   const result = await getProjectStatus(
     client,
@@ -143,346 +178,13 @@ export async function implementStatus(
 }
 
 /**
- * Implements pm.create_project tool
- */
-export async function implementCreateProject(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<Project> {
-  const userId = await getUserFromToken(accessToken);
-  const client = createServiceRoleClient();
-
-  const { data: project, error } = await (client
-    .from('projects')
-    .insert([{
-      user_id: userId,
-      name: params.name as string,
-      description: params.description as string | undefined || null,
-      rules: (params.rules as any) || {},
-    }] as any)
-    .select()
-    .single() as any);
-
-  if (error) {
-    throw new Error(`Failed to create project: ${error.message}`);
-  }
-
-  if (!project) {
-    throw new Error('Failed to retrieve created project');
-  }
-
-  return project as Project;
-}
-
-/**
- * Implements pm.list_projects tool
- */
-export async function implementListProjects(accessToken: string): Promise<Project[]> {
-  const userId = await getUserFromToken(accessToken);
-  const client = createServiceRoleClient();
-  // Filter to projects belonging to the authenticated user
-  const { data: projects, error } = await client
-    .from('projects')
-    .select('*')
-    .eq('user_id', userId) as any;
-
-  if (error) {
-    throw new Error(`Failed to list projects: ${error.message}`);
-  }
-
-  return projects || [];
-}
-
-/**
- * Implements pm.create_task tool (enhanced with acceptance criteria, constraints, dependencies)
- */
-export async function implementCreateTask(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<Task> {
-  const userId = await getUserFromToken(accessToken);
-  const client = createServiceRoleClient();
-
-  // Verify project exists and get its user_id
-  const { data: project, error: projectError } = await client
-    .from('projects')
-    .select('user_id')
-    .eq('id', params.projectId as string)
-    .single() as any;
-
-  if (projectError || !project) {
-    throw new Error(`Project not found: ${projectError?.message || 'Unknown error'}`);
-  }
-
-  // Verify user owns the project
-  if (project.user_id !== userId) {
-    throw new Error('Unauthorized: You do not own this project');
-  }
-
-  const taskData: any = {
-    title: params.title as string,
-    description: params.description as string | undefined,
-    status: (params.status as 'todo' | 'in_progress' | 'done' | 'blocked' | 'cancelled' | undefined) || 'todo',
-    priority: params.priority as 'low' | 'medium' | 'high' | undefined,
-    user_id: userId, // Set user_id explicitly for service role client
-  };
-
-  // Add enhanced fields if provided
-  if (params.acceptanceCriteria) {
-    taskData.acceptance_criteria = params.acceptanceCriteria as string[];
-  }
-  if (params.constraints) {
-    taskData.constraints = params.constraints as Record<string, any>;
-  }
-  if (params.dependencies) {
-    taskData.dependencies = params.dependencies as string[];
-  }
-
-  // Insert task directly with user_id since we're using service role client
-  const { data: task, error: taskError } = await client
-    .from('tasks')
-    .insert([{
-      project_id: params.projectId as string,
-      user_id: userId,
-      title: taskData.title,
-      description: taskData.description || null,
-      status: taskData.status,
-      priority: taskData.priority || null,
-      acceptance_criteria: taskData.acceptance_criteria || null,
-      constraints: taskData.constraints || null,
-      dependencies: taskData.dependencies || null,
-    }] as any)
-    .select()
-    .single() as any;
-
-  if (taskError) {
-    throw new Error(`Failed to create task: ${taskError.message}`);
-  }
-
-  if (!task) {
-    throw new Error('Failed to retrieve created task');
-  }
-
-  // Emit TaskCreated event
-  await emitEvent({
-    project_id: params.projectId as string,
-    task_id: task.id,
-    user_id: userId,
-    event_type: 'TaskCreated',
-    payload: {
-      task_id: task.id,
-      title: task.title,
-      description: task.description,
-      status: task.status,
-      priority: task.priority || null,
-      acceptance_criteria: (task as any).acceptance_criteria || [],
-      constraints: (task as any).constraints || {},
-      dependencies: (task as any).dependencies || [],
-    },
-  });
-
-  return task as Task;
-}
-
-/**
- * Implements pm.list_tasks tool
- */
-export async function implementListTasks(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<Task[]> {
-  const client = createServiceRoleClient();
-  return listTasks(client, params.projectId as string, {
-    status: params.status as 'todo' | 'in_progress' | 'done' | 'blocked' | 'cancelled' | undefined,
-    priority: params.priority as 'low' | 'medium' | 'high' | undefined,
-  });
-}
-
-/**
- * Implements pm.update_task tool
- */
-export async function implementUpdateTask(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<Task> {
-  const client = createServiceRoleClient();
-  return updateTask(client, params.taskId as string, {
-    title: params.title as string | undefined,
-    description: params.description as string | undefined,
-    status: params.status as 'todo' | 'in_progress' | 'done' | 'blocked' | 'cancelled' | undefined,
-    priority: params.priority as 'low' | 'medium' | 'high' | null | undefined,
-  });
-}
-
-/**
- * Implements pm.get_context tool (renamed from get_project_context)
- */
-export async function implementGetContext(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<ProjectContext> {
-  const client = createServiceRoleClient();
-  return getProjectContext(client, params.projectId as string);
-}
-
-/**
- * Implements pm.pick_next_task tool
- */
-export async function implementPickNextTask(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<Task | null> {
-  const client = createServiceRoleClient();
-  return pickNextTask(
-    client,
-    params.projectId as string,
-    (params.strategy as TaskPickingStrategy | undefined) || 'dependencies',
-    params.lockedBy as string | undefined
-  );
-}
-
-/**
- * Implements pm.start_task tool
- */
-export async function implementStartTask(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<Task> {
-  const client = createServiceRoleClient();
-  return startTask(client, params.taskId as string);
-}
-
-/**
- * Implements pm.block_task tool
- */
-export async function implementBlockTask(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<Task> {
-  const client = createServiceRoleClient();
-  return blockTask(
-    client,
-    params.taskId as string,
-    params.reason as string,
-    (params.needsHuman as boolean | undefined) || false
-  );
-}
-
-/**
- * Implements pm.append_artifact tool
- */
-export async function implementAppendArtifact(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<Artifact> {
-  const userId = await getUserFromToken(accessToken);
-  const client = createServiceRoleClient();
-
-  // Verify task exists and get its project_id
-  const { data: task, error: taskError } = await client
-    .from('tasks')
-    .select('project_id, user_id')
-    .eq('id', params.taskId as string)
-    .single() as any;
-
-  if (taskError || !task) {
-    throw new Error(`Task not found: ${taskError?.message || 'Unknown error'}`);
-  }
-
-  // Verify user owns the task
-  if (task.user_id !== userId) {
-    throw new Error('Unauthorized: You do not own this task');
-  }
-
-  // Insert artifact directly with user_id since we're using service role client
-  const { data: artifact, error: artifactError } = await client
-    .from('artifacts')
-    .insert([{
-      task_id: params.taskId as string,
-      user_id: userId,
-      type: params.type as 'diff' | 'pr' | 'test_report' | 'document' | 'other',
-      ref: (params.ref as string).trim(),
-      summary: params.summary ? (params.summary as string).trim() : null,
-    }] as any)
-    .select()
-    .single() as any;
-
-  if (artifactError) {
-    throw new Error(`Failed to create artifact: ${artifactError.message}`);
-  }
-
-  if (!artifact) {
-    throw new Error('Failed to retrieve created artifact');
-  }
-
-  // Emit ArtifactProduced event
-  await emitEvent({
-    project_id: task.project_id,
-    task_id: params.taskId as string,
-    user_id: userId,
-    event_type: 'ArtifactProduced',
-    payload: {
-      artifact_id: artifact.id,
-      task_id: params.taskId as string,
-      type: params.type as 'diff' | 'pr' | 'test_report' | 'document' | 'other',
-      ref: (params.ref as string).trim(),
-      summary: params.summary ? (params.summary as string).trim() : null,
-    },
-  });
-
-  return artifact as Artifact;
-}
-
-/**
- * Implements pm.evaluate_gates tool
- */
-export async function implementEvaluateGates(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<LegacyGateResult[]> {
-  const client = createServiceRoleClient();
-  return evaluateGates(client, params.taskId as string);
-}
-
-/**
- * Implements pm.complete_task tool
- */
-export async function implementCompleteTask(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<Task> {
-  const client = createServiceRoleClient();
-  return completeTask(
-    client,
-    params.taskId as string,
-    params.artifactIds as string[] | undefined
-  );
-}
-
-/**
- * Implements pm.create_checkpoint tool
- */
-export async function implementCreateCheckpoint(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<Checkpoint> {
-  const userId = await getUserFromToken(accessToken);
-  return createCheckpoint(userId, params.projectId as string, {
-    label: params.label as string,
-    repoRef: params.repoRef as string | undefined,
-    summary: params.summary as string,
-    resumeInstructions: params.resumeInstructions as string | undefined,
-  });
-}
-
-/**
  * Implements pm.record_decision tool
  */
 export async function implementRecordDecision(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<DecisionRecordResult> {
-  const userId = await getUserFromToken(accessToken);
+  const { userId } = await authenticateTool(accessToken, 'oauth');
   return recordDecision(userId, params.projectId as string, {
     title: params.title as string,
     options: params.options as any[],
@@ -498,7 +200,7 @@ export async function implementRecordOutcome(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<Outcome> {
-  const userId = await getUserFromToken(accessToken);
+  const { userId } = await authenticateTool(accessToken, 'oauth');
   return recordOutcome(userId, params.projectId as string, {
     subject_type: params.subjectType as any,
     subject_id: params.subjectId as string,
@@ -519,7 +221,7 @@ export async function implementCreateConstraint(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<Constraint> {
-  const userId = await getUserFromToken(accessToken);
+  const { userId } = await authenticateTool(accessToken, 'oauth');
   return createConstraint(userId, params.projectId as string, {
     scope: params.scope as any,
     scopeValue: params.scopeValue as string | undefined,
@@ -532,42 +234,15 @@ export async function implementCreateConstraint(
 }
 
 /**
- * Implements pm.list_constraints tool
- */
-export async function implementListConstraints(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<Constraint[]> {
-  const userId = await getUserFromToken(accessToken);
-  return listConstraints(userId, params.projectId as string, {
-    scope: params.scope as any,
-    trigger: params.trigger as any,
-    enforcementLevel: params.enforcementLevel as any,
-  });
-}
-
-/**
  * Implements pm.evaluate_constraints tool
  */
 export async function implementEvaluateConstraints(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<ConstraintEvaluationResult> {
-  const userId = await getUserFromToken(accessToken);
+  const { userId } = await authenticateTool(accessToken, 'oauth');
   const context = params.context as ConstraintContext;
   return evaluateConstraints(userId, params.projectId as string, context);
-}
-
-/**
- * Implements pm.assert_in_scope tool
- */
-export async function implementAssertInScope(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<ScopeResult> {
-  const userId = await getUserFromToken(accessToken);
-  const changeset = params.changesetManifest as ChangesetManifest;
-  return assertInScope(userId, params.taskId as string, changeset);
 }
 
 /**
@@ -577,7 +252,7 @@ export async function implementMemoryRecall(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<MemoryRecallResult> {
-  const userId = await getUserFromToken(accessToken);
+  const { userId } = await authenticateTool(accessToken, 'oauth');
   const context: MemoryRecallContext = {
     query: params.query as string | undefined,
     tags: params.tags as string[] | undefined,
@@ -585,120 +260,6 @@ export async function implementMemoryRecall(
     keywords: params.keywords as string[] | undefined,
   };
   return recall(userId, params.projectId as string, context);
-}
-
-/**
- * Implements pm.wizard_start tool
- */
-export async function implementWizardStart(
-  accessToken: string
-): Promise<{ sessionId: string; step: number }> {
-  const userId = await getUserFromToken(accessToken);
-  const client = createOAuthScopedClient(accessToken);
-  const sessionId = await startWizard(client);
-  return { sessionId, step: 1 };
-}
-
-/**
- * Implements pm.wizard_step tool
- */
-export async function implementWizardStep(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<{ nextStep: number | 'complete'; session: WizardSession }> {
-  const userId = await getUserFromToken(accessToken);
-  const sessionId = params.sessionId as string;
-  const stepId = params.stepId as number;
-  const payload = params.payload as Record<string, any>;
-
-  return submitWizardStep(sessionId, stepId, payload);
-}
-
-/**
- * Implements pm.wizard_finish tool
- */
-export async function implementWizardFinish(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<{
-  project: any;
-  projectSpec: any;
-  tasks: any[];
-  checkpoint: any;
-}> {
-  const userId = await getUserFromToken(accessToken);
-  const client = createOAuthScopedClient(accessToken);
-  const sessionId = params.sessionId as string;
-
-  return finishWizard(client, sessionId);
-}
-
-// Work Items
-
-/**
- * Implements pm.work_item.create tool
- */
-export async function implementWorkItemCreate(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<WorkItem> {
-  const userId = await getUserFromToken(accessToken);
-  const client = createOAuthScopedClient(accessToken);
-
-  return createWorkItem(client, params.projectId as string, {
-    title: params.title as string,
-    description: params.description ? (params.description as string) : null,
-    external_url: params.externalUrl ? (params.externalUrl as string) : null,
-    status: 'open',
-  });
-}
-
-/**
- * Implements pm.work_item.list tool
- */
-export async function implementWorkItemList(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<WorkItem[]> {
-  const userId = await getUserFromToken(accessToken);
-  const client = createOAuthScopedClient(accessToken);
-
-  const filters: any = {};
-  if (params.status) {
-    filters.status = params.status as 'open' | 'in_progress' | 'done';
-  }
-
-  return listWorkItems(client, params.projectId as string, filters);
-}
-
-/**
- * Implements pm.work_item.get tool
- */
-export async function implementWorkItemGet(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<WorkItemSummary> {
-  const userId = await getUserFromToken(accessToken);
-  const client = createOAuthScopedClient(accessToken);
-
-  return getWorkItem(client, params.workItemId as string);
-}
-
-/**
- * Implements pm.work_item.set_status tool
- */
-export async function implementWorkItemSetStatus(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<WorkItem> {
-  const userId = await getUserFromToken(accessToken);
-  const client = createOAuthScopedClient(accessToken);
-
-  return updateWorkItemStatus(
-    client,
-    params.workItemId as string,
-    params.status as 'open' | 'in_progress' | 'done'
-  );
 }
 
 // Agent Tasks
@@ -710,8 +271,7 @@ export async function implementAgentTaskCreate(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<AgentTask> {
-  const userId = await getUserFromToken(accessToken);
-  const client = createOAuthScopedClient(accessToken);
+  const { userId, client } = await authenticateTool(accessToken, 'oauth');
 
   return createAgentTask(client, params.projectId as string, {
     work_item_id: params.workItemId ? (params.workItemId as string) : null,
@@ -730,68 +290,19 @@ export async function implementAgentTaskCreate(
 }
 
 /**
- * Implements pm.task.list tool
- */
-export async function implementAgentTaskList(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<AgentTask[]> {
-  const userId = await getUserFromToken(accessToken);
-  const client = createOAuthScopedClient(accessToken);
-
-  const filters: AgentTaskFilters = {};
-  if (params.workItemId) filters.workItemId = params.workItemId as string;
-  if (params.status) filters.status = params.status as any;
-  if (params.type) filters.type = params.type as any;
-
-  return listAgentTasks(client, params.projectId as string, filters);
-}
-
-/**
- * Implements pm.task.get tool
- */
-export async function implementAgentTaskGet(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<AgentTaskWithDetails> {
-  const userId = await getUserFromToken(accessToken);
-  const client = createOAuthScopedClient(accessToken);
-
-  return getAgentTask(client, params.taskId as string);
-}
-
-/**
  * Implements pm.task.set_status tool
  */
 export async function implementAgentTaskSetStatus(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<AgentTask> {
-  const userId = await getUserFromToken(accessToken);
-  const client = createOAuthScopedClient(accessToken);
+  const { userId, client } = await authenticateTool(accessToken, 'oauth');
 
   return updateTaskStatus(
     client,
     params.taskId as string,
     params.status as 'ready' | 'doing' | 'blocked' | 'review' | 'done',
     params.blockedReason as string | undefined
-  );
-}
-
-/**
- * Implements pm.task.add_dependency tool
- */
-export async function implementAgentTaskAddDependency(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<AgentTask> {
-  const userId = await getUserFromToken(accessToken);
-  const client = createOAuthScopedClient(accessToken);
-
-  return addDependency(
-    client,
-    params.taskId as string,
-    params.dependsOnTaskId as string
   );
 }
 
@@ -804,7 +315,7 @@ export async function implementEvidenceAdd(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<Evidence> {
-  const userId = await getUserFromToken(accessToken);
+  const { userId } = await authenticateTool(accessToken, 'oauth');
 
   return addEvidence(userId, params.projectId as string, {
     task_id: params.taskId as string | undefined,
@@ -815,38 +326,7 @@ export async function implementEvidenceAdd(
   });
 }
 
-/**
- * Implements pm.evidence.list tool
- */
-export async function implementEvidenceList(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<Evidence[]> {
-  const userId = await getUserFromToken(accessToken);
-
-  return listEvidence(userId, params.projectId as string, {
-    task_id: params.taskId as string | undefined,
-    work_item_id: params.workItemId as string | undefined,
-  });
-}
-
 // Gates
-
-/**
- * Implements pm.gate.configure tool
- */
-export async function implementGateConfigure(
-  accessToken: string,
-  params: Record<string, unknown>
-): Promise<Gate[]> {
-  const userId = await getUserFromToken(accessToken);
-
-  return configureGates(
-    userId,
-    params.projectId as string,
-    params.gates as any[]
-  );
-}
 
 /**
  * Implements pm.gate.run tool
@@ -855,7 +335,7 @@ export async function implementGateRun(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<GateRun> {
-  const userId = await getUserFromToken(accessToken);
+  const { userId } = await authenticateTool(accessToken, 'oauth');
 
   return runGate(
     userId,
@@ -876,12 +356,262 @@ export async function implementGateStatus(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<GateStatusSummary[]> {
-  const userId = await getUserFromToken(accessToken);
+  const { userId } = await authenticateTool(accessToken, 'oauth');
 
   return getGateStatus(
     userId,
     params.projectId as string,
     params.workItemId as string | undefined
   );
+}
+
+/**
+ * Implements pm.manifest_discover tool
+ * Discovers the .pm directory and returns project/user IDs
+ */
+export async function implementManifestDiscover(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<{
+  found: boolean;
+  projectId?: string;
+  userId?: string;
+  pmDir?: string;
+}> {
+  // Require auth for security and auditability
+  const { userId } = await authenticateTool(accessToken, 'oauth');
+  const startDir = (params.startDir as string) || process.cwd();
+
+  const manifests = readManifests(startDir);
+
+  if (!manifests) {
+    return { found: false };
+  }
+
+  return {
+    found: true,
+    projectId: manifests.project.projectId,
+    userId: manifests.local?.userId,
+    pmDir: startDir,
+  };
+}
+
+/**
+ * Implements pm.manifest_validate tool
+ * Validates manifest files and returns errors/warnings
+ */
+export async function implementManifestValidate(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<{
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}> {
+  // Require auth for security and auditability
+  const { userId } = await authenticateTool(accessToken, 'oauth');
+  const startDir = (params.startDir as string) || process.cwd();
+
+  return validateManifests(startDir);
+}
+
+/**
+ * Implements pm.manifest_read tool
+ * Reads and returns full manifest data
+ */
+export async function implementManifestRead(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<ManifestData | { error: string }> {
+  // Require auth for security and auditability
+  const { userId } = await authenticateTool(accessToken, 'oauth');
+  const startDir = (params.startDir as string) || process.cwd();
+
+  const manifests = readManifests(startDir);
+
+  if (!manifests) {
+    return { error: 'No manifests found. Run pm.init with repoRoot parameter to create them.' };
+  }
+
+  return manifests;
+}
+
+/**
+ * Implements pm.interview_questions tool
+ * Returns the list of interview questions for project setup
+ */
+export async function implementInterviewQuestions(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<any> {
+  // Require auth even though we don't use userId/client
+  const { userId } = await authenticateTool(accessToken, 'oauth');
+
+  return {
+    questions: getInterviewQuestions(),
+  };
+}
+
+/**
+ * Implements pm.init_with_interview tool
+ * Initializes a project and saves interview responses as conventions
+ * If repoRoot is provided, also creates manifests and primer
+ */
+export async function implementInitWithInterview(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<any> {
+  // Use consolidated auth helper - it handles validation
+  const { userId: validatedUserId, client } = await authenticateTool(accessToken, 'oauth');
+
+  // If repoRoot is provided, use the server-only function that handles manifests
+  if (params.repoRoot) {
+    const result: InitProjectWithManifestsResult = await initProjectWithManifests(client, {
+      name: params.name as string,
+      description: params.description as string | undefined,
+      skipGates: params.skipGates as boolean | undefined,
+      repoRoot: params.repoRoot as string,
+      interviewResponses: params.interviewResponses as Record<string, unknown>,
+    }, validatedUserId);
+
+    return {
+      project: result.project,
+      gates: result.gates,
+      message: result.message,
+      conventions: result.conventions,
+      reconProfile: result.reconProfile,
+      manifestPaths: result.manifestPaths,
+      primerPath: result.primerPath,
+    };
+  }
+
+  // Otherwise, use the browser-safe version
+  const result = await initProject(client, {
+    name: params.name as string,
+    description: params.description as string | undefined,
+    skipGates: params.skipGates as boolean | undefined,
+    interviewResponses: params.interviewResponses as Record<string, unknown>,
+  }, validatedUserId);
+
+  return {
+    project: result.project,
+    gates: result.gates,
+    message: result.message,
+    conventions: result.conventions,
+    reconProfile: result.reconProfile,
+  };
+}
+
+/**
+ * Implements pm.project_conventions_get tool
+ * Retrieves stored project conventions
+ */
+export async function implementProjectConventionsGet(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<any> {
+  // Use consolidated auth helper
+  const { userId, client } = await authenticateTool(accessToken, 'oauth');
+
+  const projectId = params.projectId as string;
+
+  if (!projectId) {
+    throw new Error('projectId is required');
+  }
+
+  // Get project with conventions
+  const { data: project, error } = await (client
+    .from('projects')
+    .select('*')
+    .eq('id', projectId)
+    .single() as any);
+
+  if (error) {
+    throw new Error(`Failed to fetch project: ${error.message}`);
+  }
+
+  if (!project) {
+    throw new Error('Project not found');
+  }
+
+  return {
+    projectId: project.id,
+    projectName: project.name,
+    conventions: project.conventions_markdown,
+  };
+}
+
+/**
+ * Implements pm.conventions_sync_to_primer tool
+ * Syncs stored conventions from SaaS to local primer file
+ */
+export async function implementConventionsSyncToPrimer(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<any> {
+  const { userId, client } = await authenticateTool(accessToken, 'oauth');
+  const projectId = params.projectId as string;
+  const repoRoot = (params.repoRoot as string) || process.cwd();
+
+  if (!projectId) {
+    throw new Error('projectId is required');
+  }
+
+  // Get project with conventions
+  const { data: project, error } = await (client
+    .from('projects')
+    .select('*')
+    .eq('id', projectId)
+    .single() as any);
+
+  if (error) {
+    throw new Error(`Failed to fetch project: ${error.message}`);
+  }
+
+  if (!project) {
+    throw new Error('Project not found');
+  }
+
+  if (!project.conventions_markdown) {
+    return {
+      success: false,
+      message: 'No conventions stored for this project. Run pm.init_with_interview first.',
+    };
+  }
+
+  // Use dynamic imports for path module
+  const { join: pathJoin } = await import('path');
+  const { existsSync } = await import('fs');
+
+  // Discover the .pm directory
+  let pmDir: string;
+  try {
+    // Check if .pm directory exists
+    const possiblePmDir = pathJoin(repoRoot, '.pm');
+    if (existsSync(possiblePmDir)) {
+      pmDir = possiblePmDir;
+    } else {
+      throw new Error(`.pm directory not found at ${possiblePmDir}`);
+    }
+  } catch (err) {
+    throw new Error(`Failed to locate .pm directory: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // Parse conventions from markdown
+  const conventions = parseConventionsMarkdown(project.conventions_markdown);
+  if (!conventions) {
+    throw new Error('Failed to parse project conventions');
+  }
+
+  // Sync to primer
+  const result = syncConventionsToPrimer(pmDir, conventions);
+
+  return {
+    success: true,
+    path: result.path,
+    created: result.created,
+    updated: result.updated,
+    message: `Conventions synced to ${result.path}${result.created ? ' (new file)' : result.updated ? ' (updated)' : ' (no changes)'}`,
+  };
 }
 
