@@ -74,11 +74,13 @@ export async function createCheckpoint(
       }
     }
 
+    const supabase = createServerClient();
+
     // Verify user owns the project
-    await getProject(userId, projectId);
+    await getProject(supabase, projectId);
 
     // Build snapshot of current project state
-    const tasks = await listTasks(userId, projectId);
+    const tasks = await listTasks(supabase, projectId);
     const events = await getProjectEvents(projectId, 100); // Get last 100 events
 
     const snapshot = {
@@ -102,8 +104,6 @@ export async function createCheckpoint(
       })),
       created_at: new Date().toISOString(),
     };
-
-    const supabase = createServerClient();
 
     const { data: checkpoint, error } = await (supabase as any)
       .from('checkpoints')
@@ -210,10 +210,10 @@ export async function listCheckpoints(
     validateUUID(userId, 'userId');
     validateUUID(projectId, 'projectId');
 
-    // Verify user owns the project
-    await getProject(userId, projectId);
-
     const supabase = createServerClient();
+
+    // Verify user owns the project
+    await getProject(supabase, projectId);
 
     let query = (supabase as any)
       .from('checkpoints')
@@ -256,10 +256,10 @@ export async function getLatestCheckpoint(
     validateUUID(userId, 'userId');
     validateUUID(projectId, 'projectId');
 
-    // Verify user owns the project
-    await getProject(userId, projectId);
-
     const supabase = createServerClient();
+
+    // Verify user owns the project
+    await getProject(supabase, projectId);
 
     const { data: checkpoint, error } = await (supabase as any)
       .from('checkpoints')

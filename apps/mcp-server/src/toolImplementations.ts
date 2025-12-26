@@ -19,6 +19,7 @@ import {
   createCheckpoint,
   recordDecision,
   assertInScope,
+  emitEvent,
 } from '@projectflow/core';
 import type {
   Project,
@@ -116,12 +117,31 @@ export async function implementCreateTask(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<Task> {
+  const userId = await getUserFromToken(accessToken);
   const client = createServiceRoleClient();
+  
+  // Verify project exists and get its user_id
+  const { data: project, error: projectError } = await client
+    .from('projects')
+    .select('user_id')
+    .eq('id', params.projectId as string)
+    .single() as any;
+
+  if (projectError || !project) {
+    throw new Error(`Project not found: ${projectError?.message || 'Unknown error'}`);
+  }
+
+  // Verify user owns the project
+  if (project.user_id !== userId) {
+    throw new Error('Unauthorized: You do not own this project');
+  }
+
   const taskData: any = {
     title: params.title as string,
     description: params.description as string | undefined,
     status: (params.status as 'todo' | 'in_progress' | 'done' | 'blocked' | 'cancelled' | undefined) || 'todo',
     priority: params.priority as 'low' | 'medium' | 'high' | undefined,
+    user_id: userId, // Set user_id explicitly for service role client
   };
 
   // Add enhanced fields if provided
@@ -135,7 +155,50 @@ export async function implementCreateTask(
     taskData.dependencies = params.dependencies as string[];
   }
 
-  return createTask(client, params.projectId as string, taskData);
+  // Insert task directly with user_id since we're using service role client
+  const { data: task, error: taskError } = await client
+    .from('tasks')
+    .insert([{
+      project_id: params.projectId as string,
+      user_id: userId,
+      title: taskData.title,
+      description: taskData.description || null,
+      status: taskData.status,
+      priority: taskData.priority || null,
+      acceptance_criteria: taskData.acceptance_criteria || null,
+      constraints: taskData.constraints || null,
+      dependencies: taskData.dependencies || null,
+    }] as any)
+    .select()
+    .single() as any;
+
+  if (taskError) {
+    throw new Error(`Failed to create task: ${taskError.message}`);
+  }
+
+  if (!task) {
+    throw new Error('Failed to retrieve created task');
+  }
+
+  // Emit TaskCreated event
+  await emitEvent({
+    project_id: params.projectId as string,
+    task_id: task.id,
+    user_id: userId,
+    event_type: 'TaskCreated',
+    payload: {
+      task_id: task.id,
+      title: task.title,
+      description: task.description,
+      status: task.status,
+      priority: task.priority || null,
+      acceptance_criteria: (task as any).acceptance_criteria || [],
+      constraints: (task as any).constraints || {},
+      dependencies: (task as any).dependencies || [],
+    },
+  });
+
+  return task as Task;
 }
 
 /**

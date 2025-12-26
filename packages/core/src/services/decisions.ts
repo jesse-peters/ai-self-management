@@ -62,10 +62,10 @@ export async function recordDecision(
       throw new ValidationError('Decision rationale must be less than 5000 characters', 'rationale');
     }
 
-    // Verify user owns the project
-    await getProject(userId, projectId);
-
     const supabase = createServerClient();
+
+    // Verify user owns the project
+    await getProject(supabase, projectId);
 
     const { data: decision, error } = await (supabase as any)
       .from('decisions')
@@ -130,10 +130,10 @@ export async function listDecisions(
     validateUUID(userId, 'userId');
     validateUUID(projectId, 'projectId');
 
-    // Verify user owns the project
-    await getProject(userId, projectId);
-
     const supabase = createServerClient();
+
+    // Verify user owns the project
+    await getProject(supabase, projectId);
 
     let query = (supabase as any)
       .from('decisions')

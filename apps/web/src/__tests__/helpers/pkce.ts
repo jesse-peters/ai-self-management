@@ -2,7 +2,7 @@
  * PKCE helper functions for testing
  */
 
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 
 export interface PKCEPair {
   verifier: string;
@@ -15,7 +15,7 @@ export interface PKCEPair {
  */
 export function generatePKCEPair(): PKCEPair {
   // Generate a random verifier (43-128 characters, base64url encoded)
-  const verifier = Buffer.from(crypto.getRandomValues(new Uint8Array(32)))
+  const verifier = randomBytes(32)
     .toString('base64url')
     .slice(0, 128);
 
