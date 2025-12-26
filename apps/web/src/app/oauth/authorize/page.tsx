@@ -69,13 +69,25 @@ function OAuthAuthorizeContent() {
         if (user) {
           // User is authenticated - redirect to complete OAuth flow
           const authorizeUrl = buildAuthorizeUrl();
-          router.push(authorizeUrl);
+          try {
+            router.push(authorizeUrl);
+          } catch (pushErr) {
+            console.error('Error pushing auth URL:', pushErr);
+            setError('Failed to complete authorization. Please try again.');
+            setIsCheckingAuth(false);
+          }
         } else {
           // User not authenticated - show login form
           setIsCheckingAuth(false);
         }
       } catch (err) {
         console.error('Error checking auth:', err);
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        if (errorMsg.includes('fetch')) {
+          setError('Cannot reach authentication service. Please check your connection.');
+        } else {
+          setError('Failed to check authentication status. Please try again.');
+        }
         setIsCheckingAuth(false);
       }
     };

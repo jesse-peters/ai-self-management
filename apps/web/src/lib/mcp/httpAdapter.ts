@@ -3,12 +3,12 @@
  * Converts Next.js HTTP requests to MCP SDK format and back
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
+import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { tools } from '@projectflow/mcp-server';
 import { listResources, readResource } from '@projectflow/mcp-server';
 import { prompts, getPrompt } from '@projectflow/mcp-server';
 import { routeToolCall } from '@projectflow/mcp-server';
-import { AuthContext } from './authMiddleware';
 
 /**
  * JSON-RPC 2.0 Request format
@@ -68,12 +68,12 @@ export function createJsonRpcResponse(id: string | number | null, result: unknow
 /**
  * Handles an incoming HTTP request and routes it through the MCP protocol
  * @param body Already-parsed request body (to avoid double-parsing)
- * @param authContext Authentication context extracted from token
+ * @param authInfo Authentication information from verified token (MCP SDK AuthInfo format)
  * @returns JSON-RPC 2.0 response
  */
 export async function handleHttpRequest(
     body: unknown,
-    authContext: AuthContext
+    authInfo: AuthInfo | null
 ): Promise<NextResponse> {
     try {
         // Validate JSON-RPC format
@@ -88,7 +88,7 @@ export async function handleHttpRequest(
         const { method, params, id } = jsonRpcRequest;
 
         // Route the request through MCP protocol
-        const result = await handleMCPRequest(method, params, id, authContext);
+        const result = await handleMCPRequest(method, params, id, authInfo);
 
         return NextResponse.json(result);
     } catch (error) {
@@ -107,9 +107,14 @@ async function handleMCPRequest(
     method: string,
     params: unknown,
     id: string | number | null,
-    authContext: AuthContext
+    authInfo: AuthInfo | null
 ): Promise<JsonRpcResponse> {
     try {
+        // Extract userId and token from authInfo
+        // In SDK v1.25.1, additional fields are in the `extra` object
+        const userId = authInfo?.extra?.userId as string | undefined;
+        const token = authInfo?.token;
+
         switch (method) {
             case 'initialize': {
                 return createJsonRpcResponse(id, {
@@ -140,7 +145,7 @@ async function handleMCPRequest(
             }
 
             case 'tools/call': {
-                if (!authContext.claims || !authContext.token) {
+                if (!authInfo || !token) {
                     return createJsonRpcError(id, -32001, 'Unauthorized', {
                         oauth_required: true,
                         error_type: 'authentication_required',
@@ -165,7 +170,7 @@ async function handleMCPRequest(
                     const toolArguments = (toolParams.arguments as Record<string, unknown>) || {};
 
                     // Pass the access token to routeToolCall
-                    const result = await routeToolCall(toolName, toolArguments, authContext.token);
+                    const result = await routeToolCall(toolName, toolArguments, token);
                     return createJsonRpcResponse(id, result);
                 } catch (error) {
                     const msg = error instanceof Error ? error.message : 'Unknown error';
@@ -175,10 +180,10 @@ async function handleMCPRequest(
 
             case 'resources/list': {
                 try {
-                    if (!authContext.userId) {
+                    if (!userId) {
                         return createJsonRpcResponse(id, { resources: [] });
                     }
-                    const resources = await listResources(authContext.userId);
+                    const resources = await listResources(userId);
                     return createJsonRpcResponse(id, { resources });
                 } catch (error) {
                     const msg = error instanceof Error ? error.message : 'Unknown error';
@@ -188,7 +193,7 @@ async function handleMCPRequest(
 
             case 'resources/read': {
                 try {
-                    if (!authContext.userId) {
+                    if (!userId) {
                         return createJsonRpcError(id, -32001, 'Unauthorized', {
                             oauth_required: true,
                             error_type: 'authentication_required',
@@ -202,7 +207,7 @@ async function handleMCPRequest(
                         });
                     }
 
-                    const result = await readResource(authContext.userId, resourceParams.uri as string);
+                    const result = await readResource(userId, resourceParams.uri as string);
                     return createJsonRpcResponse(id, result);
                 } catch (error) {
                     const msg = error instanceof Error ? error.message : 'Unknown error';
@@ -221,7 +226,7 @@ async function handleMCPRequest(
 
             case 'prompts/get': {
                 try {
-                    if (!authContext.userId) {
+                    if (!userId) {
                         return createJsonRpcError(id, -32001, 'Unauthorized', {
                             oauth_required: true,
                             error_type: 'authentication_required',
@@ -236,7 +241,7 @@ async function handleMCPRequest(
                     }
 
                     const result = await getPrompt(
-                        authContext.userId,
+                        userId,
                         promptParams.name as string,
                         (promptParams.arguments as Record<string, unknown>) || {}
                     );

@@ -13,8 +13,11 @@ import {
     ListPromptsRequestSchema,
     GetPromptRequestSchema,
     Tool,
+    ServerRequest,
+    ServerNotification,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { tools } from './tools';
 import { routeToolCall } from './handlers';
 import { listResources, readResource } from './resources';
@@ -24,19 +27,25 @@ import { prompts, getPrompt } from './prompts';
  * Auth context provider function
  * Returns userId from request context (from extra, env, or params)
  */
-export type AuthContextProvider = (extra: RequestHandlerExtra) => string | null;
+export type AuthContextProvider = (extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => string | null;
 
 /**
  * Extracts userId from request context using multiple fallback strategies
  * @param authProvider Optional function to extract userId from request context
- * @param extra Request handler extra context
+ * @param extra Request handler extra context (may contain authInfo from SDK v1.25.1+)
  * @returns userId or null if not found
  */
 function extractUserIdFromContext(
     authProvider: AuthContextProvider | undefined,
-    extra: RequestHandlerExtra
+    extra: RequestHandlerExtra<ServerRequest, ServerNotification>
 ): string | null {
-    // Try auth provider first
+    // Try SDK v1.25.1+ authInfo first
+    const authInfo = (extra as any)?.authInfo as AuthInfo | undefined;
+    if (authInfo?.extra?.userId) {
+        return authInfo.extra.userId as string;
+    }
+
+    // Try auth provider
     if (authProvider) {
         const userId = authProvider(extra);
         if (userId) return userId;
@@ -49,6 +58,27 @@ function extractUserIdFromContext(
 
     // Fallback to environment variables
     return process.env.MCP_USER_ID || process.env.USER_ID || null;
+}
+
+/**
+ * Extracts access token from request context
+ * @param extra Request handler extra context (may contain authInfo from SDK v1.25.1+)
+ * @returns access token or null if not found
+ */
+function extractAccessToken(extra: RequestHandlerExtra<ServerRequest, ServerNotification>): string | null {
+    // Try SDK v1.25.1+ authInfo first
+    const authInfo = (extra as any)?.authInfo as AuthInfo | undefined;
+    if (authInfo?.token) {
+        return authInfo.token;
+    }
+
+    // Fallback to legacy accessToken field (for backward compatibility)
+    if ((extra as any)?.accessToken) {
+        return (extra as any).accessToken;
+    }
+
+    // Fallback to environment variables
+    return process.env.MCP_ACCESS_TOKEN || null;
 }
 
 /**
@@ -84,9 +114,9 @@ export function createMCPServer(authProvider?: AuthContextProvider): Server {
         const toolParams = (request.params.arguments as Record<string, unknown>) || {};
 
         try {
-            // Get access token from request context (passed by auth middleware)
-            // MCP clients must provide a Supabase-issued JWT token
-            const accessToken = (extra as any)?.accessToken || process.env.MCP_ACCESS_TOKEN;
+            // Get access token from request context
+            // Supports both SDK v1.25.1+ authInfo and legacy accessToken
+            const accessToken = extractAccessToken(extra);
 
             if (!accessToken) {
                 throw new Error('Access token not provided');

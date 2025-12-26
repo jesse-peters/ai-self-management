@@ -268,90 +268,45 @@ export type Database = {
           },
         ]
       }
-      oauth_authorization_codes: {
+      oauth_pending_requests: {
         Row: {
+          authorization_code: string | null
           client_id: string
-          code: string
-          code_challenge: string | null
-          code_challenge_method: string | null
+          code_challenge: string
+          code_challenge_method: string
           created_at: string
           expires_at: string
           id: string
           redirect_uri: string
-          scope: string
-          used_at: string | null
-          user_id: string
+          scope: string | null
+          state: string | null
+          user_id: string | null
         }
         Insert: {
+          authorization_code?: string | null
           client_id: string
-          code: string
-          code_challenge?: string | null
-          code_challenge_method?: string | null
+          code_challenge: string
+          code_challenge_method?: string
           created_at?: string
-          expires_at: string
+          expires_at?: string
           id?: string
           redirect_uri: string
-          scope: string
-          used_at?: string | null
-          user_id: string
+          scope?: string | null
+          state?: string | null
+          user_id?: string | null
         }
         Update: {
+          authorization_code?: string | null
           client_id?: string
-          code?: string
-          code_challenge?: string | null
-          code_challenge_method?: string | null
+          code_challenge?: string
+          code_challenge_method?: string
           created_at?: string
           expires_at?: string
           id?: string
           redirect_uri?: string
-          scope?: string
-          used_at?: string | null
-          user_id?: string
-        }
-        Relationships: []
-      }
-      oauth_tokens: {
-        Row: {
-          access_token: string
-          access_token_hash: string | null
-          client_id: string
-          created_at: string
-          expires_at: string
-          id: string
-          refresh_token: string
-          revoked_at: string | null
-          scope: string | null
-          token_type: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          access_token: string
-          access_token_hash?: string | null
-          client_id: string
-          created_at?: string
-          expires_at: string
-          id?: string
-          refresh_token: string
-          revoked_at?: string | null
           scope?: string | null
-          token_type?: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          access_token?: string
-          access_token_hash?: string | null
-          client_id?: string
-          created_at?: string
-          expires_at?: string
-          id?: string
-          refresh_token?: string
-          revoked_at?: string | null
-          scope?: string | null
-          token_type?: string
-          updated_at?: string
-          user_id?: string
+          state?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }

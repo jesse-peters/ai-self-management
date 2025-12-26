@@ -65,6 +65,12 @@ export type Checkpoint = GeneratedDatabase['public']['Tables']['checkpoints']['R
 export type Decision = GeneratedDatabase['public']['Tables']['decisions']['Row'];
 
 /**
+ * Represents a pending OAuth authorization request
+ * Type alias for backward compatibility
+ */
+export type OAuthPendingRequest = GeneratedDatabase['public']['Tables']['oauth_pending_requests']['Row'];
+
+/**
  * Represents the shape of data when inserting a new project
  */
 export type ProjectInsert = Omit<
@@ -149,3 +155,16 @@ export type DecisionInsert = Omit<
  * Represents the shape of data when updating a decision
  */
 export type DecisionUpdate = GeneratedDatabase['public']['Tables']['decisions']['Update'];
+
+/**
+ * Represents the shape of data when inserting a new OAuth pending request
+ */
+export type OAuthPendingRequestInsert = Omit<
+  GeneratedDatabase['public']['Tables']['oauth_pending_requests']['Insert'],
+  'id' | 'created_at'
+>;
+
+/**
+ * Represents the shape of data when updating an OAuth pending request
+ */
+export type OAuthPendingRequestUpdate = GeneratedDatabase['public']['Tables']['oauth_pending_requests']['Update'];

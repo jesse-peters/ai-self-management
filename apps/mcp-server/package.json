@@ -17,7 +17,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^0.7.0",
+    "@modelcontextprotocol/sdk": "^1.25.1",
     "@projectflow/core": "workspace:*",
     "@projectflow/db": "workspace:*"
   },
