@@ -9,7 +9,7 @@ import * as jose from 'jose';
  * Returns detailed information about token verification
  */
 export async function GET(request: NextRequest) {
-    const token = request.nextSearchParams.get('token');
+    const token = request.nextUrl.searchParams.get('token');
 
     if (!token) {
         return NextResponse.json({

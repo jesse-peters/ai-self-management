@@ -71,6 +71,38 @@ export type Decision = GeneratedDatabase['public']['Tables']['decisions']['Row']
 export type OAuthPendingRequest = GeneratedDatabase['public']['Tables']['oauth_pending_requests']['Row'];
 
 /**
+ * Represents an outcome record for tracking decision/task results
+ * Type alias for backward compatibility
+ */
+export type Outcome = GeneratedDatabase['public']['Tables']['outcomes']['Row'];
+
+/**
+ * Represents a constraint (enforceable rule)
+ * Type alias for backward compatibility
+ */
+export type Constraint = GeneratedDatabase['public']['Tables']['constraints']['Row'];
+
+/**
+ * Represents a project specification (goals, deliverables, risks)
+ * Type alias for backward compatibility
+ */
+export type ProjectSpec = {
+  id: string;
+  project_id: string;
+  goals: string;
+  definition_of_done: string;
+  deliverables: any; // JSONB
+  repo_context: any; // JSONB
+  risk_areas: string[];
+  preferences: any; // JSONB
+  gate_pack_id: string | null;
+  custom_gates: any; // JSONB
+  created_at: string;
+  updated_at: string;
+  user_id: string;
+};
+
+/**
  * Represents the shape of data when inserting a new project
  */
 export type ProjectInsert = Omit<
@@ -168,3 +200,42 @@ export type OAuthPendingRequestInsert = Omit<
  * Represents the shape of data when updating an OAuth pending request
  */
 export type OAuthPendingRequestUpdate = GeneratedDatabase['public']['Tables']['oauth_pending_requests']['Update'];
+
+/**
+ * Represents the shape of data when inserting a new outcome
+ */
+export type OutcomeInsert = Omit<
+  GeneratedDatabase['public']['Tables']['outcomes']['Insert'],
+  'id' | 'user_id' | 'created_at'
+>;
+
+/**
+ * Represents the shape of data when updating an outcome
+ */
+export type OutcomeUpdate = GeneratedDatabase['public']['Tables']['outcomes']['Update'];
+
+/**
+ * Represents the shape of data when inserting a new constraint
+ */
+export type ConstraintInsert = Omit<
+  GeneratedDatabase['public']['Tables']['constraints']['Insert'],
+  'id' | 'user_id' | 'created_at' | 'updated_at'
+>;
+
+/**
+ * Represents the shape of data when updating a constraint
+ */
+export type ConstraintUpdate = GeneratedDatabase['public']['Tables']['constraints']['Update'];
+
+/**
+ * Represents the shape of data when inserting a new project spec
+ */
+export type ProjectSpecInsert = Omit<
+  ProjectSpec,
+  'id' | 'user_id' | 'created_at' | 'updated_at'
+>;
+
+/**
+ * Represents the shape of data when updating a project spec
+ */
+export type ProjectSpecUpdate = Partial<ProjectSpecInsert>;

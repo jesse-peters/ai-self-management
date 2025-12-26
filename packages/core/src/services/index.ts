@@ -19,5 +19,42 @@ export {
   recordDecision,
   listDecisions,
   getDecision,
+  type DecisionRecordResult,
 } from './decisions';
+export {
+  createConstraint,
+  listConstraints,
+  getConstraint,
+  evaluateConstraints,
+  deleteConstraint,
+  type ConstraintScope,
+  type ConstraintTrigger,
+  type ConstraintEnforcement,
+  type ConstraintContext,
+  type ConstraintEvaluationResult,
+} from './constraints';
+export {
+  recordOutcome,
+  listOutcomes,
+  getOutcomesBySubject,
+  getOutcome,
+  type OutcomeSubjectType,
+  type OutcomeResult,
+  type OutcomeCreatedBy,
+} from './outcomes';
+export {
+  recall,
+  type MemoryRecallContext,
+  type MemoryRecallResult,
+} from './memory';
+export {
+  startWizard,
+  submitWizardStep,
+  finishWizard,
+  cancelWizard,
+  getWizardSession,
+  getProjectSpec,
+  type WizardSession,
+} from './wizard';
+
 

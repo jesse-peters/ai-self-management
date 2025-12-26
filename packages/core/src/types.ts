@@ -11,6 +11,8 @@ export type {
   Artifact,
   Checkpoint,
   Decision,
+  Constraint,
+  Outcome,
   ProjectInsert,
   ProjectUpdate,
   TaskInsert,
@@ -24,6 +26,10 @@ export type {
   CheckpointUpdate,
   DecisionInsert,
   DecisionUpdate,
+  ConstraintInsert,
+  ConstraintUpdate,
+  OutcomeInsert,
+  OutcomeUpdate,
 } from '@projectflow/db';
 
 /**
@@ -50,6 +56,9 @@ export type EventType =
   | 'GateEvaluated'
   | 'CheckpointCreated'
   | 'DecisionRecorded'
+  | 'OutcomeRecorded'
+  | 'ConstraintCreated'
+  | 'ConstraintDeleted'
   | 'ScopeAsserted';
 
 /**

@@ -12,6 +12,7 @@ export function DecisionLog({ projectId, limit = 20 }: DecisionLogProps) {
   const [decisions, setDecisions] = useState<Decision[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [promotingDecisionId, setPromotingDecisionId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!projectId) return;
@@ -40,6 +41,44 @@ export function DecisionLog({ projectId, limit = 20 }: DecisionLogProps) {
 
     loadDecisions();
   }, [projectId, limit]);
+
+  const handlePromoteToConstraint = async (decision: Decision) => {
+    setPromotingDecisionId(decision.id);
+    try {
+      // Create a constraint based on the decision
+      const response = await fetch('/api/constraints', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          projectId,
+          scope: 'project',
+          trigger: 'keyword',
+          triggerValue: decision.title,
+          ruleText: `Remember decision: ${decision.title} - chose "${decision.choice}". Rationale: ${decision.rationale.substring(0, 200)}${decision.rationale.length > 200 ? '...' : ''}`,
+          enforcementLevel: 'warn',
+          sourceLinks: [
+            {
+              type: 'decision',
+              id: decision.id,
+            },
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create constraint');
+      }
+
+      alert('Constraint created successfully! You can view it in the Constraints tab.');
+    } catch (err) {
+      console.error('Error creating constraint:', err);
+      alert(err instanceof Error ? err.message : 'Failed to create constraint');
+    } finally {
+      setPromotingDecisionId(null);
+    }
+  };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -86,9 +125,18 @@ export function DecisionLog({ projectId, limit = 20 }: DecisionLogProps) {
           key={decision.id}
           className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
         >
-          <div className="mb-3">
-            <h4 className="font-semibold text-gray-900 dark:text-white mb-1">{decision.title}</h4>
-            <span className="text-xs text-gray-400 dark:text-gray-500">{formatDate(decision.created_at)}</span>
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex-1">
+              <h4 className="font-semibold text-gray-900 dark:text-white mb-1">{decision.title}</h4>
+              <span className="text-xs text-gray-400 dark:text-gray-500">{formatDate(decision.created_at)}</span>
+            </div>
+            <button
+              onClick={() => handlePromoteToConstraint(decision)}
+              disabled={promotingDecisionId === decision.id}
+              className="ml-4 text-xs px-3 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {promotingDecisionId === decision.id ? 'Creating...' : 'Promote to Constraint'}
+            </button>
           </div>
 
           {Array.isArray(decision.options) && decision.options.length > 0 && (

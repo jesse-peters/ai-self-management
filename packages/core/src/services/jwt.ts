@@ -68,7 +68,7 @@ export async function verifyAccessToken(
         const secret = new TextEncoder().encode(JWT_SECRET);
 
         // Accept both "authenticated" (Supabase default) and expected audience in development
-        const validAudiences = process.env.NODE_ENV === 'development'
+        const validAudiences = (process.env.NODE_ENV as string) !== 'production'
           ? [expectedAudience, 'authenticated']
           : [expectedAudience];
 
@@ -89,12 +89,12 @@ export async function verifyAccessToken(
 
     // If HS256 failed or algorithm is ES256/RS256, try JWKS
     if (!payload && (alg === 'ES256' || alg === 'RS256' || !alg)) {
-      if (debug) console.log('[JWT] Attempting ES256/RS256 verification', { isDevelopment: process.env.NODE_ENV === 'development' });
+      if (debug) console.log('[JWT] Attempting ES256/RS256 verification', { isDevelopment: process.env.NODE_ENV !== 'production' });
 
       // For ES256/RS256, we need the public key from Supabase
       // Supabase doesn't expose JWKS in local dev, so we'll decode without verification
       // and extract claims (for development only - production should use proper JWKS)
-      if (process.env.NODE_ENV === 'development') {
+      if (process.env.NODE_ENV !== 'production') {
         try {
           // Decode without verification to extract claims
           const decoded = jose.decodeJwt(token);
@@ -113,7 +113,7 @@ export async function verifyAccessToken(
 
           // Check audience - accept both "authenticated" (Supabase default) and expected audience in development
           if (decoded.aud) {
-            const validAudiences = process.env.NODE_ENV === 'development'
+            const validAudiences = (process.env.NODE_ENV as string) !== 'production'
               ? [expectedAudience, 'authenticated']
               : [expectedAudience];
 
@@ -156,7 +156,7 @@ export async function verifyAccessToken(
               const JWKS = jose.createRemoteJWKSet(new URL(jwksUrl));
 
               // Accept both "authenticated" (Supabase default) and expected audience in development
-              const validAudiences = process.env.NODE_ENV === 'development'
+              const validAudiences = (process.env.NODE_ENV as string) !== 'production'
                 ? [expectedAudience, 'authenticated']
                 : [expectedAudience];
 

@@ -6,12 +6,11 @@
  */
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { createMCPServer, type AuthContextProvider } from './serverFactory';
 
 // Create auth provider that resolves userId from environment or params
 const createAuthProvider = (): AuthContextProvider => {
-  return (_extra: RequestHandlerExtra) => {
+  return (_extra: any) => {
     // Try to get userId from environment
     return process.env.MCP_USER_ID || null;
   };

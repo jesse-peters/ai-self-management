@@ -12,6 +12,8 @@ export type {
   Artifact,
   Checkpoint,
   Decision,
+  Constraint,
+  Outcome,
   ProjectInsert,
   ProjectUpdate,
   TaskInsert,
@@ -25,6 +27,10 @@ export type {
   CheckpointUpdate,
   DecisionInsert,
   DecisionUpdate,
+  ConstraintInsert,
+  ConstraintUpdate,
+  OutcomeInsert,
+  OutcomeUpdate,
   TaskStatus,
   TaskPriority,
   TaskFilters,
@@ -66,10 +72,58 @@ export {
   recordDecision,
   listDecisions,
   getDecision,
+  type DecisionRecordResult,
+  // Constraints
+  createConstraint,
+  listConstraints,
+  getConstraint,
+  evaluateConstraints,
+  deleteConstraint,
+  // Outcomes
+  recordOutcome,
+  listOutcomes,
+  getOutcomesBySubject,
+  getOutcome,
+  // Memory recall
+  recall,
+  // Wizard
+  startWizard,
+  submitWizardStep,
+  finishWizard,
+  cancelWizard,
+  getWizardSession,
+  getProjectSpec,
 } from './services';
 
 // Export task lifecycle types
 export type { TaskPickingStrategy } from './services';
+
+// Export constraint types
+export type {
+  ConstraintScope,
+  ConstraintTrigger,
+  ConstraintEnforcement,
+  ConstraintContext,
+  ConstraintEvaluationResult,
+} from './services';
+
+// Export outcome types
+export type {
+  OutcomeSubjectType,
+  OutcomeResult,
+  OutcomeCreatedBy,
+} from './services';
+
+// Export memory recall types
+export type {
+  MemoryRecallContext,
+  MemoryRecallResult,
+} from './services';
+
+// Export wizard types
+export type {
+  WizardSession,
+} from './services';
 
 // Export JWT types and functions
 export {
@@ -110,6 +164,9 @@ export {
   type GateEvaluatedPayload,
   type CheckpointCreatedPayload,
   type DecisionRecordedPayload,
+  type OutcomeRecordedPayload,
+  type ConstraintCreatedPayload,
+  type ConstraintDeletedPayload,
   type ScopeAssertedPayload,
 } from './events';
 

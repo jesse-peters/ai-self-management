@@ -168,6 +168,59 @@ export type Database = {
           },
         ]
       }
+      constraints: {
+        Row: {
+          created_at: string
+          enforcement_level: string
+          id: string
+          project_id: string
+          rule_text: string
+          scope: string
+          scope_value: string | null
+          source_links: Json | null
+          trigger: string
+          trigger_value: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          enforcement_level: string
+          id?: string
+          project_id: string
+          rule_text: string
+          scope: string
+          scope_value?: string | null
+          source_links?: Json | null
+          trigger: string
+          trigger_value?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          enforcement_level?: string
+          id?: string
+          project_id?: string
+          rule_text?: string
+          scope?: string
+          scope_value?: string | null
+          source_links?: Json | null
+          trigger?: string
+          trigger_value?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "constraints_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       decisions: {
         Row: {
           choice: string
@@ -309,6 +362,62 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      outcomes: {
+        Row: {
+          created_at: string
+          created_by: string
+          evidence_ids: string[] | null
+          id: string
+          notes: string | null
+          project_id: string
+          recommendation: string | null
+          result: string
+          root_cause: string | null
+          subject_id: string
+          subject_type: string
+          tags: string[] | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          evidence_ids?: string[] | null
+          id?: string
+          notes?: string | null
+          project_id: string
+          recommendation?: string | null
+          result: string
+          root_cause?: string | null
+          subject_id: string
+          subject_type: string
+          tags?: string[] | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          evidence_ids?: string[] | null
+          id?: string
+          notes?: string | null
+          project_id?: string
+          recommendation?: string | null
+          result?: string
+          root_cause?: string | null
+          subject_id?: string
+          subject_type?: string
+          tags?: string[] | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outcomes_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       projects: {
         Row: {

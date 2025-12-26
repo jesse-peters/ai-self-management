@@ -10,14 +10,32 @@ import { NotFoundError, ValidationError, mapSupabaseError } from '../errors';
 import { validateUUID } from '../validation';
 import { getProject } from './projects';
 import { emitEvent } from '../events';
+import { evaluateConstraints } from './constraints';
+
+/**
+ * Result of recording a decision, including any constraint warnings
+ */
+export interface DecisionRecordResult {
+  decision: Decision;
+  constraintWarnings?: Array<{
+    constraint: any;
+    reason: string;
+  }>;
+}
 
 /**
  * Records a decision for a project
  * 
+ * This function:
+ * 1. Validates decision data
+ * 2. Evaluates constraints to check if the decision deviates from prior lessons
+ * 3. Records the decision
+ * 4. Returns the decision along with any constraint warnings
+ * 
  * @param userId - User ID
  * @param projectId - Project ID
  * @param data - Decision data (title, options, choice, rationale)
- * @returns The created decision
+ * @returns The created decision and any constraint warnings
  */
 export async function recordDecision(
   userId: string,
@@ -28,7 +46,7 @@ export async function recordDecision(
     choice: string;
     rationale: string;
   }
-): Promise<Decision> {
+): Promise<DecisionRecordResult> {
   try {
     validateUUID(userId, 'userId');
     validateUUID(projectId, 'projectId');
@@ -67,6 +85,16 @@ export async function recordDecision(
     // Verify user owns the project
     await getProject(supabase, projectId);
 
+    // Evaluate constraints before recording the decision
+    // This checks if the decision deviates from prior lessons
+    const constraintEvaluation = await evaluateConstraints(userId, projectId, {
+      keywords: [
+        data.title,
+        data.choice,
+        ...data.options.map(o => typeof o === 'string' ? o : JSON.stringify(o)),
+      ],
+    });
+
     const { data: decision, error } = await (supabase as any)
       .from('decisions')
       .insert([
@@ -101,10 +129,14 @@ export async function recordDecision(
         options: data.options,
         choice: data.choice.trim(),
         rationale: data.rationale.trim(),
+        constraint_warnings: constraintEvaluation.warnings.length > 0 ? constraintEvaluation.warnings : undefined,
       },
     });
 
-    return decision as Decision;
+    return {
+      decision: decision as Decision,
+      constraintWarnings: constraintEvaluation.warnings.length > 0 ? constraintEvaluation.warnings : undefined,
+    };
   } catch (error) {
     if (error instanceof Error && error.name.includes('Error')) {
       throw error;

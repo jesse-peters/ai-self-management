@@ -1,6 +1,7 @@
 'use client';
 
 import { Project } from '@projectflow/core';
+import Link from 'next/link';
 
 interface ProjectListProps {
   projects: Project[];
@@ -27,15 +28,29 @@ export function ProjectList({
 
   if (projects.length === 0) {
     return (
-      <div className="text-center py-12">
-        <p className="text-gray-500 dark:text-gray-400 text-lg">No projects yet</p>
-        <p className="text-gray-400 dark:text-gray-500 text-sm">Create a project to get started</p>
+      <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+        <p className="text-gray-500 dark:text-gray-400 text-lg mb-4">No projects yet</p>
+        <p className="text-gray-400 dark:text-gray-500 text-sm mb-6">Create a project to get started</p>
+        <Link
+          href="/wizard"
+          className="inline-block px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-md transition-colors"
+        >
+          Create New Project
+        </Link>
       </div>
     );
   }
 
   return (
     <div className="space-y-2">
+      <div className="mb-4">
+        <Link
+          href="/wizard"
+          className="w-full inline-block text-center px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-md transition-colors"
+        >
+          + New Project
+        </Link>
+      </div>
       {projects.map((project) => (
         <button
           key={project.id}

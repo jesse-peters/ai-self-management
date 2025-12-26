@@ -255,6 +255,152 @@ export const tools: Tool[] = [
     },
   },
   {
+    name: 'pm.record_outcome',
+    description: 'Records the actual result of a decision, task, gate, or checkpoint to enable learning',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        projectId: { type: 'string', description: 'Project ID' },
+        subjectType: {
+          type: 'string',
+          enum: ['decision', 'task', 'gate', 'checkpoint'],
+          description: 'Type of subject this outcome is about',
+        },
+        subjectId: { type: 'string', description: 'ID of the decision, task, gate, or checkpoint' },
+        result: {
+          type: 'string',
+          enum: ['worked', 'didnt_work', 'mixed', 'unknown'],
+          description: 'How it turned out',
+        },
+        evidenceIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional array of artifact IDs or other evidence references',
+        },
+        notes: { type: 'string', description: 'Optional notes about what happened' },
+        rootCause: { type: 'string', description: 'Optional: Why did it work or not work?' },
+        recommendation: { type: 'string', description: 'Optional: What should we do differently next time?' },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional tags for categorization',
+        },
+        createdBy: {
+          type: 'string',
+          enum: ['agent', 'human'],
+          description: 'Who recorded this outcome',
+        },
+        userId: { type: 'string', description: 'User ID (optional if set in env)' },
+      },
+      required: ['projectId', 'subjectType', 'subjectId', 'result', 'createdBy'],
+    },
+  },
+  {
+    name: 'pm.create_constraint',
+    description: 'Creates a constraint (enforceable rule) for a project that warns or blocks risky actions',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        projectId: { type: 'string', description: 'Project ID' },
+        scope: {
+          type: 'string',
+          enum: ['project', 'repo', 'directory', 'task_type'],
+          description: 'Constraint scope',
+        },
+        scopeValue: { type: 'string', description: 'Optional: specific directory path or task type' },
+        trigger: {
+          type: 'string',
+          enum: ['files_match', 'task_tag', 'gate', 'keyword', 'always'],
+          description: 'Trigger condition',
+        },
+        triggerValue: { type: 'string', description: 'Optional: specific pattern, tag, gate, or keyword' },
+        ruleText: { type: 'string', description: 'Human-readable rule description' },
+        enforcementLevel: {
+          type: 'string',
+          enum: ['warn', 'block'],
+          description: 'Enforcement level (warn or block)',
+        },
+        sourceLinks: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              type: { type: 'string' },
+              id: { type: 'string' },
+            },
+            required: ['type', 'id'],
+          },
+          description: 'Optional: links to decisions/outcomes that justify this constraint',
+        },
+        userId: { type: 'string', description: 'User ID (optional if set in env)' },
+      },
+      required: ['projectId', 'scope', 'trigger', 'ruleText', 'enforcementLevel'],
+    },
+  },
+  {
+    name: 'pm.list_constraints',
+    description: 'Lists all constraints for a project with optional filters',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        projectId: { type: 'string', description: 'Project ID' },
+        scope: {
+          type: 'string',
+          enum: ['project', 'repo', 'directory', 'task_type'],
+          description: 'Filter by scope',
+        },
+        trigger: {
+          type: 'string',
+          enum: ['files_match', 'task_tag', 'gate', 'keyword', 'always'],
+          description: 'Filter by trigger',
+        },
+        enforcementLevel: {
+          type: 'string',
+          enum: ['warn', 'block'],
+          description: 'Filter by enforcement level',
+        },
+        userId: { type: 'string', description: 'User ID (optional if set in env)' },
+      },
+      required: ['projectId'],
+    },
+  },
+  {
+    name: 'pm.evaluate_constraints',
+    description: 'Evaluates constraints against a given context (files, tags, keywords, etc.) and returns violations and warnings',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        projectId: { type: 'string', description: 'Project ID' },
+        context: {
+          type: 'object',
+          description: 'Context for evaluation',
+          properties: {
+            files: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'File paths being changed',
+            },
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Task tags',
+            },
+            gate: { type: 'string', description: 'Gate being evaluated' },
+            keywords: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Keywords in description/content',
+            },
+            taskType: { type: 'string', description: 'Type of task' },
+            directory: { type: 'string', description: 'Directory being modified' },
+          },
+        },
+        userId: { type: 'string', description: 'User ID (optional if set in env)' },
+      },
+      required: ['projectId', 'context'],
+    },
+  },
+  {
     name: 'pm.assert_in_scope',
     description: 'Asserts that a changeset is within the allowed scope for a task (enforces "leash" constraints)',
     inputSchema: {
@@ -286,6 +432,80 @@ export const tools: Tool[] = [
         userId: { type: 'string', description: 'User ID (optional if set in env)' },
       },
       required: ['taskId', 'changesetManifest'],
+    },
+  },
+  {
+    name: 'pm.memory_recall',
+    description:
+      'Recalls relevant history (decisions, outcomes, constraints) for a project to inform major decisions. ' +
+      'Use this before recording important decisions to avoid repeating past mistakes and learn from prior experience.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        projectId: { type: 'string', description: 'Project ID' },
+        query: { type: 'string', description: 'Free-text search query describing what you want to recall' },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional tags to match for more targeted recall',
+        },
+        files: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional file paths to find history related to these files',
+        },
+        keywords: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional keywords to match in content',
+        },
+        userId: { type: 'string', description: 'User ID (optional if set in env)' },
+      },
+      required: ['projectId'],
+    },
+  },
+  {
+    name: 'pm.wizard_start',
+    description: 'Starts a new project wizard session for structured project kickoff',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        userId: { type: 'string', description: 'User ID (optional if set in env)' },
+      },
+    },
+  },
+  {
+    name: 'pm.wizard_step',
+    description: 'Submits data for a specific wizard step and advances to the next step',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        sessionId: { type: 'string', description: 'Wizard session ID from pm.wizard_start' },
+        stepId: { type: 'number', description: 'Step number (1-5)' },
+        payload: {
+          type: 'object',
+          description: 'Step data payload. Structure depends on step: ' +
+            'Step 1: {name, description?, repo_url?, main_branch?, language?, framework?}. ' +
+            'Step 2: {goals, definition_of_done, deliverables?: [{name, description, acceptance_criteria?}]}. ' +
+            'Step 3: {risk_areas?: [], do_not_touch?: [], preferences?: {}}. ' +
+            'Step 4: {gate_pack_id?, custom_gates?: [{type, config?}]}. ' +
+            'Step 5: {} (review, no new data)',
+        },
+        userId: { type: 'string', description: 'User ID (optional if set in env)' },
+      },
+      required: ['sessionId', 'stepId', 'payload'],
+    },
+  },
+  {
+    name: 'pm.wizard_finish',
+    description: 'Finishes the wizard and creates the project with spec, seed tasks, gates, and initial checkpoint',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        sessionId: { type: 'string', description: 'Wizard session ID from pm.wizard_start' },
+        userId: { type: 'string', description: 'User ID (optional if set in env)' },
+      },
+      required: ['sessionId'],
     },
   },
 ];

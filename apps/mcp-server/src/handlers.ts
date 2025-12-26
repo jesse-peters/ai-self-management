@@ -19,7 +19,15 @@ import {
   implementCompleteTask,
   implementCreateCheckpoint,
   implementRecordDecision,
+  implementRecordOutcome,
+  implementCreateConstraint,
+  implementListConstraints,
+  implementEvaluateConstraints,
   implementAssertInScope,
+  implementMemoryRecall,
+  implementWizardStart,
+  implementWizardStep,
+  implementWizardFinish,
 } from './toolImplementations';
 
 export interface ToolCallResult {
@@ -462,6 +470,131 @@ export async function handleRecordDecision(
 }
 
 /**
+ * Handles pm.record_outcome tool calls
+ */
+export async function handleRecordOutcome(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const outcome = await implementRecordOutcome(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(outcome, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+
+/**
+ * Handles pm.create_constraint tool calls
+ */
+export async function handleCreateConstraint(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const constraint = await implementCreateConstraint(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(constraint, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.list_constraints tool calls
+ */
+export async function handleListConstraints(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const constraints = await implementListConstraints(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(constraints, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.evaluate_constraints tool calls
+ */
+export async function handleEvaluateConstraints(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementEvaluateConstraints(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
  * Handles pm.assert_in_scope tool calls
  */
 export async function handleAssertInScope(
@@ -470,6 +603,130 @@ export async function handleAssertInScope(
 ): Promise<ToolCallResult> {
   try {
     const result = await implementAssertInScope(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.memory_recall tool calls
+ */
+export async function handleMemoryRecall(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementMemoryRecall(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles wizard_start tool calls
+ */
+export async function handleWizardStart(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementWizardStart(accessToken);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles wizard_step tool calls
+ */
+export async function handleWizardStep(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementWizardStep(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles wizard_finish tool calls
+ */
+export async function handleWizardFinish(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementWizardFinish(accessToken, params);
     return {
       content: [
         {
@@ -530,8 +787,24 @@ export async function routeToolCall(
       return handleCreateCheckpoint(params, accessToken);
     case 'pm.record_decision':
       return handleRecordDecision(params, accessToken);
+    case 'pm.record_outcome':
+      return handleRecordOutcome(params, accessToken);
+    case 'pm.create_constraint':
+      return handleCreateConstraint(params, accessToken);
+    case 'pm.list_constraints':
+      return handleListConstraints(params, accessToken);
+    case 'pm.evaluate_constraints':
+      return handleEvaluateConstraints(params, accessToken);
     case 'pm.assert_in_scope':
       return handleAssertInScope(params, accessToken);
+    case 'pm.memory_recall':
+      return handleMemoryRecall(params, accessToken);
+    case 'pm.wizard_start':
+      return handleWizardStart(params, accessToken);
+    case 'pm.wizard_step':
+      return handleWizardStep(params, accessToken);
+    case 'pm.wizard_finish':
+      return handleWizardFinish(params, accessToken);
     default:
       return {
         content: [

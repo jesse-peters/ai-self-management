@@ -10,9 +10,11 @@ import { MCPSetup } from '@/components/MCPSetup';
 import { EventTimeline } from '@/components/EventTimeline';
 import { CheckpointList } from '@/components/CheckpointList';
 import { DecisionLog } from '@/components/DecisionLog';
+import { ConstraintList } from '@/components/ConstraintList';
+import { OutcomeList } from '@/components/OutcomeList';
 import { listProjects, listTasks, type Project, type Task } from '@projectflow/core';
 
-type DashboardTab = 'tasks' | 'events' | 'checkpoints' | 'decisions';
+type DashboardTab = 'tasks' | 'events' | 'checkpoints' | 'decisions' | 'outcomes' | 'constraints';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -166,7 +168,7 @@ export default function DashboardPage() {
                 {/* Tabs */}
                 <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
                   <nav className="-mb-px flex space-x-8">
-                    {(['tasks', 'events', 'checkpoints', 'decisions'] as DashboardTab[]).map(
+                    {(['tasks', 'events', 'checkpoints', 'decisions', 'outcomes', 'constraints'] as DashboardTab[]).map(
                       (tab) => (
                         <button
                           key={tab}
@@ -187,13 +189,15 @@ export default function DashboardPage() {
                 {/* Tab Content */}
                 <div className="mt-6">
                   {activeTab === 'tasks' && (
-                    <TaskList tasks={tasks} isLoading={isLoadingTasks} />
+                    <TaskList tasks={tasks} isLoading={isLoadingTasks} projectId={selectedProjectId} />
                   )}
                   {activeTab === 'events' && <EventTimeline projectId={selectedProjectId} />}
                   {activeTab === 'checkpoints' && (
                     <CheckpointList projectId={selectedProjectId} />
                   )}
                   {activeTab === 'decisions' && <DecisionLog projectId={selectedProjectId} />}
+                  {activeTab === 'outcomes' && <OutcomeList projectId={selectedProjectId} />}
+                  {activeTab === 'constraints' && <ConstraintList projectId={selectedProjectId} />}
                 </div>
               </div>
             ) : (

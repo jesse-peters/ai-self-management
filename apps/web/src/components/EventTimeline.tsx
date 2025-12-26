@@ -9,17 +9,17 @@ interface EventTimelineProps {
 }
 
 const eventTypeColors: Record<string, string> = {
-  ProjectCreated: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200',
-  TaskCreated: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200',
-  TaskStarted: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200',
-  TaskBlocked: 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200',
-  TaskCompleted: 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200',
-  TaskCancelled: 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200',
-  ArtifactProduced: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-200',
-  GateEvaluated: 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-200',
-  CheckpointCreated: 'bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-200',
-  DecisionRecorded: 'bg-pink-100 dark:bg-pink-900/30 text-pink-800 dark:text-pink-200',
-  ScopeAsserted: 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-800 dark:text-cyan-200',
+  ProjectCreated: 'bg-blue-100 text-blue-800',
+  TaskCreated: 'bg-green-100 text-green-800',
+  TaskStarted: 'bg-yellow-100 text-yellow-800',
+  TaskBlocked: 'bg-red-100 text-red-800',
+  TaskCompleted: 'bg-purple-100 text-purple-800',
+  TaskCancelled: 'bg-gray-100 text-gray-800',
+  ArtifactProduced: 'bg-indigo-100 text-indigo-800',
+  GateEvaluated: 'bg-orange-100 text-orange-800',
+  CheckpointCreated: 'bg-teal-100 text-teal-800',
+  DecisionRecorded: 'bg-pink-100 text-pink-800',
+  ScopeAsserted: 'bg-cyan-100 text-cyan-800',
 };
 
 const eventTypeLabels: Record<string, string> = {

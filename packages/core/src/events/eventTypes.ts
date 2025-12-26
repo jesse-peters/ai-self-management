@@ -98,6 +98,26 @@ export interface DecisionRecordedPayload {
   rationale: string;
 }
 
+export interface OutcomeRecordedPayload {
+  outcome_id: string;
+  subject_type: string;
+  subject_id: string;
+  result: string;
+  created_by: string;
+}
+
+export interface ConstraintCreatedPayload {
+  constraint_id: string;
+  scope: string;
+  trigger: string;
+  rule_text: string;
+  enforcement_level: string;
+}
+
+export interface ConstraintDeletedPayload {
+  constraint_id: string;
+}
+
 export interface ScopeAssertedPayload {
   task_id: string;
   changeset: {
@@ -124,6 +144,9 @@ export type EventPayloadMap = {
   GateEvaluated: GateEvaluatedPayload;
   CheckpointCreated: CheckpointCreatedPayload;
   DecisionRecorded: DecisionRecordedPayload;
+  OutcomeRecorded: OutcomeRecordedPayload;
+  ConstraintCreated: ConstraintCreatedPayload;
+  ConstraintDeleted: ConstraintDeletedPayload;
   ScopeAsserted: ScopeAssertedPayload;
 };
 

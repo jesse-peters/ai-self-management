@@ -18,8 +18,16 @@ import {
   evaluateGates,
   createCheckpoint,
   recordDecision,
+  recordOutcome,
   assertInScope,
   emitEvent,
+  createConstraint,
+  listConstraints,
+  evaluateConstraints,
+  recall,
+  startWizard,
+  submitWizardStep,
+  finishWizard,
 } from '@projectflow/core';
 import type {
   Project,
@@ -29,9 +37,17 @@ import type {
   GateResult,
   Checkpoint,
   Decision,
+  Outcome,
   ScopeResult,
   TaskPickingStrategy,
   ChangesetManifest,
+  Constraint,
+  ConstraintContext,
+  ConstraintEvaluationResult,
+  DecisionRecordResult,
+  MemoryRecallContext,
+  MemoryRecallResult,
+  WizardSession,
 } from '@projectflow/core';
 import { createServiceRoleClient, createOAuthScopedClient } from '@projectflow/db';
 import { verifyAccessToken } from '@projectflow/core';
@@ -398,7 +414,7 @@ export async function implementCreateCheckpoint(
 export async function implementRecordDecision(
   accessToken: string,
   params: Record<string, unknown>
-): Promise<Decision> {
+): Promise<DecisionRecordResult> {
   const userId = await getUserFromToken(accessToken);
   return recordDecision(userId, params.projectId as string, {
     title: params.title as string,
@@ -406,6 +422,73 @@ export async function implementRecordDecision(
     choice: params.choice as string,
     rationale: params.rationale as string,
   });
+}
+
+/**
+ * Implements pm.record_outcome tool
+ */
+export async function implementRecordOutcome(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<Outcome> {
+  const userId = await getUserFromToken(accessToken);
+  return recordOutcome(userId, params.projectId as string, {
+    subject_type: params.subjectType as any,
+    subject_id: params.subjectId as string,
+    result: params.result as any,
+    evidence_ids: params.evidenceIds as string[] | undefined,
+    notes: params.notes as string | undefined,
+    root_cause: params.rootCause as string | undefined,
+    recommendation: params.recommendation as string | undefined,
+    tags: params.tags as string[] | undefined,
+    created_by: params.createdBy as any,
+  });
+}
+
+/**
+ * Implements pm.create_constraint tool
+ */
+export async function implementCreateConstraint(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<Constraint> {
+  const userId = await getUserFromToken(accessToken);
+  return createConstraint(userId, params.projectId as string, {
+    scope: params.scope as any,
+    scopeValue: params.scopeValue as string | undefined,
+    trigger: params.trigger as any,
+    triggerValue: params.triggerValue as string | undefined,
+    ruleText: params.ruleText as string,
+    enforcementLevel: params.enforcementLevel as any,
+    sourceLinks: params.sourceLinks as any[] | undefined,
+  });
+}
+
+/**
+ * Implements pm.list_constraints tool
+ */
+export async function implementListConstraints(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<Constraint[]> {
+  const userId = await getUserFromToken(accessToken);
+  return listConstraints(userId, params.projectId as string, {
+    scope: params.scope as any,
+    trigger: params.trigger as any,
+    enforcementLevel: params.enforcementLevel as any,
+  });
+}
+
+/**
+ * Implements pm.evaluate_constraints tool
+ */
+export async function implementEvaluateConstraints(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<ConstraintEvaluationResult> {
+  const userId = await getUserFromToken(accessToken);
+  const context = params.context as ConstraintContext;
+  return evaluateConstraints(userId, params.projectId as string, context);
 }
 
 /**
@@ -418,5 +501,68 @@ export async function implementAssertInScope(
   const userId = await getUserFromToken(accessToken);
   const changeset = params.changesetManifest as ChangesetManifest;
   return assertInScope(userId, params.taskId as string, changeset);
+}
+
+/**
+ * Implements pm.memory_recall tool
+ */
+export async function implementMemoryRecall(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<MemoryRecallResult> {
+  const userId = await getUserFromToken(accessToken);
+  const context: MemoryRecallContext = {
+    query: params.query as string | undefined,
+    tags: params.tags as string[] | undefined,
+    files: params.files as string[] | undefined,
+    keywords: params.keywords as string[] | undefined,
+  };
+  return recall(userId, params.projectId as string, context);
+}
+
+/**
+ * Implements pm.wizard_start tool
+ */
+export async function implementWizardStart(
+  accessToken: string
+): Promise<{ sessionId: string; step: number }> {
+  const userId = await getUserFromToken(accessToken);
+  const client = createOAuthScopedClient(accessToken);
+  const sessionId = await startWizard(client);
+  return { sessionId, step: 1 };
+}
+
+/**
+ * Implements pm.wizard_step tool
+ */
+export async function implementWizardStep(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<{ nextStep: number | 'complete'; session: WizardSession }> {
+  const userId = await getUserFromToken(accessToken);
+  const sessionId = params.sessionId as string;
+  const stepId = params.stepId as number;
+  const payload = params.payload as Record<string, any>;
+
+  return submitWizardStep(sessionId, stepId, payload);
+}
+
+/**
+ * Implements pm.wizard_finish tool
+ */
+export async function implementWizardFinish(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<{
+  project: any;
+  projectSpec: any;
+  tasks: any[];
+  checkpoint: any;
+}> {
+  const userId = await getUserFromToken(accessToken);
+  const client = createOAuthScopedClient(accessToken);
+  const sessionId = params.sessionId as string;
+
+  return finishWizard(client, sessionId);
 }
 
