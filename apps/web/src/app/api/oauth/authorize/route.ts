@@ -4,6 +4,20 @@ import { createRequestLogger } from '@/lib/logger';
 import { getCorrelationId } from '@/lib/correlationId';
 import { createServiceRoleClient } from '@projectflow/db';
 
+interface PendingRequest {
+    id: string;
+    client_id: string;
+    code_challenge: string;
+    code_challenge_method: string;
+    redirect_uri: string;
+    state: string | null;
+    scope: string | null;
+    user_id: string | null;
+    authorization_code: string | null;
+    created_at: string;
+    expires_at: string;
+}
+
 /**
  * OAuth 2.1 Authorization Endpoint
  * 
@@ -81,53 +95,171 @@ export async function GET(request: NextRequest) {
                 );
             }
 
-            // Insert pending request
-            const { error: insertError } = await serviceRoleClient
+            // Check if a pending request already exists for this client_id (deduplication)
+            const { data: existingPending, error: lookupError } = await serviceRoleClient
                 .from('oauth_pending_requests')
-                .insert({
-                    client_id: clientId,
-                    code_challenge: codeChallenge,
-                    code_challenge_method: codeChallengeMethod || 'S256',
-                    redirect_uri: redirectUri,
-                    state: state || null,
-                    scope: scope || null,
-                    expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-                });
+                .select('*')
+                .eq('client_id', clientId)
+                .eq('status', 'pending')
+                .gt('expires_at', new Date().toISOString())
+                .maybeSingle();
 
-            if (insertError) {
+            if (lookupError) {
                 // Handle specific database errors gracefully
-                const errorMessage = insertError.message || '';
+                const errorMessage = lookupError.message || '';
                 const isTableNotFound = errorMessage.includes('Could not find the table') ||
                     errorMessage.includes('relation') ||
                     errorMessage.includes('does not exist');
 
                 if (isTableNotFound) {
                     logger.warn({
-                        insertError: insertError.message,
+                        lookupError: lookupError.message,
                         correlationId,
                         codeChallengeFull: codeChallenge,
                         fallback: 'self-contained-code',
                     }, 'Database table not found (schema cache issue) - will use self-contained authorization code');
                 } else {
                     logger.warn({
-                        insertError: insertError.message,
+                        lookupError: lookupError.message,
                         correlationId,
                         codeChallengeFull: codeChallenge,
                         fallback: 'self-contained-code',
-                    }, 'Failed to store pending request in Supabase - will use self-contained authorization code');
+                    }, 'Failed to lookup pending request in Supabase - will use self-contained authorization code');
                 }
                 // Continue anyway - authorization code will be self-contained with all necessary information
+            } else if (existingPending) {
+                // Update existing pending request with new challenge (latest wins for deduplication)
+                const { error: updateError } = await serviceRoleClient
+                    .from('oauth_pending_requests')
+                    .update({
+                        code_challenge: codeChallenge,
+                        code_challenge_method: codeChallengeMethod || 'S256',
+                        redirect_uri: redirectUri,
+                        state: state || null,
+                        scope: scope || null,
+                        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+                        status: 'pending',
+                    })
+                    .eq('id', existingPending.id);
+
+                if (updateError) {
+                    logger.warn({
+                        updateError: updateError.message,
+                        correlationId,
+                        existingPendingId: existingPending.id,
+                        codeChallengeFull: codeChallenge,
+                        fallback: 'self-contained-code',
+                    }, 'Failed to update existing pending request - will use self-contained authorization code');
+                } else {
+                    logger.info({
+                        clientId,
+                        existingPendingId: existingPending.id,
+                        oldChallenge: existingPending.code_challenge?.substring(0, 20) + '...',
+                        newChallenge: codeChallenge?.substring(0, 20) + '...',
+                        codeChallengeLength: codeChallenge?.length,
+                        codeChallengeMethod: codeChallengeMethod || 'S256',
+                        redirectUri,
+                        state: state?.substring(0, 20) + '...',
+                        correlationId,
+                        timestamp: new Date().toISOString(),
+                    }, 'Updated existing pending request with new challenge (deduplication - latest wins)');
+                }
             } else {
-                logger.info({
-                    clientId,
-                    codeChallengeFull: codeChallenge, // Log full challenge for debugging
-                    codeChallengeLength: codeChallenge?.length,
-                    codeChallengeMethod: codeChallengeMethod || 'S256',
-                    redirectUri,
-                    state: state?.substring(0, 20) + '...',
-                    correlationId,
-                    timestamp: new Date().toISOString(),
-                }, 'Stored pending request in Supabase with full challenge');
+                // No existing pending request - try to insert new one
+                // If unique constraint violation, another request already inserted, so update instead
+                const { error: insertError } = await serviceRoleClient
+                    .from('oauth_pending_requests')
+                    .insert({
+                        client_id: clientId,
+                        code_challenge: codeChallenge,
+                        code_challenge_method: codeChallengeMethod || 'S256',
+                        redirect_uri: redirectUri,
+                        state: state || null,
+                        scope: scope || null,
+                        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+                        status: 'pending',
+                    });
+
+                if (insertError) {
+                    // Check if it's a unique constraint violation (concurrent request already inserted)
+                    const errorMessage = insertError.message || '';
+                    const isUniqueViolation = errorMessage.includes('duplicate key') ||
+                        errorMessage.includes('unique constraint') ||
+                        errorMessage.includes('already exists') ||
+                        errorMessage.includes('violates unique constraint');
+
+                    if (isUniqueViolation) {
+                        // Another concurrent request already inserted - update it instead
+                        logger.info({
+                            clientId,
+                            codeChallenge: codeChallenge?.substring(0, 20) + '...',
+                            correlationId,
+                        }, 'Concurrent request detected (unique constraint violation), updating existing pending request');
+
+                        const { error: updateError } = await serviceRoleClient
+                            .from('oauth_pending_requests')
+                            .update({
+                                code_challenge: codeChallenge, // Latest wins
+                                code_challenge_method: codeChallengeMethod || 'S256',
+                                redirect_uri: redirectUri,
+                                state: state || null,
+                                scope: scope || null,
+                                expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+                                status: 'pending',
+                            })
+                            .eq('client_id', clientId)
+                            .eq('status', 'pending');
+
+                        if (updateError) {
+                            logger.warn({
+                                updateError: updateError.message,
+                                correlationId,
+                                codeChallengeFull: codeChallenge,
+                                fallback: 'self-contained-code',
+                            }, 'Failed to update after unique constraint violation - will use self-contained authorization code');
+                        } else {
+                            logger.info({
+                                clientId,
+                                codeChallenge: codeChallenge?.substring(0, 20) + '...',
+                                correlationId,
+                                timestamp: new Date().toISOString(),
+                            }, 'Updated existing pending request after unique constraint violation (deduplication - latest wins)');
+                        }
+                    } else {
+                        // Some other error
+                        const isTableNotFound = errorMessage.includes('Could not find the table') ||
+                            errorMessage.includes('relation') ||
+                            errorMessage.includes('does not exist');
+
+                        if (isTableNotFound) {
+                            logger.warn({
+                                insertError: insertError.message,
+                                correlationId,
+                                codeChallengeFull: codeChallenge,
+                                fallback: 'self-contained-code',
+                            }, 'Database table not found (schema cache issue) - will use self-contained authorization code');
+                        } else {
+                            logger.warn({
+                                insertError: insertError.message,
+                                correlationId,
+                                codeChallengeFull: codeChallenge,
+                                fallback: 'self-contained-code',
+                            }, 'Failed to store pending request in Supabase - will use self-contained authorization code');
+                        }
+                    }
+                    // Continue anyway - authorization code will be self-contained with all necessary information
+                } else {
+                    logger.info({
+                        clientId,
+                        codeChallengeFull: codeChallenge, // Log full challenge for debugging
+                        codeChallengeLength: codeChallenge?.length,
+                        codeChallengeMethod: codeChallengeMethod || 'S256',
+                        redirectUri,
+                        state: state?.substring(0, 20) + '...',
+                        correlationId,
+                        timestamp: new Date().toISOString(),
+                    }, 'Stored new pending request in Supabase with full challenge');
+                }
             }
         } catch (error) {
             // Handle any exceptions during database operations gracefully
@@ -260,7 +392,7 @@ export async function GET(request: NextRequest) {
         );
     }
 
-    // Prepare code data that will be used for all code paths
+    // Prepare default code data (fallback if no pending request found)
     const authCode = `${user.id}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     const codeData = {
         userId: user.id,
@@ -275,7 +407,7 @@ export async function GET(request: NextRequest) {
 
     // Base64 encode the code data
     const encodedCode = Buffer.from(JSON.stringify(codeData)).toString('base64url');
-    const finalCode = `${authCode}.${encodedCode}`;
+    let finalCode = `${authCode}.${encodedCode}`; // Use let so it can be reassigned from pending request
 
     // Log code challenge storage with full details
     logger.info({
@@ -285,20 +417,21 @@ export async function GET(request: NextRequest) {
         userId: user.id,
         correlationId,
         timestamp: new Date().toISOString(),
-    }, 'Storing code challenge in authorization code');
+    }, 'Prepared default authorization code (will use pending request challenge if found)');
 
-    // Check if there's a pending request for this client+challenge to update
+    // Look up THE SINGLE pending request for this client (deduplication)
+    // Generate ONE authorization code using that request's challenge
     // Note: This is optional - if database operations fail, we continue with self-contained code
     // The authorization code is self-contained and contains all necessary information
     try {
         const serviceRoleClient = createServiceRoleClient();
 
-        // Look up pending request
-        const { data: pending, error: lookupError } = await serviceRoleClient
+        // Find THE SINGLE pending request for this client (deduplication ensures only one exists)
+        const { data: pendingRequest, error: lookupError } = await serviceRoleClient
             .from('oauth_pending_requests')
             .select('*')
             .eq('client_id', clientId)
-            .eq('code_challenge', codeChallenge)
+            .eq('status', 'pending')
             .gt('expires_at', new Date().toISOString())
             .maybeSingle();
 
@@ -323,40 +456,65 @@ export async function GET(request: NextRequest) {
                 }, 'Failed to lookup pending request from Supabase - using self-contained authorization code');
             }
             // Continue with self-contained code - it contains all necessary information
-        } else if (pending) {
-            // Found pending request - store the full encoded code
+        } else if (pendingRequest) {
+            // Found THE SINGLE pending request - use its challenge for code generation
+            const pendingReq = pendingRequest as PendingRequest;
+            const pendingChallenge = pendingReq.code_challenge;
+            const pendingChallengeMethod = pendingReq.code_challenge_method || 'S256';
+            const pendingScope = pendingReq.scope || '';
+            const pendingRedirectUri = pendingReq.redirect_uri;
+            const pendingState = pendingReq.state;
+
             logger.info({
-                pendingId: pending.id,
+                pendingId: pendingReq.id,
+                pendingChallenge: pendingChallenge?.substring(0, 20) + '...',
+                pendingChallengeLength: pendingChallenge?.length,
+                currentRequestChallenge: codeChallenge?.substring(0, 20) + '...',
+                challengesMatch: pendingChallenge === codeChallenge,
                 clientId,
-                storedChallenge: (pending as any).code_challenge,
-                storedChallengeLength: (pending as any).code_challenge?.length,
-                codeChallengeInCode: codeChallenge, // The challenge we're encoding in the code
-                challengesMatch: (pending as any).code_challenge === codeChallenge,
                 correlationId,
-            }, 'Found pending request in Supabase, storing full authorization code');
+            }, 'Found single pending request for client (deduplication), using its challenge for code generation');
 
-            // Log code details before storing
-            const codePreview = finalCode.substring(0, 100) + '...';
+            // Generate ONE authorization code using the challenge from the pending request
+            // This ensures PKCE verification will succeed for the latest concurrent request
+            const pendingAuthCode = `${user.id}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+            const pendingCodeData = {
+                userId: user.id,
+                codeChallenge: pendingChallenge, // Use challenge from pending request (latest wins)
+                codeChallengeMethod: pendingChallengeMethod,
+                scope: pendingScope,
+                redirectUri: pendingRedirectUri,
+                accessToken: session.access_token,
+                refreshToken: session.refresh_token,
+                expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
+                state: pendingState,
+            };
+
+            // Base64 encode the code data
+            const pendingEncodedCode = Buffer.from(JSON.stringify(pendingCodeData)).toString('base64url');
+            const pendingFinalCode = `${pendingAuthCode}.${pendingEncodedCode}`;
+
+            // Update finalCode to use the code generated from pending request
+            // This ensures the redirect uses the correct challenge
+            finalCode = pendingFinalCode;
 
             logger.info({
-                pendingId: pending.id,
-                codeDataChallenge: codeData.codeChallenge,
-                codeDataChallengeLength: codeData.codeChallenge?.length,
-                finalCodeLength: finalCode.length,
-                finalCodePreview: codePreview,
-                authCodePart: authCode,
-                encodedDataLength: encodedCode.length,
+                pendingId: pendingReq.id,
+                pendingChallenge: pendingChallenge?.substring(0, 20) + '...',
+                pendingChallengeLength: pendingChallenge?.length,
+                codeLength: pendingFinalCode.length,
                 correlationId,
-            }, 'Code details before storing in database');
+            }, 'Generated authorization code from pending request challenge');
 
-            // Update pending request with user_id and full authorization_code
+            // Update pending request with user_id, authorization_code, and status
             const { error: updateError } = await serviceRoleClient
                 .from('oauth_pending_requests')
                 .update({
                     user_id: user.id,
-                    authorization_code: finalCode, // Store the full encoded code
+                    authorization_code: pendingFinalCode, // Store the full encoded code
+                    status: 'authorized',
                 })
-                .eq('id', pending.id);
+                .eq('id', pendingReq.id);
 
             if (updateError) {
                 // Handle update errors gracefully - code is already self-contained
@@ -369,29 +527,29 @@ export async function GET(request: NextRequest) {
                     logger.warn({
                         updateError: updateError.message,
                         correlationId,
-                        pendingId: pending.id,
+                        pendingId: pendingReq.id,
                         fallback: 'self-contained-code',
                     }, 'Database table not found (schema cache issue) - authorization code is self-contained');
                 } else {
                     logger.warn({
                         updateError: updateError.message,
                         correlationId,
-                        pendingId: pending.id,
+                        pendingId: pendingReq.id,
                         fallback: 'self-contained-code',
                     }, 'Failed to update pending request with code - authorization code is self-contained');
                 }
                 // Continue - authorization code is self-contained and can be used directly
             } else {
                 logger.info({
-                    pendingId: pending.id,
+                    pendingId: pendingReq.id,
                     userId: user.id,
-                    codeLength: finalCode.length,
-                    codeChallengeInStoredCode: codeChallenge, // The challenge that should be in the code
-                    storedChallengeInPending: (pending as any).code_challenge, // The challenge stored in pending request
-                    finalCodePreview: finalCode.substring(0, 150) + '...',
+                    codeLength: pendingFinalCode.length,
+                    codeChallengeInStoredCode: pendingChallenge,
+                    finalCodePreview: pendingFinalCode.substring(0, 50) + '...',
+                    status: 'authorized',
                     correlationId,
                     timestamp: new Date().toISOString(),
-                }, 'Updated pending request with full authorization code - code contains challenge');
+                }, 'Updated pending request with authorization code and status');
             }
         } else {
             logger.info({

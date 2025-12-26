@@ -4,28 +4,32 @@
 
 Cursor MCP client was making multiple concurrent authorization requests with different PKCE code challenges, causing:
 
-1. PKCE verification failures
-2. "authorization_pending" responses not being handled correctly
-3. Each request getting a new state instead of being tracked
+1. PKCE verification failures - client sends verifier that doesn't match the challenge in the authorization code
+2. Multiple pending requests created, but only one code generated
+3. Client expects standard OAuth redirect flow, not polling
 
 ## Solution Architecture
 
 ### Overview
 
-Instead of handling all requests in-memory (which doesn't work on Vercel's stateless serverless functions), we now use **Supabase database** as the source of truth for pending authorization requests.
+We use **Supabase database** as the source of truth for pending authorization requests and implement **server-side request deduplication** to handle multiple concurrent authorization requests. Concurrent requests from the same client are consolidated into a single pending request, ensuring only one authorization code is generated with the correct PKCE challenge.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  MCP Client (Cursor) - Multiple Concurrent Requests         │
+│  Request 1: challenge_A, verifier_A                        │
+│  Request 2: challenge_B, verifier_B                        │
+│  Request 3: challenge_C, verifier_C                        │
 └────────────┬─────────────────────────────────────────────────┘
              │
              ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  OAuth Authorize Endpoint                                   │
-│  - Validates parameters & PKCE challenge format             │
-│  - Stores request in oauth_pending_requests (if user not    │
-│    authenticated)                                           │
-│  - Returns "authorization_pending" for programmatic clients │
+│  - Request 1: No existing pending → INSERT (challenge_A)   │
+│  - Request 2: Found existing → UPDATE (challenge_B)        │
+│  - Request 3: Found existing → UPDATE (challenge_C)        │
+│  - Latest challenge wins (deduplication)                    │
+│  - Returns "authorization_pending" for programmatic clients│
 └─────────────────────────────────────────────────────────────┘
              │
              ├─► Browser: Redirect to login
@@ -42,27 +46,25 @@ Instead of handling all requests in-memory (which doesn't work on Vercel's state
              ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  OAuth Authorize Endpoint (POST-auth)                       │
-│  - Lookup pending requests in Supabase by code_challenge    │
-│  - Generate authorization_code for each pending request     │
-│  - Update oauth_pending_requests with code & user_id       │
-│  - Redirect to callback page (for cursor://) or directly    │
-│    to client (for regular URIs)                             │
+│  - Find THE SINGLE pending request for client               │
+│  - Generate ONE authorization_code with latest challenge  │
+│  - Update oauth_pending_requests with code & status         │
+│  - Redirect with code (standard OAuth flow)                 │
 └─────────────────────────────────────────────────────────────┘
              │
              ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  MCP Client - Token Exchange                                │
-│  - Sends code + code_verifier + state                       │
+│  - Exchange code + verifier_C → tokens                     │
+│  - (Only latest request succeeds - others fail)             │
 └─────────────────────────────────────────────────────────────┘
              │
              ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  OAuth Token Endpoint                                       │
-│  - Compute challenge from verifier                          │
-│  - Lookup pending request by code_challenge in Supabase    │
-│  - Get authorization_code from pending request             │
-│  - Validate PKCE                                           │
-│  - Delete pending request (single-use enforcement)         │
+│  - Decode authorization code (self-contained)                │
+│  - Validate PKCE (challenge matches verifier)               │
+│  - Delete pending request (single-use enforcement)          │
 │  - Return access_token + refresh_token                     │
 └─────────────────────────────────────────────────────────────┘
              │
@@ -77,7 +79,7 @@ Instead of handling all requests in-memory (which doesn't work on Vercel's state
 
 ### 1. Database Schema
 
-**New Table**: `oauth_pending_requests`
+**Table**: `oauth_pending_requests`
 
 ```sql
 CREATE TABLE oauth_pending_requests (
@@ -90,10 +92,11 @@ CREATE TABLE oauth_pending_requests (
   scope TEXT,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   authorization_code TEXT,
+  status TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'authorized' | 'completed'
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '10 minutes',
 
-  UNIQUE(client_id, code_challenge)
+  UNIQUE(client_id) -- Only ONE pending request per client (deduplication)
 );
 ```
 
@@ -102,8 +105,9 @@ CREATE TABLE oauth_pending_requests (
 - ✅ **UUID Primary Key** - Supabase native
 - ✅ **Automatic Timestamps** - created_at, expires_at with NOW()
 - ✅ **RLS Policies** - Service role can manage all, users can see their own
-- ✅ **Unique Constraint** - Prevents duplicate requests for same client+challenge
-- ✅ **Indexes** - For fast lookups by code_challenge, user_id, expires_at
+- ✅ **Unique Constraint on client_id** - Ensures only ONE pending request per client (deduplication)
+- ✅ **Status Column** - Tracks request state: 'pending' | 'authorized' | 'completed'
+- ✅ **Indexes** - For fast lookups by code_challenge, user_id, expires_at, status
 - ✅ **Foreign Key** - Links to auth.users with CASCADE delete
 
 ### 2. Authorization Endpoint
@@ -113,18 +117,44 @@ CREATE TABLE oauth_pending_requests (
 **When User Not Authenticated:**
 
 ```typescript
-// Store pending request in Supabase
-const { error } = await serviceRoleClient
-  .from("oauth_pending_requests" as any)
-  .insert({
-    client_id,
-    code_challenge,
-    code_challenge_method,
-    redirect_uri,
-    state,
-    scope,
-    expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-  });
+// Check if pending request already exists for this client
+const { data: existingPending } = await serviceRoleClient
+  .from("oauth_pending_requests")
+  .select("*")
+  .eq("client_id", clientId)
+  .eq("status", "pending")
+  .gt("expires_at", new Date().toISOString())
+  .maybeSingle();
+
+if (existingPending) {
+  // Update existing pending request with new challenge (latest wins)
+  await serviceRoleClient
+    .from("oauth_pending_requests")
+    .update({
+      code_challenge: codeChallenge,  // Latest challenge wins
+      code_challenge_method,
+      redirect_uri,
+      state,
+      scope,
+      expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      status: "pending",
+    })
+    .eq("id", existingPending.id);
+} else {
+  // Insert new pending request
+  await serviceRoleClient
+    .from("oauth_pending_requests")
+    .insert({
+      client_id,
+      code_challenge,
+      code_challenge_method,
+      redirect_uri,
+      state,
+      scope,
+      expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      status: "pending",
+    });
+}
 
 // Return authorization_pending for programmatic clients
 return NextResponse.json({
@@ -136,71 +166,67 @@ return NextResponse.json({
 **When User Authenticates:**
 
 ```typescript
-// Lookup pending request
-const { data: pending } = await serviceRoleClient
+// Find THE SINGLE pending request for this client (deduplication ensures only one exists)
+const { data: pendingRequest } = await serviceRoleClient
   .from("oauth_pending_requests")
   .select("*")
   .eq("client_id", clientId)
-  .eq("code_challenge", codeChallenge)
+  .eq("status", "pending")
   .gt("expires_at", new Date().toISOString())
   .maybeSingle();
 
-if (pending) {
-  // Update with authorization code
-  const authCode = generateAuthorizationCode();
+// Generate ONE authorization code using the challenge from the pending request
+if (pendingRequest) {
+  const authCode = generateAuthorizationCode({
+    codeChallenge: pendingRequest.code_challenge,  // Use challenge from pending request (latest)
+    // ... other data
+  });
+    
   await serviceRoleClient
     .from("oauth_pending_requests")
     .update({
       user_id: user.id,
       authorization_code: authCode,
+      status: "authorized",
     })
-    .eq("id", pending.id);
+    .eq("id", pendingRequest.id);
 }
 
-// Redirect with code
+// Redirect with code (standard OAuth flow)
 ```
 
 ### 3. Token Exchange Endpoint
 
 **File**: `apps/web/src/app/api/oauth/token/route.ts`
 
-**Lazy Code Creation:**
+**Single-Use Enforcement:**
 
 ```typescript
-// Compute challenge from verifier
-const computedChallenge = createHash("sha256")
-  .update(code_verifier)
-  .digest("base64url");
-
-// Lookup pending request
+// Lookup pending request by authorization_code for single-use enforcement
 const { data: pending } = await serviceRoleClient
   .from("oauth_pending_requests")
-  .select("*")
-  .eq("code_challenge", computedChallenge)
+  .select("id, status")
+  .eq("authorization_code", code)
   .gt("expires_at", new Date().toISOString())
   .maybeSingle();
 
-if (pending && pending.authorization_code) {
-  // Use code from pending request
-  code = pending.authorization_code;
-
-  // Delete pending request (single-use enforcement)
-  await serviceRoleClient
-    .from("oauth_pending_requests")
-    .delete()
-    .eq("id", pending.id);
-}
+// Store pending request ID for deletion after successful exchange
+let pendingRequestId = pending?.id || null;
 ```
 
 **PKCE Verification:**
 
 ```typescript
+// Decode authorization code (self-contained)
+const codeParts = code.split(".");
+const codeData = JSON.parse(Buffer.from(codeParts[1], "base64url").toString());
+
 // Compute challenge from verifier
 const computedChallenge = createHash("sha256")
   .update(code_verifier)
   .digest("base64url");
 
-// Compare with stored challenge
+// Compare with challenge stored in authorization code
 if (computedChallenge !== codeData.codeChallenge) {
   return NextResponse.json(
     {
@@ -209,6 +235,14 @@ if (computedChallenge !== codeData.codeChallenge) {
     },
     { status: 400 }
   );
+}
+
+// Delete pending request after successful token exchange (single-use enforcement)
+if (pendingRequestId) {
+  await serviceRoleClient
+    .from("oauth_pending_requests")
+    .delete()
+    .eq("id", pendingRequestId);
 }
 ```
 
@@ -225,9 +259,10 @@ if (computedChallenge !== codeData.codeChallenge) {
 
 ### ✅ Concurrent Request Handling
 
-- **Unique Per Request**: Each request gets its own pending row
-- **No Race Conditions**: Database UNIQUE constraint prevents duplicates
-- **Lazy Code Creation**: Codes only created when needed
+- **Request Deduplication**: Concurrent requests update the same pending row (latest wins)
+- **No Race Conditions**: Database UNIQUE constraint on client_id ensures only one pending request
+- **Single Code Generated**: When user authenticates, ONE authorization code is generated with the latest challenge
+- **Standard OAuth Flow**: Uses traditional redirect flow (no polling required)
 - **Stateless Serverless**: Works on Vercel (no in-memory state)
 
 ### ✅ Security
@@ -317,18 +352,25 @@ The test suite in `test-oauth-concurrent.ts` validates:
 
    - `apps/web/src/app/api/oauth/authorize/route.ts`
    - Stores pending requests in Supabase
-   - Looks up and updates pending requests when authenticated
+   - When user authenticates, generates codes for ALL pending requests
+   - Each code contains its own challenge from the pending request
 
 3. **Token Endpoint**:
 
    - `apps/web/src/app/api/oauth/token/route.ts`
-   - Looks up pending requests by code_challenge
-   - Gets authorization code from pending request
-   - Deletes pending request after use
+   - Looks up pending requests by code_challenge (optional)
+   - Validates PKCE challenge matches verifier
+   - Returns access_token + refresh_token
 
-4. **Test File** (NEW):
-   - `test-oauth-concurrent.ts`
-   - Test suite for concurrent authorization requests
+5. **Migration File** (NEW):
+
+   - `packages/db/supabase/migrations/20251225000007_oauth_deduplication.sql`
+   - Updates schema for deduplication (unique constraint on client_id, status column)
+
+6. **Test Files**:
+
+   - `test-oauth-concurrent.ts` - Manual test script
+   - `apps/web/src/app/api/oauth/__tests__/concurrent-flow.test.ts` - Integration tests for deduplication
 
 ## Debugging
 
@@ -347,9 +389,11 @@ LIMIT 10;
 ```bash
 # Look for these log messages:
 # - "Stored pending request in Supabase"
-# - "Found pending request in Supabase, generating code"
-# - "Deleted pending request after code creation"
-# - "Looking up pending request in Supabase"
+# - "Found X pending request(s) for client, generating codes for all"
+# - "Generated authorization code for pending request"
+# - "Returning authorization code from pending request"
+# - "Deleted pending request after returning code"
+# - "Looking up pending request in Supabase by computed challenge"
 ```
 
 ### Verify Code Challenge Format
@@ -391,9 +435,57 @@ The code challenge must be base64url-encoded:
 - **Cleanup**: Expired rows not queried (expires_at index helps)
 - **Storage**: Minimal (only stores challenge + metadata)
 
+## Client Implementation Guide
+
+### For MCP Clients (Cursor, etc.)
+
+**Note**: The server implements request deduplication. If multiple concurrent authorization requests are made, only the **latest** request's challenge will be used for code generation. Earlier concurrent requests will fail PKCE verification.
+
+1. **Make Authorization Request**:
+   ```typescript
+   const { verifier, challenge } = generatePKCEPair();
+   const response = await fetch('/api/oauth/authorize?' + new URLSearchParams({
+     client_id: 'your-client-id',
+     redirect_uri: 'cursor://oauth-callback',
+     code_challenge: challenge,
+     code_challenge_method: 'S256',
+   }));
+   
+   if (response.status === 401) {
+     const data = await response.json();
+     // data.error === 'authorization_pending'
+     // Open browser to data.verification_uri
+   }
+   ```
+
+2. **Receive Authorization Code** (via redirect):
+   - User authenticates in browser
+   - Browser redirects to `cursor://oauth-callback?code={authorization_code}`
+   - Client receives the authorization code from the redirect
+
+3. **Exchange Code for Tokens**:
+   ```typescript
+   const tokenResponse = await fetch('/api/oauth/token', {
+     method: 'POST',
+     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+     body: new URLSearchParams({
+       grant_type: 'authorization_code',
+       code: code,  // From redirect
+       redirect_uri: 'cursor://oauth-callback',
+       code_verifier: verifier,  // Must match the challenge from the latest concurrent request
+     }),
+   });
+   
+   const tokens = await tokenResponse.json();
+   // tokens.access_token, tokens.refresh_token
+   ```
+
+**Important**: If your client makes multiple concurrent authorization requests, ensure you use the verifier from the **last** request for token exchange, as that's the challenge that will be embedded in the authorization code.
+
 ## Future Improvements
 
 - Periodic cleanup job for very old rows
 - Metrics on authorization_pending flow duration
 - Rate limiting per client_id
 - Support for other grant types (client credentials, etc.)
+- Polling interval recommendations in error responses

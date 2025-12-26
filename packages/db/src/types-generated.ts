@@ -333,6 +333,7 @@ export type Database = {
           redirect_uri: string
           scope: string | null
           state: string | null
+          status: string
           user_id: string | null
         }
         Insert: {
@@ -346,6 +347,7 @@ export type Database = {
           redirect_uri: string
           scope?: string | null
           state?: string | null
+          status?: string
           user_id?: string | null
         }
         Update: {
@@ -359,6 +361,7 @@ export type Database = {
           redirect_uri?: string
           scope?: string | null
           state?: string | null
+          status?: string
           user_id?: string | null
         }
         Relationships: []
@@ -414,6 +417,62 @@ export type Database = {
             foreignKeyName: "outcomes_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_specs: {
+        Row: {
+          created_at: string
+          custom_gates: Json | null
+          definition_of_done: string
+          deliverables: Json | null
+          gate_pack_id: string | null
+          goals: string
+          id: string
+          preferences: Json | null
+          project_id: string
+          repo_context: Json | null
+          risk_areas: string[] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          custom_gates?: Json | null
+          definition_of_done: string
+          deliverables?: Json | null
+          gate_pack_id?: string | null
+          goals: string
+          id?: string
+          preferences?: Json | null
+          project_id: string
+          repo_context?: Json | null
+          risk_areas?: string[] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          custom_gates?: Json | null
+          definition_of_done?: string
+          deliverables?: Json | null
+          gate_pack_id?: string | null
+          goals?: string
+          id?: string
+          preferences?: Json | null
+          project_id?: string
+          repo_context?: Json | null
+          risk_areas?: string[] | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_specs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
             referencedRelation: "projects"
             referencedColumns: ["id"]
           },

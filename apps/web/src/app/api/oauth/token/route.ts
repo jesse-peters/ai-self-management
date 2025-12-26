@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
         if (grantType === 'authorization_code') {
             result = await handleAuthorizationCodeGrant(body, logger, correlationId);
         } else if (grantType === 'refresh_token') {
-            result = await handleRefreshTokenGrant(body, logger, correlationId);
+            result = await handleRefreshTokenGrant(body, logger);
         } else {
             logger.warn({ grantType }, 'Unsupported grant type');
             result = NextResponse.json(
@@ -113,12 +113,27 @@ export async function POST(request: NextRequest) {
     }
 }
 
+interface CodeData {
+    userId: string;
+    codeChallenge: string;
+    codeChallengeMethod: string;
+    scope: string;
+    redirectUri: string;
+    accessToken: string;
+    refreshToken: string;
+    expiresAt: number;
+    state?: string;
+}
+
 async function handleAuthorizationCodeGrant(
     body: Record<string, string>,
     logger: ReturnType<typeof createRequestLogger>,
     correlationId: string
 ): Promise<NextResponse> {
-    let { code, redirect_uri, code_verifier, state } = body;
+    const code = body.code;
+    const redirect_uri = body.redirect_uri;
+    const code_verifier = body.code_verifier;
+    const state = body.state;
 
     logger.info({
         hasCode: !!code,
@@ -129,6 +144,8 @@ async function handleAuthorizationCodeGrant(
         codePreview: code?.substring(0, 100) + '...', // Log first 100 chars of code from request
         codeVerifierLength: code_verifier?.length,
         codeVerifierPreview: code_verifier?.substring(0, 20) + '...',
+        codeVerifierFull: code_verifier, // Log full verifier for debugging PKCE issues
+        codeVerifierFormatValid: code_verifier ? /^[A-Za-z0-9._~\-]+$/.test(code_verifier) : false,
         correlationId,
     }, 'Processing authorization code grant - code received from client');
 
@@ -199,28 +216,16 @@ async function handleAuthorizationCodeGrant(
             );
         }
 
-        // First compute the code challenge from the verifier to check for pending requests
-        // This will be reused for PKCE verification later
-        const computedChallengeForLookup = createHash('sha256').update(code_verifier).digest('base64url');
-
-        logger.info({
-            codeVerifierLength: code_verifier.length,
-            codeVerifierPreview: code_verifier.substring(0, 20) + '...',
-            computedChallengeLength: computedChallengeForLookup.length,
-            computedChallengeFull: computedChallengeForLookup,
-            correlationId,
-        }, 'Looking up pending request in Supabase');
-
-        // Look up pending request by computed challenge
-        // Note: This lookup is optional - the authorization code is self-contained
-        // and contains all necessary information. Database lookup is only for
-        // handling concurrent requests. If lookup fails, we continue with self-contained verification.
+        // Look up pending request by authorization_code for single-use enforcement
+        // Note: The authorization code is self-contained and contains all necessary information.
+        // The database lookup is only for enforcing single-use (deleting after successful exchange).
+        let pendingRequestId: string | null = null;
         try {
             const serviceRoleClient = createServiceRoleClient();
             const { data: pending, error: lookupError } = await serviceRoleClient
                 .from('oauth_pending_requests')
-                .select('*')
-                .eq('code_challenge', computedChallengeForLookup)
+                .select('id, status')
+                .eq('authorization_code', code)
                 .gt('expires_at', new Date().toISOString())
                 .maybeSingle();
 
@@ -245,67 +250,22 @@ async function handleAuthorizationCodeGrant(
                     }, 'Failed to lookup pending request from Supabase - continuing with self-contained code verification');
                 }
                 // Continue with self-contained code verification - code contains all necessary data
-            } else if (pending && pending.authorization_code) {
-                const codeFromRequest = code; // Save original code from request
-                const codeFromDB = pending.authorization_code;
-                const codesMatch = codeFromRequest === codeFromDB;
-
+            } else if (pending) {
+                pendingRequestId = pending.id;
                 logger.info({
                     pendingId: pending.id,
-                    hasPendingCode: !!pending.authorization_code,
-                    clientId: pending.client_id,
-                    storedChallenge: (pending as any).code_challenge,
-                    storedChallengeLength: (pending as any).code_challenge?.length,
-                    computedChallengeForLookup: computedChallengeForLookup,
-                    computedChallengeLength: computedChallengeForLookup.length,
-                    challengesMatch: (pending as any).code_challenge === computedChallengeForLookup,
-                    codeFromRequestLength: codeFromRequest?.length,
-                    codeFromRequestPreview: codeFromRequest?.substring(0, 100) + '...',
-                    codeFromDBLength: codeFromDB?.length,
-                    codeFromDBPreview: codeFromDB?.substring(0, 100) + '...',
-                    codesMatch,
+                    status: (pending as { id: string; status?: string }).status,
+                    codeLength: code.length,
+                    codePreview: code.substring(0, 50) + '...',
                     correlationId,
-                }, 'Found pending request with authorization code in Supabase - comparing codes');
-
-                // Use the authorization code from pending request
-                code = pending.authorization_code;
-
-                logger.info({
-                    usingCodeFrom: codesMatch ? 'request (matches DB)' : 'database (replacing request code)',
-                    finalCodeLength: code.length,
-                    finalCodePreview: code.substring(0, 100) + '...',
-                    correlationId,
-                }, 'Using authorization code for processing');
-
-                // Delete the pending request (single-use enforcement)
-                const { error: deleteError } = await serviceRoleClient
-                    .from('oauth_pending_requests')
-                    .delete()
-                    .eq('id', pending.id);
-
-                if (deleteError) {
-                    logger.warn({
-                        deleteError: deleteError.message,
-                        correlationId,
-                    }, 'Failed to delete pending request after code creation');
-                } else {
-                    logger.info({
-                        pendingId: pending.id,
-                        correlationId,
-                    }, 'Deleted pending request after code creation (single-use enforcement)');
-                }
-            } else if (pending && !pending.authorization_code) {
-                logger.info({
-                    pendingId: pending.id,
-                    correlationId,
-                }, 'Found pending request but no authorization code yet - user may not have authenticated');
+                }, 'Found pending request for authorization code - will delete after successful exchange (single-use enforcement)');
             } else {
                 logger.info({
-                    computedChallengeFull: computedChallengeForLookup,
-                    computedChallengePreview: computedChallengeForLookup.substring(0, 20) + '...',
+                    codeLength: code.length,
+                    codePreview: code.substring(0, 50) + '...',
                     correlationId,
                     fallback: 'self-contained-code-verification',
-                }, 'No pending request found for this code challenge - using self-contained code verification');
+                }, 'No pending request found for this authorization code - using self-contained code verification');
             }
         } catch (error) {
             // Handle any exceptions during database lookup gracefully
@@ -380,7 +340,7 @@ async function handleAuthorizationCodeGrant(
             );
         }
 
-        const [authCode, encodedData] = codeParts;
+        const [, encodedData] = codeParts;
         if (!encodedData) {
             logger.warn({
                 wasUrlEncoded,
@@ -396,7 +356,7 @@ async function handleAuthorizationCodeGrant(
         }
 
         // Decode base64url encoded data
-        let codeData: any;
+        let codeData: CodeData;
         try {
             const decodedData = Buffer.from(encodedData, 'base64url').toString();
             codeData = JSON.parse(decodedData);
@@ -516,8 +476,6 @@ async function handleAuthorizationCodeGrant(
             storedChallengeLength: codeData.codeChallenge?.length,
             computedChallengeFromVerifier: computedChallenge, // Challenge computed from verifier
             computedChallengeLength: computedChallenge.length,
-            computedChallengeForLookup: computedChallengeForLookup, // Challenge used for DB lookup
-            lookupChallengeMatchesCodeChallenge: computedChallengeForLookup === codeData.codeChallenge,
             computedChallengeMatchesCodeChallenge: computedChallenge === codeData.codeChallenge,
             challengesMatch: computedChallenge === codeData.codeChallenge,
             correlationId,
@@ -537,7 +495,17 @@ async function handleAuthorizationCodeGrant(
                 }
             }
 
-            logger.warn({
+            // Character-by-character comparison for first 50 chars
+            const comparison: string[] = [];
+            const maxCompare = Math.min(50, Math.max(stored.length, computed.length));
+            for (let i = 0; i < maxCompare; i++) {
+                const storedChar = stored[i] || 'MISSING';
+                const computedChar = computed[i] || 'MISSING';
+                const match = storedChar === computedChar ? '✓' : '✗';
+                comparison.push(`${i}: ${match} stored='${storedChar}' computed='${computedChar}'`);
+            }
+
+            logger.error({
                 method: codeChallengeMethod,
                 storedLength: stored.length,
                 computedLength: computed.length,
@@ -546,8 +514,35 @@ async function handleAuthorizationCodeGrant(
                 computedAtDiff: diffIndex >= 0 ? computed.substring(Math.max(0, diffIndex - 5), diffIndex + 10) : null,
                 storedChallenge: stored,
                 computedChallenge: computed,
-                codeVerifier: code_verifier, // Log the verifier for debugging
-            }, 'PKCE code challenge verification failed');
+                codeVerifier: code_verifier, // Log the full verifier for debugging
+                codeVerifierLength: code_verifier.length,
+                characterComparison: comparison.slice(0, 20), // First 20 chars comparison
+                correlationId,
+                userId: codeData.userId,
+                timestamp: new Date().toISOString(),
+            }, 'PKCE code challenge verification failed - detailed comparison');
+
+            // ADD: Log what verifier SHOULD have been used
+            logger.error({
+                method: codeChallengeMethod,
+                storedLength: stored.length,
+                computedLength: computed.length,
+                diffIndex,
+                storedAtDiff: diffIndex >= 0 ? stored.substring(Math.max(0, diffIndex - 5), diffIndex + 10) : null,
+                computedAtDiff: diffIndex >= 0 ? computed.substring(Math.max(0, diffIndex - 5), diffIndex + 10) : null,
+                storedChallenge: stored,
+                computedChallenge: computed,
+                codeVerifier: code_verifier, // Log the full verifier for debugging
+                codeVerifierLength: code_verifier.length,
+                characterComparison: comparison.slice(0, 20), // First 20 chars comparison
+                correlationId,
+                userId: codeData.userId,
+                timestamp: new Date().toISOString(),
+                expectedVerifierHint: 'The verifier should hash to: ' + codeData.codeChallenge,
+                receivedVerifierHashesTo: computedChallenge,
+                mismatch: 'Client sent verifier from a different PKCE pair',
+                recommendation: 'Client should match verifier to the challenge stored in the authorization code',
+            }, 'PKCE verification failed - verifier mismatch');
 
             return NextResponse.json(
                 {
@@ -578,6 +573,38 @@ async function handleAuthorizationCodeGrant(
 
         logger.info({ userId: codeData.userId }, 'Authorization code grant successful');
 
+        // Delete pending request after successful token exchange (single-use enforcement)
+        if (pendingRequestId) {
+            try {
+                const serviceRoleClient = createServiceRoleClient();
+                const { error: deleteError } = await serviceRoleClient
+                    .from('oauth_pending_requests')
+                    .delete()
+                    .eq('id', pendingRequestId);
+
+                if (deleteError) {
+                    logger.warn({
+                        deleteError: deleteError.message,
+                        pendingRequestId,
+                        correlationId,
+                    }, 'Failed to delete pending request after successful token exchange');
+                    // Continue anyway - tokens are returned, single-use is enforced by status
+                } else {
+                    logger.info({
+                        pendingRequestId,
+                        correlationId,
+                    }, 'Deleted pending request after successful token exchange (single-use enforcement)');
+                }
+            } catch (error) {
+                logger.warn({
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                    pendingRequestId,
+                    correlationId,
+                }, 'Exception deleting pending request after successful token exchange');
+                // Continue anyway - tokens are returned
+            }
+        }
+
         // Return the Supabase JWT tokens
         return NextResponse.json({
             access_token: codeData.accessToken,
@@ -602,8 +629,7 @@ async function handleAuthorizationCodeGrant(
 
 async function handleRefreshTokenGrant(
     body: Record<string, string>,
-    logger: ReturnType<typeof createRequestLogger>,
-    correlationId: string
+    logger: ReturnType<typeof createRequestLogger>
 ): Promise<NextResponse> {
     const { refresh_token } = body;
 

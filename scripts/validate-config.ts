@@ -162,6 +162,88 @@ async function validateSupabaseConnection(): Promise<ValidationResult> {
     return result;
 }
 
+async function validateOAuthTables(): Promise<ValidationResult> {
+    const result: ValidationResult = { passed: true, errors: [], warnings: [] };
+
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!url || !serviceKey || url.includes('your-') || serviceKey.includes('your-')) {
+        result.warnings.push('Skipping OAuth table verification (credentials not set)');
+        return result;
+    }
+
+    try {
+        // Check oauth_pending_requests table
+        const response = await fetch(`${url}/rest/v1/oauth_pending_requests?select=id&limit=0`, {
+            headers: {
+                apikey: serviceKey,
+                Authorization: `Bearer ${serviceKey}`,
+            },
+        });
+
+        if (response.status === 404) {
+            result.errors.push('oauth_pending_requests table not found');
+            result.errors.push('Run database migrations: pnpm db:migrate');
+            result.passed = false;
+        } else if (!response.ok) {
+            result.warnings.push(
+                `OAuth table check returned status ${response.status}: ${response.statusText}`
+            );
+        } else {
+            // Table exists, verify it has required columns by trying to insert a test record
+            // (we'll delete it immediately or let it expire)
+            const testData = {
+                client_id: 'validation-test',
+                code_challenge: 'test-challenge-validation',
+                code_challenge_method: 'S256',
+                redirect_uri: 'http://localhost:3000/test',
+                expires_at: new Date(Date.now() + 60000).toISOString(), // 1 minute from now
+            };
+
+            const insertResponse = await fetch(`${url}/rest/v1/oauth_pending_requests`, {
+                method: 'POST',
+                headers: {
+                    apikey: serviceKey,
+                    Authorization: `Bearer ${serviceKey}`,
+                    'Content-Type': 'application/json',
+                    Prefer: 'return=minimal',
+                },
+                body: JSON.stringify(testData),
+            });
+
+            if (insertResponse.ok || insertResponse.status === 201) {
+                // Clean up test record
+                const deleteResponse = await fetch(
+                    `${url}/rest/v1/oauth_pending_requests?client_id=eq.validation-test&code_challenge=eq.test-challenge-validation`,
+                    {
+                        method: 'DELETE',
+                        headers: {
+                            apikey: serviceKey,
+                            Authorization: `Bearer ${serviceKey}`,
+                        },
+                    }
+                );
+                // Don't fail if delete fails, it will expire anyway
+                if (deleteResponse.ok) {
+                    // Table structure is valid
+                }
+            } else {
+                const errorText = await insertResponse.text();
+                result.warnings.push(
+                    `OAuth table structure may be incorrect: ${insertResponse.status} - ${errorText.substring(0, 100)}`
+                );
+            }
+        }
+    } catch (error) {
+        result.warnings.push(
+            `Error checking OAuth tables: ${error instanceof Error ? error.message : String(error)}`
+        );
+    }
+
+    return result;
+}
+
 function validateGitHub(): ValidationResult {
     const result: ValidationResult = { passed: true, errors: [], warnings: [] };
 
@@ -268,6 +350,21 @@ async function main() {
         log('');
     }
 
+    // Validate OAuth tables
+    log('🔐 OAuth Tables:');
+    const oauthResult = await validateOAuthTables();
+    if (oauthResult.passed && oauthResult.errors.length === 0) {
+        log('  ✅ OAuth tables exist and are accessible\n', GREEN);
+    } else {
+        if (oauthResult.errors.length > 0) {
+            oauthResult.errors.forEach(e => log(`  ❌ ${e}`, RED));
+        }
+        if (oauthResult.warnings.length > 0) {
+            oauthResult.warnings.forEach(w => log(`  ⚠️  ${w}`, YELLOW));
+        }
+        log('');
+    }
+
     // Validate GitHub
     log('🐙 GitHub Configuration:');
     const githubResult = validateGitHub();
@@ -291,7 +388,7 @@ async function main() {
     // Summary
     const allPassed =
         envResult.passed && fileResult.passed && supabaseResult.passed &&
-        githubResult.passed && vercelResult.passed;
+        oauthResult.passed && githubResult.passed && vercelResult.passed;
 
     if (allPassed && envResult.errors.length === 0 && fileResult.errors.length === 0) {
         log('✅ All configurations validated successfully!', GREEN);
