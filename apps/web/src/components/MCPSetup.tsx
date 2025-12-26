@@ -224,16 +224,16 @@ export function MCPSetup() {
   }
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-sm mb-8">
+    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-8">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
+        className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
       >
         <div className="flex items-center space-x-3">
           <div className="flex-shrink-0">
             {isExpanded ? (
               <svg
-                className="w-5 h-5 text-gray-500"
+                className="w-5 h-5 text-gray-500 dark:text-gray-400"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -247,7 +247,7 @@ export function MCPSetup() {
               </svg>
             ) : (
               <svg
-                className="w-5 h-5 text-gray-500"
+                className="w-5 h-5 text-gray-500 dark:text-gray-400"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -262,8 +262,8 @@ export function MCPSetup() {
             )}
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Set up MCP Integration</h2>
-            <p className="text-sm text-gray-500">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Set up MCP Integration</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               Connect Cursor to ProjectFlow for AI-powered project management
             </p>
           </div>
@@ -288,10 +288,10 @@ export function MCPSetup() {
       </button>
 
       {isExpanded && (
-        <div className="px-6 py-4 border-t border-gray-200 space-y-6">
+        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 space-y-6">
           {/* Introduction */}
           <div>
-            <p className="text-sm text-gray-600 mb-4">
+            <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
               Connect your Cursor IDE to ProjectFlow using the Model Context Protocol (MCP). This
               allows AI assistants in Cursor to create projects, manage tasks, and track your work
               directly from your editor.
@@ -456,7 +456,7 @@ export function MCPSetup() {
                 <div className="w-full border-t border-gray-300"></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Or set up manually (OAuth flow)</span>
+                <span className="px-2 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">Or set up manually (OAuth flow)</span>
               </div>
             </div>
           </div>
@@ -468,10 +468,10 @@ export function MCPSetup() {
                 <span className="text-sm font-semibold text-blue-600">1</span>
               </div>
               <div className="flex-1">
-                <h3 className="text-sm font-semibold text-gray-900 mb-1">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
                   OAuth Authentication Flow
                 </h3>
-                <p className="text-sm text-gray-600 mb-2">
+                <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
                   After clicking &quot;Connect to Cursor&quot;, Cursor will open a browser window for OAuth authentication:
                 </p>
                 <ol className="text-sm text-gray-600 list-decimal list-inside space-y-1 ml-2 mb-2">
@@ -496,8 +496,8 @@ export function MCPSetup() {
                 <span className="text-sm font-semibold text-blue-600">2</span>
               </div>
               <div className="flex-1">
-                <h3 className="text-sm font-semibold text-gray-900 mb-1">Verify Connection</h3>
-                <p className="text-sm text-gray-600 mb-2">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">Verify Connection</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
                   After OAuth authorization completes, Cursor will automatically use the MCP tools. You can test the connection below to verify everything is working.
                 </p>
               </div>
@@ -505,18 +505,18 @@ export function MCPSetup() {
           </div>
 
           {/* Manual Configuration (Alternative) */}
-          <details className="bg-gray-50 rounded-lg p-4">
-            <summary className="text-sm font-semibold text-gray-900 cursor-pointer mb-3">
+          <details className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+            <summary className="text-sm font-semibold text-gray-900 dark:text-white cursor-pointer mb-3">
               Manual Configuration (Alternative)
             </summary>
             <div className="space-y-3">
-              <p className="text-xs text-gray-600">
+              <p className="text-xs text-gray-600 dark:text-gray-300">
                 If you prefer to configure manually, place the configuration in your Cursor settings file:
               </p>
-              <div className="bg-gray-100 rounded-md p-2 font-mono text-xs text-gray-800 break-all">
+              <div className="bg-gray-100 dark:bg-gray-700 rounded-md p-2 font-mono text-xs text-gray-800 dark:text-gray-200 break-all">
                 {getCursorSettingsPath()}
               </div>
-              <p className="text-xs text-gray-600">
+              <p className="text-xs text-gray-600 dark:text-gray-300">
                 Copy the configuration below and merge it into the existing <code className="bg-gray-200 px-1 rounded">mcpServers</code> object:
               </p>
               <div className="flex items-center justify-end">
@@ -664,7 +664,7 @@ export function MCPSetup() {
                     </div>
                   </div>
                 )}
-                <p className="text-xs text-gray-500 mt-2">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                   Click the button above to verify your MCP connection is working correctly.
                 </p>
               </div>

@@ -54,7 +54,7 @@ export function DecisionLog({ projectId, limit = 20 }: DecisionLogProps) {
     return (
       <div className="space-y-4">
         {[...Array(2)].map((_, i) => (
-          <div key={i} className="animate-pulse bg-gray-200 h-32 rounded" />
+          <div key={i} className="animate-pulse bg-gray-200 dark:bg-gray-700 h-32 rounded" />
         ))}
       </div>
     );
@@ -62,8 +62,8 @@ export function DecisionLog({ projectId, limit = 20 }: DecisionLogProps) {
 
   if (error) {
     return (
-      <div className="rounded-md bg-red-50 p-4">
-        <p className="text-sm text-red-700">{error}</p>
+      <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-4">
+        <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
       </div>
     );
   }
@@ -71,8 +71,8 @@ export function DecisionLog({ projectId, limit = 20 }: DecisionLogProps) {
   if (decisions.length === 0) {
     return (
       <div className="text-center py-8">
-        <p className="text-gray-500 text-sm">No decisions recorded yet</p>
-        <p className="text-gray-400 text-xs mt-1">
+        <p className="text-gray-500 dark:text-gray-400 text-sm">No decisions recorded yet</p>
+        <p className="text-gray-400 dark:text-gray-500 text-xs mt-1">
           Decisions capture key architectural and design choices
         </p>
       </div>
@@ -84,17 +84,17 @@ export function DecisionLog({ projectId, limit = 20 }: DecisionLogProps) {
       {decisions.map((decision) => (
         <div
           key={decision.id}
-          className="bg-white p-4 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors"
+          className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
         >
           <div className="mb-3">
-            <h4 className="font-semibold text-gray-900 mb-1">{decision.title}</h4>
-            <span className="text-xs text-gray-400">{formatDate(decision.created_at)}</span>
+            <h4 className="font-semibold text-gray-900 dark:text-white mb-1">{decision.title}</h4>
+            <span className="text-xs text-gray-400 dark:text-gray-500">{formatDate(decision.created_at)}</span>
           </div>
 
           {Array.isArray(decision.options) && decision.options.length > 0 && (
             <div className="mb-3">
-              <p className="text-xs font-semibold text-gray-700 mb-1">Options considered:</p>
-              <ul className="list-disc list-inside text-xs text-gray-600 space-y-1">
+              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Options considered:</p>
+              <ul className="list-disc list-inside text-xs text-gray-600 dark:text-gray-300 space-y-1">
                 {decision.options.map((option: any, index: number) => (
                   <li key={index}>
                     {typeof option === 'string' ? option : JSON.stringify(option)}
@@ -105,15 +105,15 @@ export function DecisionLog({ projectId, limit = 20 }: DecisionLogProps) {
           )}
 
           <div className="mb-3">
-            <p className="text-xs font-semibold text-gray-700 mb-1">Choice:</p>
-            <p className="text-sm text-gray-900 bg-blue-50 px-2 py-1 rounded inline-block">
+            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Choice:</p>
+            <p className="text-sm text-gray-900 dark:text-white bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded inline-block">
               {decision.choice}
             </p>
           </div>
 
           <div>
-            <p className="text-xs font-semibold text-gray-700 mb-1">Rationale:</p>
-            <p className="text-sm text-gray-700 whitespace-pre-wrap">{decision.rationale}</p>
+            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Rationale:</p>
+            <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{decision.rationale}</p>
           </div>
         </div>
       ))}

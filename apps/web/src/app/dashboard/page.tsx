@@ -96,8 +96,8 @@ export default function DashboardPage() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-gray-500">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-gray-500 dark:text-gray-400">Loading...</div>
       </div>
     );
   }
@@ -107,16 +107,16 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600 mt-2">Welcome back! Here are your projects and tasks.</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-2">Welcome back! Here are your projects and tasks.</p>
         </div>
 
         {error && (
-          <div className="rounded-md bg-red-50 p-4 mb-6">
-            <p className="text-sm text-red-700">{error}</p>
+          <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-4 mb-6">
+            <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
           </div>
         )}
 
@@ -125,18 +125,18 @@ export default function DashboardPage() {
 
         {/* Active Task Banner */}
         {selectedProjectId && activeTask && (
-          <div className="mb-6 rounded-lg border-2 border-blue-500 bg-blue-50 p-4">
+          <div className="mb-6 rounded-lg border-2 border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20 p-4">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-semibold text-blue-900 mb-1">Active Task</h3>
-                <p className="text-sm text-blue-800">{activeTask.title}</p>
+                <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-1">Active Task</h3>
+                <p className="text-sm text-blue-800 dark:text-blue-200">{activeTask.title}</p>
                 {(activeTask as Task & { locked_by?: string }).locked_by && (
-                  <p className="text-xs text-blue-600 mt-1">
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
                     Locked by: {(activeTask as Task & { locked_by?: string }).locked_by}
                   </p>
                 )}
               </div>
-              <span className="text-xs font-semibold px-2 py-1 rounded bg-blue-100 text-blue-800">
+              <span className="text-xs font-semibold px-2 py-1 rounded bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200">
                 {activeTask.status === 'in_progress' ? 'In Progress' : 'Locked'}
               </span>
             </div>
@@ -146,7 +146,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Projects Column */}
           <div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Projects</h2>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Projects</h2>
             <ProjectList
               projects={projects}
               selectedProjectId={selectedProjectId}
@@ -159,12 +159,12 @@ export default function DashboardPage() {
           <div className="lg:col-span-2">
             {selectedProjectId ? (
               <div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
                   {projects.find((p) => p.id === selectedProjectId)?.name || 'Project'}
                 </h2>
 
                 {/* Tabs */}
-                <div className="mb-6 border-b border-gray-200">
+                <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
                   <nav className="-mb-px flex space-x-8">
                     {(['tasks', 'events', 'checkpoints', 'decisions'] as DashboardTab[]).map(
                       (tab) => (
@@ -173,8 +173,8 @@ export default function DashboardPage() {
                           onClick={() => setActiveTab(tab)}
                           className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
                             activeTab === tab
-                              ? 'border-blue-500 text-blue-600'
-                              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                              ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
+                              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                           }`}
                         >
                           {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -197,8 +197,8 @@ export default function DashboardPage() {
                 </div>
               </div>
             ) : (
-              <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
-                <p className="text-gray-500">Select a project to view its details</p>
+              <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                <p className="text-gray-500 dark:text-gray-400">Select a project to view its details</p>
               </div>
             )}
           </div>

@@ -119,7 +119,7 @@ export async function implementCreateTask(
 ): Promise<Task> {
   const userId = await getUserFromToken(accessToken);
   const client = createServiceRoleClient();
-  
+
   // Verify project exists and get its user_id
   const { data: project, error: projectError } = await client
     .from('projects')
@@ -292,12 +292,62 @@ export async function implementAppendArtifact(
   accessToken: string,
   params: Record<string, unknown>
 ): Promise<Artifact> {
+  const userId = await getUserFromToken(accessToken);
   const client = createServiceRoleClient();
-  return appendArtifact(client, params.taskId as string, {
-    type: params.type as 'diff' | 'pr' | 'test_report' | 'document' | 'other',
-    ref: params.ref as string,
-    summary: params.summary as string | undefined,
+
+  // Verify task exists and get its project_id
+  const { data: task, error: taskError } = await client
+    .from('tasks')
+    .select('project_id, user_id')
+    .eq('id', params.taskId as string)
+    .single() as any;
+
+  if (taskError || !task) {
+    throw new Error(`Task not found: ${taskError?.message || 'Unknown error'}`);
+  }
+
+  // Verify user owns the task
+  if (task.user_id !== userId) {
+    throw new Error('Unauthorized: You do not own this task');
+  }
+
+  // Insert artifact directly with user_id since we're using service role client
+  const { data: artifact, error: artifactError } = await client
+    .from('artifacts')
+    .insert([{
+      task_id: params.taskId as string,
+      user_id: userId,
+      type: params.type as 'diff' | 'pr' | 'test_report' | 'document' | 'other',
+      ref: (params.ref as string).trim(),
+      summary: params.summary ? (params.summary as string).trim() : null,
+    }] as any)
+    .select()
+    .single() as any;
+
+  if (artifactError) {
+    throw new Error(`Failed to create artifact: ${artifactError.message}`);
+  }
+
+  if (!artifact) {
+    throw new Error('Failed to retrieve created artifact');
+  }
+
+  // Emit ArtifactProduced event
+  await emitEvent({
+    project_id: task.project_id,
+    task_id: params.taskId as string,
+    user_id: userId,
+    event_type: 'ArtifactProduced',
+    payload: {
+      artifact_id: artifact.id,
+      task_id: params.taskId as string,
+      type: params.type as 'diff' | 'pr' | 'test_report' | 'document' | 'other',
+      ref: (params.ref as string).trim(),
+      summary: params.summary ? (params.summary as string).trim() : null,
+    },
   });
+
+  return artifact as Artifact;
 }
 
 /**

@@ -155,7 +155,7 @@ export async function GET(request: NextRequest) {
         // Build OAuth authorize URL with all parameters preserved
         // Use absolute URL to ensure proper redirects
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
-        const oauthAuthorizeUrl = new URL('/oauth/authorize', baseUrl);
+        const oauthAuthorizeUrl = new URL('/api/oauth/authorize', baseUrl);
         if (clientId) oauthAuthorizeUrl.searchParams.set('client_id', clientId);
         if (redirectUri) oauthAuthorizeUrl.searchParams.set('redirect_uri', redirectUri);
         if (state) oauthAuthorizeUrl.searchParams.set('state', state);
@@ -207,7 +207,7 @@ export async function GET(request: NextRequest) {
         // Build OAuth authorize URL with all parameters preserved
         // Use absolute URL to ensure proper redirects
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
-        const oauthAuthorizeUrl = new URL('/oauth/authorize', baseUrl);
+        const oauthAuthorizeUrl = new URL('/api/oauth/authorize', baseUrl);
         if (clientId) oauthAuthorizeUrl.searchParams.set('client_id', clientId);
         if (redirectUri) oauthAuthorizeUrl.searchParams.set('redirect_uri', redirectUri);
         if (state) oauthAuthorizeUrl.searchParams.set('state', state);

@@ -7,12 +7,12 @@ import { vi } from 'vitest';
 
 // Mock Next.js headers
 vi.mock('next/headers', () => ({
-  cookies: vi.fn(() => ({
-    get: vi.fn(),
-    set: vi.fn(),
-    delete: vi.fn(),
-  })),
-  headers: vi.fn(() => new Headers()),
+    cookies: vi.fn(() => ({
+        get: vi.fn(),
+        set: vi.fn(),
+        delete: vi.fn(),
+    })),
+    headers: vi.fn(() => new Headers()),
 }));
 
 // Set test environment variables

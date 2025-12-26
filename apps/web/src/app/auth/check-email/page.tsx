@@ -7,8 +7,8 @@ import { createBrowserClient } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 
 const LoadingFallback = () => (
-  <div className="min-h-screen flex items-center justify-center bg-gray-50">
-    <p className="text-sm text-gray-500">Loading…</p>
+  <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+    <p className="text-sm text-gray-500 dark:text-gray-400">Loading…</p>
   </div>
 );
 
@@ -117,29 +117,29 @@ function CheckEmailContent() {
   const message = getMessage();
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
             {message.title}
           </h2>
         </div>
 
         <div className="mt-8 space-y-6">
           {error && (
-            <div className="rounded-md bg-red-50 p-4">
-              <p className="text-sm text-red-700 whitespace-pre-line">{error}</p>
+            <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-4">
+              <p className="text-sm text-red-700 dark:text-red-400 whitespace-pre-line">{error}</p>
             </div>
           )}
 
           {resendSuccess && (
-            <div className="rounded-md bg-green-50 p-4">
-              <p className="text-sm text-green-700">Email sent! Please check your inbox.</p>
+            <div className="rounded-md bg-green-50 dark:bg-green-900/20 p-4">
+              <p className="text-sm text-green-700 dark:text-green-400">Email sent! Please check your inbox.</p>
             </div>
           )}
 
-          <div className="rounded-md bg-blue-50 p-4">
-            <p className="text-sm text-blue-700">{message.description}</p>
+          <div className="rounded-md bg-blue-50 dark:bg-blue-900/20 p-4">
+            <p className="text-sm text-blue-700 dark:text-blue-400">{message.description}</p>
           </div>
 
           <div className="space-y-4">
@@ -154,14 +154,14 @@ function CheckEmailContent() {
 
             <Link
               href="/auth/login"
-              className="w-full flex justify-center py-2 px-4 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              className="w-full flex justify-center py-2 px-4 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               Back to sign in
             </Link>
           </div>
 
           <div className="text-center">
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
               Didn't receive the email? Check your spam folder or try resending.
             </p>
           </div>
