@@ -16,7 +16,8 @@ import {
   listDecisions,
 } from '@projectflow/core';
 import { resolveUserId } from './auth';
-import type { Project, Task, Artifact, Checkpoint, Event, Decision } from '@projectflow/core';
+import type { Project, Task } from '@projectflow/core';
+import type { Artifact, Checkpoint, Event, Decision } from '@projectflow/db';
 
 /**
  * Resource URI patterns:

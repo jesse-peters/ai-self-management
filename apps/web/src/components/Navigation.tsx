@@ -32,10 +32,32 @@ export function Navigation() {
     <nav className="bg-white dark:bg-gray-900 shadow">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 items-center">
-          <div className="flex items-center">
+          <div className="flex items-center space-x-6">
             <Link href="/dashboard" className="text-lg font-semibold text-gray-900 dark:text-white">
               ProjectFlow
             </Link>
+            {user && (
+              <div className="flex items-center space-x-4">
+                <Link
+                  href="/dashboard"
+                  className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                >
+                  Dashboard
+                </Link>
+                <Link
+                  href="/work-items"
+                  className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                >
+                  Work Items
+                </Link>
+                <Link
+                  href="/settings"
+                  className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                >
+                  Settings
+                </Link>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center space-x-4">

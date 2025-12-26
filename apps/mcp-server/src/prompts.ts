@@ -14,7 +14,7 @@ import { listArtifacts } from '@projectflow/core';
 import { evaluateGates } from '@projectflow/core';
 import { getTaskEvents } from '@projectflow/core';
 import { getProjectEvents } from '@projectflow/core';
-import type { Task, Artifact, GateResult, Event, Checkpoint } from '@projectflow/core';
+import type { Task, Artifact, LegacyGateResult, Event, Checkpoint } from '@projectflow/core';
 
 /**
  * List of all available prompts
@@ -140,10 +140,10 @@ async function getTaskFocusModePrompt(
     : '  (No artifacts yet)';
 
   // Build gate status
-  const passedGates = gateResults.filter((g: GateResult) => g.passed);
-  const failedGates = gateResults.filter((g: GateResult) => !g.passed);
+  const passedGates = gateResults.filter((g: LegacyGateResult) => g.passed);
+  const failedGates = gateResults.filter((g: LegacyGateResult) => !g.passed);
   const gateStatus = gateResults.length > 0
-    ? `\nGate Status:\n  Passed: ${passedGates.length}/${gateResults.length}\n${failedGates.length > 0 ? `  Failed:\n${failedGates.map((g: GateResult) => `    - ${g.gate.type}: ${g.reason || 'Not met'}`).join('\n')}` : ''}`
+    ? `\nGate Status:\n  Passed: ${passedGates.length}/${gateResults.length}\n${failedGates.length > 0 ? `  Failed:\n${failedGates.map((g: LegacyGateResult) => `    - ${g.gate.type}: ${g.reason || 'Not met'}`).join('\n')}` : ''}`
     : '\nGate Status: No gates configured';
 
   const promptText = `# Task Focus Mode: ${task.title}

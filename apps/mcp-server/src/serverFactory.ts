@@ -119,7 +119,28 @@ export function createMCPServer(authProvider?: AuthContextProvider): Server {
             const accessToken = extractAccessToken(extra);
 
             if (!accessToken) {
-                throw new Error('Access token not provided');
+                // Provide more diagnostic information
+                const hasAuthInfo = !!(extra as any)?.authInfo;
+                const hasLegacyToken = !!(extra as any)?.accessToken;
+                const hasEnvToken = !!process.env.MCP_ACCESS_TOKEN;
+                
+                throw new Error(
+                    `Access token not provided. ` +
+                    `Auth sources checked: authInfo=${hasAuthInfo}, legacyToken=${hasLegacyToken}, envToken=${hasEnvToken}. ` +
+                    `Please ensure MCP client is properly authenticated.`
+                );
+            }
+
+            // Check environment variables for better error messages
+            const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+            const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+            
+            if (!supabaseUrl || !supabaseAnonKey) {
+                throw new Error(
+                    `Missing Supabase configuration. ` +
+                    `SUPABASE_URL=${!!supabaseUrl}, SUPABASE_ANON_KEY=${!!supabaseAnonKey}. ` +
+                    `Please set required environment variables.`
+                );
             }
 
             const result = await routeToolCall(toolName, toolParams, accessToken);
@@ -134,6 +155,8 @@ export function createMCPServer(authProvider?: AuthContextProvider): Server {
             };
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            const errorStack = error instanceof Error ? error.stack : undefined;
+            
             return {
                 content: [
                     {
@@ -141,7 +164,8 @@ export function createMCPServer(authProvider?: AuthContextProvider): Server {
                         text: JSON.stringify({
                             code: 'INTERNAL_ERROR',
                             message: errorMessage,
-                        }),
+                            ...(errorStack && { stack: errorStack }),
+                        }, null, 2),
                     },
                 ],
             };

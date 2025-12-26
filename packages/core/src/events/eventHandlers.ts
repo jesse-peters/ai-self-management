@@ -192,23 +192,30 @@ export function initializeEventHandlers(): void {
  * This is the recommended way to emit events in services
  * 
  * @param eventData - Event data to append
+ * @param client - Optional authenticated Supabase client (required for RLS to work)
  * @returns The created event
  */
-export async function emitEvent(eventData: {
-  project_id: string;
-  task_id?: string | null;
-  user_id: string;
-  event_type: EventType;
-  payload: Record<string, any>;
-}): Promise<Event> {
+export async function emitEvent(
+  eventData: {
+    project_id: string;
+    task_id?: string | null;
+    user_id: string;
+    event_type: EventType;
+    payload: Record<string, any>;
+  },
+  client?: any
+): Promise<Event> {
   const { appendEvent } = await import('./eventStore');
-  const event = await appendEvent({
-    project_id: eventData.project_id,
-    task_id: eventData.task_id || null,
-    user_id: eventData.user_id,
-    event_type: eventData.event_type,
-    payload: eventData.payload || {},
-  });
+  const event = await appendEvent(
+    {
+      project_id: eventData.project_id,
+      task_id: eventData.task_id || null,
+      user_id: eventData.user_id,
+      event_type: eventData.event_type,
+      payload: eventData.payload || {},
+    },
+    client
+  );
   
   // Process event handlers asynchronously (don't wait)
   processEvent(event).catch((error) => {

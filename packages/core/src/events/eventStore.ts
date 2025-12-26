@@ -15,9 +15,13 @@ import { validateUUID } from '../validation';
  * Appends an event to the event log
  * 
  * @param event - Event data to append (without id and created_at, which are auto-generated)
+ * @param client - Optional authenticated Supabase client (required for RLS to work)
  * @returns The created event with id and created_at
  */
-export async function appendEvent(event: EventInsert): Promise<Event> {
+export async function appendEvent(
+  event: EventInsert,
+  client?: any
+): Promise<Event> {
   try {
     if (!event.project_id) {
       throw new Error('project_id is required for events');
@@ -35,7 +39,8 @@ export async function appendEvent(event: EventInsert): Promise<Event> {
       validateUUID(event.task_id, 'task_id');
     }
 
-    const supabase = createServerClient();
+    // Use provided authenticated client, or create a new one (for backward compatibility)
+    const supabase = client || createServerClient();
 
     const { data: createdEvent, error } = await (supabase as any)
       .from('events')

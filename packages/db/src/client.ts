@@ -111,17 +111,42 @@ export function createOAuthScopedClient(accessToken: string) {
     throw new Error('Missing SUPABASE_ANON_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable');
   }
 
-  return createClient<Database>(supabaseUrl, supabaseAnonKey, {
-    global: {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
+  // Validate that we're using anon key, not service role key
+  // Service role keys typically start with "eyJ" but have different structure
+  // Anon keys are the correct type for OAuth-scoped clients
+  if (supabaseAnonKey.length < 100) {
+    throw new Error(
+      `Invalid SUPABASE_ANON_KEY: Key appears to be too short or incorrect format. ` +
+      `Expected anon key (starts with eyJ and is ~200+ chars), but got key of length ${supabaseAnonKey.length}. ` +
+      `Make sure you're using the anon/public key, not the service role key.`
+    );
+  }
+
+  try {
+    return createClient<Database>(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
       },
-    },
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-      detectSessionInUrl: false,
-    },
-  });
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false,
+      },
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    if (errorMessage.includes('key') || errorMessage.includes('type')) {
+      throw new Error(
+        `Failed to create Supabase OAuth client: ${errorMessage}. ` +
+        `URL: ${supabaseUrl ? 'set' : 'missing'}, ` +
+        `Anon Key: ${supabaseAnonKey ? `set (length: ${supabaseAnonKey.length})` : 'missing'}, ` +
+        `Access Token: ${accessToken ? `set (length: ${accessToken.length})` : 'missing'}. ` +
+        `Please verify your Supabase configuration.`
+      );
+    }
+    throw error;
+  }
 }
 

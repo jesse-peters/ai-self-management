@@ -60,9 +60,14 @@ export async function verifyAccessToken(
     let payload: jose.JWTPayload | undefined;
     let lastError: Error | null = null;
 
-    // Try HS256 first (most common for Supabase)
-    if (alg === 'HS256' || !alg) {
-      if (debug) console.log('[JWT] Attempting HS256 verification');
+    // Determine which verification method to use based on algorithm
+    // If algorithm is missing, try both methods (HS256 first, then ES256/RS256)
+    const shouldTryHS256 = alg === 'HS256' || !alg;
+    const shouldTryES256RS256 = alg === 'ES256' || alg === 'RS256' || !alg;
+
+    // Try HS256 if algorithm is HS256 or missing
+    if (shouldTryHS256) {
+      if (debug) console.log('[JWT] Attempting HS256 verification', { algorithm: alg || 'missing' });
       try {
         const JWT_SECRET = getJWTSecret();
         const secret = new TextEncoder().encode(JWT_SECRET);
@@ -79,16 +84,28 @@ export async function verifyAccessToken(
         if (debug) console.log('[JWT] HS256 verification succeeded');
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
-        if (debug) console.log('[JWT] HS256 verification failed', { error: lastError.message });
-        // If algorithm is explicitly HS256, don't try other methods
-        if (alg === 'HS256') {
-          throw new Error(`JWT verification failed (HS256): ${lastError.message}`);
+        const errorMsg = lastError.message;
+        
+        // Check for key type mismatch error
+        if (errorMsg.includes('No suitable key') || errorMsg.includes('wrong key type')) {
+          if (debug) console.log('[JWT] HS256 verification failed - key type mismatch, token may be ES256/RS256', { error: errorMsg });
+          // If algorithm was explicitly HS256, this is a real error
+          if (alg === 'HS256') {
+            throw new Error(`JWT verification failed: Token uses HS256 but key type is incompatible. ${errorMsg}`);
+          }
+          // If algorithm was missing, continue to try ES256/RS256
+        } else {
+          if (debug) console.log('[JWT] HS256 verification failed', { error: errorMsg });
+          // If algorithm is explicitly HS256, don't try other methods
+          if (alg === 'HS256') {
+            throw new Error(`JWT verification failed (HS256): ${errorMsg}`);
+          }
         }
       }
     }
 
     // If HS256 failed or algorithm is ES256/RS256, try JWKS
-    if (!payload && (alg === 'ES256' || alg === 'RS256' || !alg)) {
+    if (!payload && shouldTryES256RS256) {
       if (debug) console.log('[JWT] Attempting ES256/RS256 verification', { isDevelopment: process.env.NODE_ENV !== 'production' });
 
       // For ES256/RS256, we need the public key from Supabase
@@ -168,7 +185,21 @@ export async function verifyAccessToken(
               break; // Success, exit loop
             } catch (err) {
               jwksError = err instanceof Error ? err : new Error(String(err));
-              if (debug) console.log('[JWT] JWKS endpoint failed', { jwksUrl, error: jwksError.message });
+              const errorMsg = jwksError.message;
+              if (debug) {
+                console.log('[JWT] JWKS endpoint failed', { 
+                  jwksUrl, 
+                  error: errorMsg,
+                  isKeyTypeError: errorMsg.includes('No suitable key') || errorMsg.includes('wrong key type')
+                });
+              }
+              // If it's a key type error, don't try other URLs (same issue will occur)
+              if (errorMsg.includes('No suitable key') || errorMsg.includes('wrong key type')) {
+                throw new Error(
+                  `JWT verification failed: Token algorithm (${alg}) does not match available keys. ` +
+                  `Token may be signed with a different algorithm than expected. ${errorMsg}`
+                );
+              }
               continue; // Try next URL
             }
           }
@@ -185,7 +216,12 @@ export async function verifyAccessToken(
     }
 
     if (!payload) {
-      throw new Error(`Unsupported JWT algorithm: ${alg || 'unknown'}. Supported algorithms: HS256, ES256, RS256`);
+      const errorContext = lastError ? ` Last error: ${lastError.message}` : '';
+      throw new Error(
+        `JWT verification failed: Unsupported or incompatible algorithm "${alg || 'unknown'}". ` +
+        `Supported algorithms: HS256 (requires SUPABASE_JWT_SECRET), ES256/RS256 (requires JWKS endpoint).` +
+        errorContext
+      );
     }
 
     if (!payload.sub || !payload.role) {

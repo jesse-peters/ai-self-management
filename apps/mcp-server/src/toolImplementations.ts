@@ -6,6 +6,8 @@
 import {
   createProject,
   listProjects,
+  initProject,
+  getProjectStatus,
   createTask,
   listTasks,
   updateTask,
@@ -28,13 +30,37 @@ import {
   startWizard,
   submitWizardStep,
   finishWizard,
+  createWorkItem,
+  listWorkItems,
+  getWorkItem,
+  updateWorkItemStatus,
+  createAgentTask,
+  listAgentTasks,
+  getAgentTask,
+  updateTaskStatus,
+  addDependency,
+  addEvidence,
+  listEvidence,
+  type WorkItemSummary,
+  type AgentTaskWithDetails,
+  type AgentTaskFilters,
+  type GateStatusSummary,
+  type GateConfigInput,
+  type InitResult,
+  type ProjectStatus,
 } from '@projectflow/core';
+// Import server-only gate functions from server module
+import {
+  configureGates,
+  runGate,
+  getGateStatus,
+} from '@projectflow/core/server';
 import type {
   Project,
   Task,
   ProjectContext,
   Artifact,
-  GateResult,
+  LegacyGateResult,
   Checkpoint,
   Decision,
   Outcome,
@@ -49,6 +75,7 @@ import type {
   MemoryRecallResult,
   WizardSession,
 } from '@projectflow/core';
+import type { WorkItem, AgentTask, Evidence, Gate, GateRun } from '@projectflow/db';
 import { createServiceRoleClient, createOAuthScopedClient } from '@projectflow/db';
 import { verifyAccessToken } from '@projectflow/core';
 
@@ -73,6 +100,46 @@ async function getUserFromToken(accessToken: string): Promise<string> {
   } catch (error) {
     throw new Error(`Failed to get user from token: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
+}
+
+/**
+ * Implements pm.init tool
+ * Quick project bootstrap with sensible defaults
+ */
+export async function implementInit(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<InitResult> {
+  const userId = await getUserFromToken(accessToken);
+  const client = createOAuthScopedClient(accessToken);
+
+  const result = await initProject(client, {
+    name: params.name as string,
+    description: params.description as string | undefined,
+    skipGates: params.skipGates as boolean | undefined,
+  });
+
+  return result;
+}
+
+/**
+ * Implements pm.status tool
+ * Get comprehensive project status
+ */
+export async function implementStatus(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<ProjectStatus> {
+  const userId = await getUserFromToken(accessToken);
+  const client = createOAuthScopedClient(accessToken);
+
+  const result = await getProjectStatus(
+    client,
+    userId,
+    params.projectId as string
+  );
+
+  return result;
 }
 
 /**
@@ -372,7 +439,7 @@ export async function implementAppendArtifact(
 export async function implementEvaluateGates(
   accessToken: string,
   params: Record<string, unknown>
-): Promise<GateResult[]> {
+): Promise<LegacyGateResult[]> {
   const client = createServiceRoleClient();
   return evaluateGates(client, params.taskId as string);
 }
@@ -564,5 +631,257 @@ export async function implementWizardFinish(
   const sessionId = params.sessionId as string;
 
   return finishWizard(client, sessionId);
+}
+
+// Work Items
+
+/**
+ * Implements pm.work_item.create tool
+ */
+export async function implementWorkItemCreate(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<WorkItem> {
+  const userId = await getUserFromToken(accessToken);
+  const client = createOAuthScopedClient(accessToken);
+
+  return createWorkItem(client, params.projectId as string, {
+    title: params.title as string,
+    description: params.description ? (params.description as string) : null,
+    external_url: params.externalUrl ? (params.externalUrl as string) : null,
+    status: 'open',
+  });
+}
+
+/**
+ * Implements pm.work_item.list tool
+ */
+export async function implementWorkItemList(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<WorkItem[]> {
+  const userId = await getUserFromToken(accessToken);
+  const client = createOAuthScopedClient(accessToken);
+
+  const filters: any = {};
+  if (params.status) {
+    filters.status = params.status as 'open' | 'in_progress' | 'done';
+  }
+
+  return listWorkItems(client, params.projectId as string, filters);
+}
+
+/**
+ * Implements pm.work_item.get tool
+ */
+export async function implementWorkItemGet(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<WorkItemSummary> {
+  const userId = await getUserFromToken(accessToken);
+  const client = createOAuthScopedClient(accessToken);
+
+  return getWorkItem(client, params.workItemId as string);
+}
+
+/**
+ * Implements pm.work_item.set_status tool
+ */
+export async function implementWorkItemSetStatus(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<WorkItem> {
+  const userId = await getUserFromToken(accessToken);
+  const client = createOAuthScopedClient(accessToken);
+
+  return updateWorkItemStatus(
+    client,
+    params.workItemId as string,
+    params.status as 'open' | 'in_progress' | 'done'
+  );
+}
+
+// Agent Tasks
+
+/**
+ * Implements pm.task.create tool
+ */
+export async function implementAgentTaskCreate(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<AgentTask> {
+  const userId = await getUserFromToken(accessToken);
+  const client = createOAuthScopedClient(accessToken);
+
+  return createAgentTask(client, params.projectId as string, {
+    work_item_id: params.workItemId ? (params.workItemId as string) : null,
+    type: params.type as 'research' | 'implement' | 'verify' | 'docs' | 'cleanup',
+    title: params.title as string,
+    goal: params.goal as string,
+    context: params.context ? (params.context as string) : null,
+    inputs: null,
+    output_expectation: null,
+    verification: params.verification ? (params.verification as string) : null,
+    timebox_minutes: params.timeboxMinutes as number | undefined || 15,
+    depends_on_ids: params.dependsOnIds as string[] | undefined || [],
+    status: 'ready',
+    risk: 'low',
+  });
+}
+
+/**
+ * Implements pm.task.list tool
+ */
+export async function implementAgentTaskList(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<AgentTask[]> {
+  const userId = await getUserFromToken(accessToken);
+  const client = createOAuthScopedClient(accessToken);
+
+  const filters: AgentTaskFilters = {};
+  if (params.workItemId) filters.workItemId = params.workItemId as string;
+  if (params.status) filters.status = params.status as any;
+  if (params.type) filters.type = params.type as any;
+
+  return listAgentTasks(client, params.projectId as string, filters);
+}
+
+/**
+ * Implements pm.task.get tool
+ */
+export async function implementAgentTaskGet(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<AgentTaskWithDetails> {
+  const userId = await getUserFromToken(accessToken);
+  const client = createOAuthScopedClient(accessToken);
+
+  return getAgentTask(client, params.taskId as string);
+}
+
+/**
+ * Implements pm.task.set_status tool
+ */
+export async function implementAgentTaskSetStatus(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<AgentTask> {
+  const userId = await getUserFromToken(accessToken);
+  const client = createOAuthScopedClient(accessToken);
+
+  return updateTaskStatus(
+    client,
+    params.taskId as string,
+    params.status as 'ready' | 'doing' | 'blocked' | 'review' | 'done',
+    params.blockedReason as string | undefined
+  );
+}
+
+/**
+ * Implements pm.task.add_dependency tool
+ */
+export async function implementAgentTaskAddDependency(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<AgentTask> {
+  const userId = await getUserFromToken(accessToken);
+  const client = createOAuthScopedClient(accessToken);
+
+  return addDependency(
+    client,
+    params.taskId as string,
+    params.dependsOnTaskId as string
+  );
+}
+
+// Evidence
+
+/**
+ * Implements pm.evidence.add tool
+ */
+export async function implementEvidenceAdd(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<Evidence> {
+  const userId = await getUserFromToken(accessToken);
+
+  return addEvidence(userId, params.projectId as string, {
+    task_id: params.taskId as string | undefined,
+    work_item_id: params.workItemId as string | undefined,
+    type: params.type as 'note' | 'link' | 'log' | 'diff',
+    content: params.content as string,
+    created_by: 'agent',
+  });
+}
+
+/**
+ * Implements pm.evidence.list tool
+ */
+export async function implementEvidenceList(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<Evidence[]> {
+  const userId = await getUserFromToken(accessToken);
+
+  return listEvidence(userId, params.projectId as string, {
+    task_id: params.taskId as string | undefined,
+    work_item_id: params.workItemId as string | undefined,
+  });
+}
+
+// Gates
+
+/**
+ * Implements pm.gate.configure tool
+ */
+export async function implementGateConfigure(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<Gate[]> {
+  const userId = await getUserFromToken(accessToken);
+
+  return configureGates(
+    userId,
+    params.projectId as string,
+    params.gates as any[]
+  );
+}
+
+/**
+ * Implements pm.gate.run tool
+ */
+export async function implementGateRun(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<GateRun> {
+  const userId = await getUserFromToken(accessToken);
+
+  return runGate(
+    userId,
+    params.projectId as string,
+    params.gateName as string,
+    {
+      task_id: params.taskId as string | undefined,
+      work_item_id: params.workItemId as string | undefined,
+      cwd: params.cwd as string | undefined,
+    }
+  );
+}
+
+/**
+ * Implements pm.gate.status tool
+ */
+export async function implementGateStatus(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<GateStatusSummary[]> {
+  const userId = await getUserFromToken(accessToken);
+
+  return getGateStatus(
+    userId,
+    params.projectId as string,
+    params.workItemId as string | undefined
+  );
 }
 

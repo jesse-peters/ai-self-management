@@ -131,6 +131,79 @@ export interface ScopeAssertedPayload {
 }
 
 /**
+ * MVP Event Payloads
+ */
+
+export interface WorkItemCreatedPayload {
+  work_item_id: string;
+  title: string;
+  description?: string | null;
+  external_url?: string | null;
+  status: string;
+}
+
+export interface WorkItemStatusChangedPayload {
+  work_item_id: string;
+  old_status: string;
+  new_status: string;
+}
+
+export interface AgentTaskCreatedPayload {
+  task_id: string;
+  work_item_id?: string | null;
+  type: string;
+  title: string;
+  goal: string;
+  status: string;
+  depends_on_ids?: string[];
+}
+
+export interface AgentTaskStartedPayload {
+  task_id: string;
+  old_status: string;
+  new_status: string;
+  locked_at: string;
+}
+
+export interface AgentTaskBlockedPayload {
+  task_id: string;
+  old_status: string;
+  new_status: string;
+  reason: string;
+}
+
+export interface AgentTaskCompletedPayload {
+  task_id: string;
+  old_status: string;
+  new_status: string;
+}
+
+export interface EvidenceAddedPayload {
+  evidence_id?: string;
+  task_id?: string | null;
+  work_item_id?: string | null;
+  type: string;
+  content: string;
+  created_by: string;
+}
+
+export interface GateConfiguredPayload {
+  gate_id: string;
+  name: string;
+  is_required: boolean;
+  runner_mode: string;
+}
+
+export interface GateExecutedPayload {
+  gate_run_id: string;
+  gate_id: string;
+  work_item_id?: string | null;
+  task_id?: string | null;
+  status: string;
+  exit_code?: number | null;
+}
+
+/**
  * Type-safe event factory functions
  */
 export type EventPayloadMap = {
@@ -148,6 +221,15 @@ export type EventPayloadMap = {
   ConstraintCreated: ConstraintCreatedPayload;
   ConstraintDeleted: ConstraintDeletedPayload;
   ScopeAsserted: ScopeAssertedPayload;
+  WorkItemCreated: WorkItemCreatedPayload;
+  WorkItemStatusChanged: WorkItemStatusChangedPayload;
+  AgentTaskCreated: AgentTaskCreatedPayload;
+  AgentTaskStarted: AgentTaskStartedPayload;
+  AgentTaskBlocked: AgentTaskBlockedPayload;
+  AgentTaskCompleted: AgentTaskCompletedPayload;
+  EvidenceAdded: EvidenceAddedPayload;
+  GateConfigured: GateConfiguredPayload;
+  GateExecuted: GateExecutedPayload;
 };
 
 /**

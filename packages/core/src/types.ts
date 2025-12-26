@@ -30,6 +30,22 @@ export type {
   ConstraintUpdate,
   OutcomeInsert,
   OutcomeUpdate,
+  // MVP types
+  WorkItem,
+  WorkItemInsert,
+  WorkItemUpdate,
+  AgentTask,
+  AgentTaskInsert,
+  AgentTaskUpdate,
+  Evidence,
+  EvidenceInsert,
+  EvidenceUpdate,
+  Gate as GateConfig,
+  GateInsert,
+  GateUpdate,
+  GateRun,
+  GateRunInsert,
+  GateRunUpdate,
 } from '@projectflow/db';
 
 /**
@@ -59,7 +75,16 @@ export type EventType =
   | 'OutcomeRecorded'
   | 'ConstraintCreated'
   | 'ConstraintDeleted'
-  | 'ScopeAsserted';
+  | 'ScopeAsserted'
+  | 'WorkItemCreated'
+  | 'WorkItemStatusChanged'
+  | 'AgentTaskCreated'
+  | 'AgentTaskStarted'
+  | 'AgentTaskBlocked'
+  | 'AgentTaskCompleted'
+  | 'EvidenceAdded'
+  | 'GateConfigured'
+  | 'GateExecuted';
 
 /**
  * Artifact type enum
@@ -113,19 +138,21 @@ export interface ScopeResult {
 }
 
 /**
- * Gate configuration
+ * Legacy gate configuration (deprecated - use new Gates service)
+ * @deprecated Use the new Gates service with database-backed gates
  */
-export interface Gate {
+export interface LegacyGate {
   type: 'has_tests' | 'has_docs' | 'has_artifacts' | 'acceptance_met' | 'custom';
   config?: Record<string, any>;
 }
 
 /**
- * Gate evaluation result
+ * Legacy gate evaluation result (deprecated - use new Gates service)
+ * @deprecated Use the new Gates service with database-backed gates
  */
-export interface GateResult {
+export interface LegacyGateResult {
   passed: boolean;
-  gate: Gate;
+  gate: LegacyGate;
   reason?: string;
   missingRequirements?: string[];
 }

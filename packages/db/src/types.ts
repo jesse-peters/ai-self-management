@@ -103,6 +103,99 @@ export type ProjectSpec = {
 };
 
 /**
+ * Represents a work item (external ticket reference)
+ * Type alias for the manual type definition
+ */
+export type WorkItem = {
+  id: string;
+  project_id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  external_url: string | null;
+  status: 'open' | 'in_progress' | 'done';
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * Represents an agent task (micro work packet)
+ * Type alias for the manual type definition
+ */
+export type AgentTask = {
+  id: string;
+  project_id: string;
+  work_item_id: string | null;
+  user_id: string;
+  type: 'research' | 'implement' | 'verify' | 'docs' | 'cleanup';
+  title: string;
+  goal: string;
+  context: string | null;
+  inputs: string | null;
+  output_expectation: string | null;
+  verification: string | null;
+  status: 'ready' | 'doing' | 'blocked' | 'review' | 'done';
+  depends_on_ids: string[];
+  risk: 'low' | 'medium' | 'high';
+  timebox_minutes: number;
+  blocked_reason: string | null;
+  locked_at: string | null;
+  locked_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * Represents evidence attached to tasks or work items
+ * Type alias for the manual type definition
+ */
+export type Evidence = {
+  id: string;
+  project_id: string;
+  work_item_id: string | null;
+  task_id: string | null;
+  user_id: string;
+  type: 'note' | 'link' | 'log' | 'diff';
+  content: string;
+  created_by: 'agent' | 'human';
+  created_at: string;
+};
+
+/**
+ * Represents a gate (verification configuration)
+ * Type alias for the manual type definition
+ */
+export type Gate = {
+  id: string;
+  project_id: string;
+  user_id: string;
+  name: string;
+  is_required: boolean;
+  runner_mode: 'manual' | 'command';
+  command: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * Represents a gate run (execution result)
+ * Type alias for the manual type definition
+ */
+export type GateRun = {
+  id: string;
+  project_id: string;
+  gate_id: string;
+  work_item_id: string | null;
+  task_id: string | null;
+  user_id: string;
+  status: 'passing' | 'failing';
+  stdout: string | null;
+  stderr: string | null;
+  exit_code: number | null;
+  created_at: string;
+};
+
+/**
  * Represents the shape of data when inserting a new project
  */
 export type ProjectInsert = Omit<
@@ -239,3 +332,53 @@ export type ProjectSpecInsert = Omit<
  * Represents the shape of data when updating a project spec
  */
 export type ProjectSpecUpdate = Partial<ProjectSpecInsert>;
+
+/**
+ * Represents the shape of data when inserting a new work item
+ */
+export type WorkItemInsert = Omit<WorkItem, 'id' | 'user_id' | 'created_at' | 'updated_at'>;
+
+/**
+ * Represents the shape of data when updating a work item
+ */
+export type WorkItemUpdate = Partial<WorkItemInsert>;
+
+/**
+ * Represents the shape of data when inserting a new agent task
+ */
+export type AgentTaskInsert = Omit<AgentTask, 'id' | 'user_id' | 'created_at' | 'updated_at'>;
+
+/**
+ * Represents the shape of data when updating an agent task
+ */
+export type AgentTaskUpdate = Partial<AgentTaskInsert>;
+
+/**
+ * Represents the shape of data when inserting new evidence
+ */
+export type EvidenceInsert = Omit<Evidence, 'id' | 'user_id' | 'created_at'>;
+
+/**
+ * Represents the shape of data when updating evidence
+ */
+export type EvidenceUpdate = Partial<Omit<Evidence, 'id' | 'user_id' | 'created_at'>>;
+
+/**
+ * Represents the shape of data when inserting a new gate
+ */
+export type GateInsert = Omit<Gate, 'id' | 'user_id' | 'created_at' | 'updated_at'>;
+
+/**
+ * Represents the shape of data when updating a gate
+ */
+export type GateUpdate = Partial<GateInsert>;
+
+/**
+ * Represents the shape of data when inserting a new gate run
+ */
+export type GateRunInsert = Omit<GateRun, 'id' | 'user_id' | 'created_at'>;
+
+/**
+ * Represents the shape of data when updating a gate run
+ */
+export type GateRunUpdate = Partial<Omit<GateRun, 'id' | 'user_id' | 'created_at'>>;

@@ -6,7 +6,7 @@
  */
 
 import type { Database } from '@projectflow/db';
-import type { Gate, GateResult, ProjectRules } from '../types';
+import type { LegacyGate, LegacyGateResult, ProjectRules } from '../types';
 import { listArtifacts } from '../services/artifacts';
 import { getTask } from '../services/tasks';
 import { getProject } from '../services/projects';
@@ -25,8 +25,8 @@ type SupabaseClient<T = any> = any;
 export async function evaluateGates(
   client: SupabaseClient<Database>,
   taskId: string,
-  gates?: Gate[]
-): Promise<GateResult[]> {
+  gates?: LegacyGate[]
+): Promise<LegacyGateResult[]> {
   // Get task to access acceptance criteria and other metadata
   const task = await getTask(client, taskId);
   const taskData = task as any;
@@ -49,7 +49,7 @@ export async function evaluateGates(
     }
   }
 
-  const results: GateResult[] = [];
+  const results: LegacyGateResult[] = [];
 
   // Get artifacts for the task
   const artifacts = await listArtifacts(client, taskId);
@@ -74,8 +74,8 @@ export async function evaluateGates(
  * @param gateStrings - Array of gate string definitions
  * @returns Array of Gate objects
  */
-function parseGatesFromStrings(gateStrings: string[]): Gate[] {
-  const gates: Gate[] = [];
+function parseGatesFromStrings(gateStrings: string[]): LegacyGate[] {
+  const gates: LegacyGate[] = [];
 
   for (const gateStr of gateStrings) {
     const [type, configStr] = gateStr.split(':');
@@ -85,8 +85,8 @@ function parseGatesFromStrings(gateStrings: string[]): Gate[] {
       continue;
     }
 
-    const gate: Gate = {
-      type: type as Gate['type'],
+    const gate: LegacyGate = {
+      type: type as LegacyGate['type'],
     };
 
     // Parse config if present (e.g., "has_artifacts:minCount=2")
@@ -115,7 +115,7 @@ function parseGatesFromStrings(gateStrings: string[]): Gate[] {
 /**
  * Validates that a gate type string is valid
  */
-function isValidGateType(type: string): type is Gate['type'] {
+function isValidGateType(type: string): type is LegacyGate['type'] {
   return ['has_tests', 'has_docs', 'has_artifacts', 'acceptance_met', 'custom'].includes(type);
 }
 
@@ -123,10 +123,10 @@ function isValidGateType(type: string): type is Gate['type'] {
  * Evaluates a single gate
  */
 async function evaluateGate(
-  gate: Gate,
+  gate: LegacyGate,
   task: any,
   artifacts: any[]
-): Promise<GateResult> {
+): Promise<LegacyGateResult> {
   switch (gate.type) {
     case 'has_tests': {
       const testArtifacts = artifacts.filter(a => a.type === 'test_report');

@@ -38,6 +38,22 @@ export type {
   OAuthPendingRequestInsert,
   OAuthPendingRequestUpdate,
   Database,
+  // MVP types
+  WorkItem,
+  WorkItemInsert,
+  WorkItemUpdate,
+  AgentTask,
+  AgentTaskInsert,
+  AgentTaskUpdate,
+  Evidence,
+  EvidenceInsert,
+  EvidenceUpdate,
+  Gate,
+  GateInsert,
+  GateUpdate,
+  GateRun,
+  GateRunInsert,
+  GateRunUpdate,
 } from './types';
 
 // Export client functions

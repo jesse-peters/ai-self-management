@@ -6,15 +6,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { createBrowserClient } from '@/lib/supabaseClient';
 import { ProjectList } from '@/components/ProjectList';
 import { TaskList } from '@/components/TaskList';
-import { MCPSetup } from '@/components/MCPSetup';
 import { EventTimeline } from '@/components/EventTimeline';
-import { CheckpointList } from '@/components/CheckpointList';
-import { DecisionLog } from '@/components/DecisionLog';
-import { ConstraintList } from '@/components/ConstraintList';
-import { OutcomeList } from '@/components/OutcomeList';
+import { GatePanel } from '@/components/GatePanel';
 import { listProjects, listTasks, type Project, type Task } from '@projectflow/core';
 
-type DashboardTab = 'tasks' | 'events' | 'checkpoints' | 'decisions' | 'outcomes' | 'constraints';
+type DashboardTab = 'tasks' | 'gates' | 'events';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -122,9 +118,6 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* MCP Setup Section */}
-        <MCPSetup />
-
         {/* Active Task Banner */}
         {selectedProjectId && activeTask && (
           <div className="mb-6 rounded-lg border-2 border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20 p-4">
@@ -168,21 +161,19 @@ export default function DashboardPage() {
                 {/* Tabs */}
                 <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
                   <nav className="-mb-px flex space-x-8">
-                    {(['tasks', 'events', 'checkpoints', 'decisions', 'outcomes', 'constraints'] as DashboardTab[]).map(
-                      (tab) => (
-                        <button
-                          key={tab}
-                          onClick={() => setActiveTab(tab)}
-                          className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                            activeTab === tab
-                              ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
-                              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-                          }`}
-                        >
-                          {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                        </button>
-                      )
-                    )}
+                    {(['tasks', 'gates', 'events'] as DashboardTab[]).map((tab) => (
+                      <button
+                        key={tab}
+                        onClick={() => setActiveTab(tab)}
+                        className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                          activeTab === tab
+                            ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
+                            : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+                        }`}
+                      >
+                        {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                      </button>
+                    ))}
                   </nav>
                 </div>
 
@@ -191,13 +182,8 @@ export default function DashboardPage() {
                   {activeTab === 'tasks' && (
                     <TaskList tasks={tasks} isLoading={isLoadingTasks} projectId={selectedProjectId} />
                   )}
+                  {activeTab === 'gates' && <GatePanel projectId={selectedProjectId} />}
                   {activeTab === 'events' && <EventTimeline projectId={selectedProjectId} />}
-                  {activeTab === 'checkpoints' && (
-                    <CheckpointList projectId={selectedProjectId} />
-                  )}
-                  {activeTab === 'decisions' && <DecisionLog projectId={selectedProjectId} />}
-                  {activeTab === 'outcomes' && <OutcomeList projectId={selectedProjectId} />}
-                  {activeTab === 'constraints' && <ConstraintList projectId={selectedProjectId} />}
                 </div>
               </div>
             ) : (

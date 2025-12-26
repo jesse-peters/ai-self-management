@@ -4,6 +4,8 @@
  */
 
 export { createProject, listProjects, getProject } from './projects';
+export { initProject, type InitResult, type InitOptions } from './init';
+export { getProjectStatus, type ProjectStatus } from './status';
 export { createTask, listTasks, updateTask, getTask } from './tasks';
 export { saveSessionContext, getLatestSession, getProjectContext } from './sessions';
 export { pickNextTask, startTask, blockTask, completeTask } from './taskLifecycle';
@@ -56,5 +58,37 @@ export {
   getProjectSpec,
   type WizardSession,
 } from './wizard';
-
-
+export {
+  createWorkItem,
+  listWorkItems,
+  getWorkItem,
+  updateWorkItemStatus,
+  updateWorkItem,
+  type WorkItemSummary,
+} from './workItems';
+export {
+  createAgentTask,
+  listAgentTasks,
+  getAgentTask,
+  updateTaskStatus,
+  updateAgentTask,
+  addDependency,
+  type AgentTaskFilters,
+  type AgentTaskWithDetails,
+} from './agentTasks';
+export {
+  addEvidence,
+  listEvidence,
+  getEvidenceCount,
+  getEvidence,
+  type EvidenceType,
+  type EvidenceCreatedBy,
+} from './evidence';
+// Gates exports moved to server.ts (server-only) to avoid importing Node.js modules in browser
+// Import types from separate type-only file (safe for client-side)
+export type {
+  GateRunnerMode,
+  GateRunStatus,
+  GateConfigInput,
+  GateStatusSummary,
+} from './gatesTypes';

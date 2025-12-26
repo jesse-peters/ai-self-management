@@ -35,12 +35,28 @@ export type {
   TaskPriority,
   TaskFilters,
   ProjectContext,
-  Gate,
-  GateResult,
+  LegacyGate,
+  LegacyGateResult,
   ChangesetManifest,
   ScopeResult,
   TaskConstraints,
   ProjectRules,
+  // MVP types
+  WorkItem,
+  WorkItemInsert,
+  WorkItemUpdate,
+  AgentTask,
+  AgentTaskInsert,
+  AgentTaskUpdate,
+  Evidence,
+  EvidenceInsert,
+  EvidenceUpdate,
+  GateConfig,
+  GateInsert,
+  GateUpdate,
+  GateRun,
+  GateRunInsert,
+  GateRunUpdate,
 } from './types';
 
 // Export services
@@ -48,6 +64,8 @@ export {
   createProject,
   listProjects,
   getProject,
+  initProject,
+  getProjectStatus,
   createTask,
   listTasks,
   updateTask,
@@ -93,10 +111,32 @@ export {
   cancelWizard,
   getWizardSession,
   getProjectSpec,
+  // Work Items
+  createWorkItem,
+  listWorkItems,
+  getWorkItem,
+  updateWorkItemStatus,
+  updateWorkItem,
+  // Agent Tasks
+  createAgentTask,
+  listAgentTasks,
+  getAgentTask,
+  updateTaskStatus,
+  updateAgentTask,
+  addDependency,
+  // Evidence
+  addEvidence,
+  listEvidence,
+  getEvidenceCount,
+  getEvidence,
+  // Gates - Note: Server-only functions moved to '@projectflow/core/server'
+  // For functions that execute commands (like runGate), import from '@projectflow/core/server'
 } from './services';
 
 // Export task lifecycle types
 export type { TaskPickingStrategy } from './services';
+export type { InitResult, InitOptions } from './services';
+export type { ProjectStatus } from './services';
 
 // Export constraint types
 export type {
@@ -124,6 +164,34 @@ export type {
 export type {
   WizardSession,
 } from './services';
+
+// Export work item types
+export type {
+  WorkItemSummary,
+} from './services';
+
+// Export agent task types
+export type {
+  AgentTaskFilters,
+  AgentTaskWithDetails,
+} from './services';
+
+// Export evidence types
+export type {
+  EvidenceType,
+  EvidenceCreatedBy,
+} from './services';
+
+// Export gates types (types are safe to import in browser)
+export type {
+  GateRunnerMode,
+  GateRunStatus,
+  GateConfigInput,
+  GateStatusSummary,
+} from './services';
+
+// Note: Gate execution functions (configureGates, runGate, etc.) are server-only
+// Import from '@projectflow/core/server' if you need them on the server-side
 
 // Export JWT types and functions
 export {
@@ -168,6 +236,15 @@ export {
   type ConstraintCreatedPayload,
   type ConstraintDeletedPayload,
   type ScopeAssertedPayload,
+  type WorkItemCreatedPayload,
+  type WorkItemStatusChangedPayload,
+  type AgentTaskCreatedPayload,
+  type AgentTaskStartedPayload,
+  type AgentTaskBlockedPayload,
+  type AgentTaskCompletedPayload,
+  type EvidenceAddedPayload,
+  type GateConfiguredPayload,
+  type GateExecutedPayload,
 } from './events';
 
 // Export gate evaluator

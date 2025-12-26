@@ -12,7 +12,7 @@
  */
 
 import type { Project, ProjectInsert, Database } from '@projectflow/db';
-import { NotFoundError, mapSupabaseError } from '../errors';
+import { NotFoundError, ValidationError, mapSupabaseError } from '../errors';
 import { validateProjectData } from '../validation';
 import { emitEvent } from '../events';
 
@@ -134,6 +134,12 @@ export async function getProject(
   projectId: string
 ): Promise<Project> {
   try {
+    // First verify the user is authenticated
+    const { data: { user }, error: authError } = await client.auth.getUser();
+    if (authError || !user) {
+      throw new ValidationError('User authentication required');
+    }
+
     const { data: project, error } = await client
       .from('projects')
       .select('*')
@@ -141,6 +147,10 @@ export async function getProject(
       .single();
 
     if (error) {
+      // Handle specific Supabase errors
+      if (error.code === 'PGRST116') {
+        throw new NotFoundError('Project not found');
+      }
       throw mapSupabaseError(error);
     }
 
