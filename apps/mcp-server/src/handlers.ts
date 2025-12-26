@@ -5,6 +5,8 @@
 
 import { resolveUserId } from './auth';
 import { mapErrorToMCP, MCPErrorResponse } from './errors';
+import * as Sentry from '@sentry/node';
+import { verifyAccessToken } from '@projectflow/core';
 import {
   implementInit,
   implementStatus,
@@ -18,6 +20,24 @@ import {
   implementCreateConstraint,
   implementEvaluateConstraints,
   implementEvidenceAdd,
+  implementCreateProject,
+  implementListProjects,
+  implementCreateTask,
+  implementListTasks,
+  implementUpdateTask,
+  implementGetContext,
+  implementPickNextTask,
+  implementStartTask,
+  implementBlockTask,
+  implementAppendArtifact,
+  implementEvaluateGates,
+  implementCompleteTask,
+  implementCreateCheckpoint,
+  implementListConstraints,
+  implementAssertInScope,
+  implementWizardStart,
+  implementWizardStep,
+  implementWizardFinish,
 } from './toolImplementations';
 
 export interface ToolCallResult {
@@ -47,6 +67,7 @@ export async function handleInit(
       ],
     };
   } catch (error) {
+    // Context already set in routeToolCall
     const mcpError = mapErrorToMCP(error);
     return {
       content: [
@@ -78,6 +99,7 @@ export async function handleStatus(
       ],
     };
   } catch (error) {
+    // Context already set in routeToolCall
     const mcpError = mapErrorToMCP(error);
     return {
       content: [
@@ -109,6 +131,7 @@ export async function handleTaskCreate(
       ],
     };
   } catch (error) {
+    // Context already set in routeToolCall
     const mcpError = mapErrorToMCP(error);
     return {
       content: [
@@ -140,6 +163,7 @@ export async function handleTaskSetStatus(
       ],
     };
   } catch (error) {
+    // Context already set in routeToolCall
     const mcpError = mapErrorToMCP(error);
     return {
       content: [
@@ -171,6 +195,7 @@ export async function handleMemoryRecall(
       ],
     };
   } catch (error) {
+    // Context already set in routeToolCall
     const mcpError = mapErrorToMCP(error);
     return {
       content: [
@@ -185,7 +210,263 @@ export async function handleMemoryRecall(
 }
 
 /**
- * Handles record_decision tool calls
+ * Handles pm.get_context tool calls (renamed from get_project_context)
+ */
+export async function handleGetContext(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const context = await implementGetContext(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(context, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    // Context already set in routeToolCall
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.pick_next_task tool calls
+ */
+export async function handlePickNextTask(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const task = await implementPickNextTask(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(task, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    // Context already set in routeToolCall
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.start_task tool calls
+ */
+export async function handleStartTask(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const task = await implementStartTask(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(task, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    // Context already set in routeToolCall
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.block_task tool calls
+ */
+export async function handleBlockTask(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const task = await implementBlockTask(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(task, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    // Context already set in routeToolCall
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.append_artifact tool calls
+ */
+export async function handleAppendArtifact(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const artifact = await implementAppendArtifact(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(artifact, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    // Context already set in routeToolCall
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.evaluate_gates tool calls
+ */
+export async function handleEvaluateGates(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const results = await implementEvaluateGates(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(results, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    // Context already set in routeToolCall
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.complete_task tool calls
+ */
+export async function handleCompleteTask(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const task = await implementCompleteTask(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(task, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    // Context already set in routeToolCall
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.create_checkpoint tool calls
+ */
+export async function handleCreateCheckpoint(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const checkpoint = await implementCreateCheckpoint(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(checkpoint, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    // Context already set in routeToolCall
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.record_decision tool calls
  */
 export async function handleRecordDecision(
   params: Record<string, unknown>,
@@ -202,6 +483,7 @@ export async function handleRecordDecision(
       ],
     };
   } catch (error) {
+    // Context already set in routeToolCall
     const mcpError = mapErrorToMCP(error);
     return {
       content: [
@@ -227,12 +509,110 @@ export async function handleRecordOutcome(
     return {
       content: [
         {
-          type: 'text' as const,
+          type: 'text',
           text: JSON.stringify(result, null, 2),
         },
       ],
     };
   } catch (error) {
+    // Context already set in routeToolCall
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+
+/**
+ * Handles pm.create_constraint tool calls
+ */
+export async function handleCreateConstraint(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const constraint = await implementCreateConstraint(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(constraint, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    // Context already set in routeToolCall
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.list_constraints tool calls
+ */
+export async function handleListConstraints(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const constraints = await implementListConstraints(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(constraints, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    // Context already set in routeToolCall
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.evaluate_constraints tool calls
+ */
+export async function handleEvaluateConstraints(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementEvaluateConstraints(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    // Context already set in routeToolCall
     const mcpError = mapErrorToMCP(error);
     return {
       content: [
@@ -264,6 +644,7 @@ export async function handleGateRun(
       ],
     };
   } catch (error) {
+    // Context already set in routeToolCall
     const mcpError = mapErrorToMCP(error);
     return {
       content: [
@@ -295,68 +676,7 @@ export async function handleGateStatus(
       ],
     };
   } catch (error) {
-    const mcpError = mapErrorToMCP(error);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(mcpError),
-        },
-      ],
-      isError: true,
-    };
-  }
-}
-
-/**
- * Handles create_constraint tool calls
- */
-export async function handleCreateConstraint(
-  params: Record<string, unknown>,
-  accessToken: string
-): Promise<ToolCallResult> {
-  try {
-    const result = await implementCreateConstraint(accessToken, params);
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    const mcpError = mapErrorToMCP(error);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(mcpError),
-        },
-      ],
-      isError: true,
-    };
-  }
-}
-
-/**
- * Handles evaluate_constraints tool calls
- */
-export async function handleEvaluateConstraints(
-  params: Record<string, unknown>,
-  accessToken: string
-): Promise<ToolCallResult> {
-  try {
-    const result = await implementEvaluateConstraints(accessToken, params);
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
+    // Context already set in routeToolCall
     const mcpError = mapErrorToMCP(error);
     return {
       content: [
@@ -388,6 +708,7 @@ export async function handleEvidenceAdd(
       ],
     };
   } catch (error) {
+    // Context already set in routeToolCall
     const mcpError = mapErrorToMCP(error);
     return {
       content: [
@@ -402,68 +723,416 @@ export async function handleEvidenceAdd(
 }
 
 /**
- * Routes tool calls to appropriate handler
- * 
- * @param toolName Tool name (must be one of the 11 core tools)
- * @param params Tool parameters
- * @param accessToken Access token
- * @returns Tool call result
+ * Handles pm.create_project tool calls
+ */
+export async function handleCreateProject(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementCreateProject(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.list_projects tool calls
+ */
+export async function handleListProjects(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementListProjects(accessToken);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.create_task tool calls
+ */
+export async function handleCreateTask(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementCreateTask(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.list_tasks tool calls
+ */
+export async function handleListTasks(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementListTasks(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.update_task tool calls
+ */
+export async function handleUpdateTask(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementUpdateTask(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.assert_in_scope tool calls
+ */
+export async function handleAssertInScope(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementAssertInScope(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.wizard_start tool calls
+ */
+export async function handleWizardStart(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementWizardStart(accessToken);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.wizard_step tool calls
+ */
+export async function handleWizardStep(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementWizardStep(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles pm.wizard_finish tool calls
+ */
+export async function handleWizardFinish(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementWizardFinish(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Helper to extract userId from token for Sentry context
+ */
+async function getUserIdFromToken(accessToken: string): Promise<string | undefined> {
+  try {
+    const apiUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL || 'http://localhost:3000';
+    const audience = `${apiUrl}/api/mcp`;
+    const claims = await verifyAccessToken(accessToken, audience);
+    return claims.sub;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Routes tool calls to appropriate handlers
+ * All tools use the pm.* prefix
  */
 export async function routeToolCall(
   toolName: string,
   params: Record<string, unknown>,
   accessToken: string
 ): Promise<ToolCallResult> {
-  switch (toolName) {
-    // Core
-    case 'pm.init':
-      return handleInit(params, accessToken);
-    case 'pm.status':
-      return handleStatus(params, accessToken);
-    
-    // Tasks
-    case 'pm.task_create':
-      return handleTaskCreate(params, accessToken);
-    case 'pm.task_set_status':
-      return handleTaskSetStatus(params, accessToken);
-    
-    // Memory
-    case 'pm.memory_recall':
-      return handleMemoryRecall(params, accessToken);
-    case 'pm.record_decision':
-      return handleRecordDecision(params, accessToken);
-    case 'pm.record_outcome':
-      return handleRecordOutcome(params, accessToken);
-    
-    // Gates
-    case 'pm.gate_run':
-      return handleGateRun(params, accessToken);
-    case 'pm.gate_status':
-      return handleGateStatus(params, accessToken);
-    
-    // Advanced
-    case 'pm.create_constraint':
-      return handleCreateConstraint(params, accessToken);
-    case 'pm.evaluate_constraints':
-      return handleEvaluateConstraints(params, accessToken);
-    
-    // Utility
-    case 'pm.evidence_add':
-      return handleEvidenceAdd(params, accessToken);
-    
-    default:
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              error: 'Unknown tool',
-              message: `Tool "${toolName}" is not recognized. Available tools: pm.init, pm.status, pm.task_create, pm.task_set_status, pm.memory_recall, pm.record_decision, pm.record_outcome, pm.gate_run, pm.gate_status, pm.create_constraint, pm.evaluate_constraints, pm.evidence_add`,
-            }),
-          },
-        ],
-        isError: true,
-      };
+  // Set Sentry context for this tool call
+  const userId = await getUserIdFromToken(accessToken);
+  Sentry.setContext('mcp_tool_call', {
+    toolName,
+    userId,
+  });
+  if (userId) {
+    Sentry.setUser({ id: userId });
+  }
+
+  try {
+    let result: ToolCallResult;
+    switch (toolName) {
+      case 'pm.create_project':
+        result = await handleCreateProject(params, accessToken);
+        break;
+      case 'pm.list_projects':
+        result = await handleListProjects(params, accessToken);
+        break;
+      case 'pm.create_task':
+        result = await handleCreateTask(params, accessToken);
+        break;
+      case 'pm.list_tasks':
+        result = await handleListTasks(params, accessToken);
+        break;
+      case 'pm.update_task':
+        result = await handleUpdateTask(params, accessToken);
+        break;
+      case 'pm.get_context':
+        result = await handleGetContext(params, accessToken);
+        break;
+      case 'pm.pick_next_task':
+        result = await handlePickNextTask(params, accessToken);
+        break;
+      case 'pm.start_task':
+        result = await handleStartTask(params, accessToken);
+        break;
+      case 'pm.block_task':
+        result = await handleBlockTask(params, accessToken);
+        break;
+      case 'pm.append_artifact':
+        result = await handleAppendArtifact(params, accessToken);
+        break;
+      case 'pm.evaluate_gates':
+        result = await handleEvaluateGates(params, accessToken);
+        break;
+      case 'pm.complete_task':
+        result = await handleCompleteTask(params, accessToken);
+        break;
+      case 'pm.create_checkpoint':
+        result = await handleCreateCheckpoint(params, accessToken);
+        break;
+      case 'pm.record_decision':
+        result = await handleRecordDecision(params, accessToken);
+        break;
+      case 'pm.record_outcome':
+        result = await handleRecordOutcome(params, accessToken);
+        break;
+      case 'pm.create_constraint':
+        result = await handleCreateConstraint(params, accessToken);
+        break;
+      case 'pm.list_constraints':
+        result = await handleListConstraints(params, accessToken);
+        break;
+      case 'pm.evaluate_constraints':
+        result = await handleEvaluateConstraints(params, accessToken);
+        break;
+      case 'pm.assert_in_scope':
+        result = await handleAssertInScope(params, accessToken);
+        break;
+      case 'pm.memory_recall':
+        result = await handleMemoryRecall(params, accessToken);
+        break;
+      case 'pm.wizard_start':
+        result = await handleWizardStart(params, accessToken);
+        break;
+      case 'pm.wizard_step':
+        result = await handleWizardStep(params, accessToken);
+        break;
+      case 'pm.wizard_finish':
+        result = await handleWizardFinish(params, accessToken);
+        break;
+      default:
+        result = {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify({
+                code: 'UNKNOWN_TOOL',
+                message: `Unknown tool: ${toolName}`,
+              }),
+            },
+          ],
+          isError: true,
+        };
+    }
+    return result;
+  } catch (error) {
+    // Context is already set in routeToolCall, just pass error
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
   }
 }
 

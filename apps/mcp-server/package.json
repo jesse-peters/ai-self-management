@@ -19,7 +19,8 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.1",
     "@projectflow/core": "workspace:*",
-    "@projectflow/db": "workspace:*"
+    "@projectflow/db": "workspace:*",
+    "@sentry/node": "^10.32.1"
   },
   "devDependencies": {
     "@projectflow/config": "workspace:*"

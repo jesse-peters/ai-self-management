@@ -5,6 +5,7 @@ import { handleHttpRequest, createJsonRpcError } from '@/lib/mcp/httpAdapter';
 import { createRequestLogger } from '@/lib/logger';
 import { getCorrelationId } from '@/lib/correlationId';
 import { verifyAccessToken } from '@projectflow/core';
+import * as Sentry from '@sentry/nextjs';
 
 /**
  * Extracts and verifies authentication from the request
@@ -123,6 +124,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         authHeaderPreview: request.headers.get('Authorization')?.substring(0, 30) || 'none',
     }, 'MCP request received');
 
+    let jsonRpcRequest: any = null;
+    let authInfo: AuthInfo | null = null;
+
     try {
         // Extract and verify OAuth token
         const apiUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
@@ -134,7 +138,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             requestOrigin: request.nextUrl.origin,
         }, 'Extracting auth info');
 
-        const authInfo = await extractAuthInfo(request, audience);
+        authInfo = await extractAuthInfo(request, audience);
 
         logger.debug({
             hasAuth: authInfo !== null,
@@ -155,7 +159,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             );
         }
 
-        const jsonRpcRequest = body as any;
+        jsonRpcRequest = body as any;
         const method = jsonRpcRequest?.method;
 
         logger.debug({
@@ -224,6 +228,26 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             errorType: error?.constructor?.name,
             stack: error instanceof Error ? error.stack : undefined,
         }, 'MCP request error');
+
+        // Capture error to Sentry with context
+        Sentry.captureException(error, {
+            level: 'error',
+            tags: {
+                component: 'mcp-api-route',
+                correlationId,
+            },
+            extra: {
+                duration,
+                method: jsonRpcRequest?.method,
+                hasAuth: !!authInfo,
+                userId: authInfo?.extra?.userId as string | undefined,
+            },
+        });
+
+        // Set user context if available
+        if (authInfo?.extra?.userId) {
+            Sentry.setUser({ id: authInfo.extra.userId as string });
+        }
 
         return NextResponse.json(
             {

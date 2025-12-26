@@ -13,6 +13,38 @@ import type { BaseEvent } from './eventTypes';
 import { createServerClient } from '@projectflow/db';
 import { mapSupabaseError } from '../errors';
 
+// Lazy load Sentry to avoid initialization issues if DSN is not set
+// Only works in Node.js environment (server-side)
+let Sentry: any = null;
+
+function getSentry(): any {
+  // Skip Sentry in browser environments (client-side)
+  // Check for browser globals that don't exist in Node.js
+  if (typeof process === 'undefined' || (globalThis as any).window !== undefined) {
+    return null;
+  }
+
+  if (Sentry !== null) {
+    return Sentry;
+  }
+
+  // Only try to load Sentry if DSN is available and we're in Node.js
+  // Use extremely dynamic require to prevent Turbopack/webpack static analysis
+  if (process.env.SENTRY_DSN && typeof require !== 'undefined') {
+    try {
+      // Use Function constructor to make require truly dynamic and prevent static analysis
+      const requireFunc = new Function('moduleName', 'return require(moduleName)');
+      Sentry = requireFunc('@sentry/node');
+      return Sentry;
+    } catch {
+      // Sentry not available, return null
+      return null;
+    }
+  }
+
+  return null;
+}
+
 /**
  * Event handler function type
  */
@@ -43,7 +75,7 @@ export function registerEventHandler(eventType: EventType, handler: EventHandler
  */
 export async function processEvent(event: Event): Promise<void> {
   const handlers = eventHandlers.get(event.event_type as EventType) || [];
-  
+
   // Execute all handlers in parallel
   await Promise.all(
     handlers.map(async (handler) => {
@@ -52,7 +84,25 @@ export async function processEvent(event: Event): Promise<void> {
       } catch (error) {
         // Log error but don't fail the event processing
         console.error(`Error in event handler for ${event.event_type}:`, error);
-        // In production, you might want to send this to an error tracking service
+
+        // Capture error to Sentry if available
+        const sentry = getSentry();
+        if (sentry && error instanceof Error) {
+          sentry.captureException(error, {
+            level: 'error',
+            tags: {
+              component: 'event-handler',
+              event_type: event.event_type,
+            },
+            extra: {
+              eventId: event.id,
+              projectId: event.project_id,
+              taskId: event.task_id,
+              userId: event.user_id,
+              eventPayload: event.payload,
+            },
+          });
+        }
       }
     })
   );
@@ -216,12 +266,12 @@ export async function emitEvent(
     },
     client
   );
-  
+
   // Process event handlers asynchronously (don't wait)
   processEvent(event).catch((error) => {
     console.error('Error processing event handlers:', error);
   });
-  
+
   return event;
 }
 

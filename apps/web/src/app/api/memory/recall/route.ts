@@ -18,17 +18,17 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = await createServerClient();
 
-    // Get user from session
+    // Get authenticated user
     const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
-    if (sessionError || !session) {
+    if (userError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = session.user.id;
+    const userId = user.id;
     const searchParams = request.nextUrl.searchParams;
     const projectId = searchParams.get('projectId');
 

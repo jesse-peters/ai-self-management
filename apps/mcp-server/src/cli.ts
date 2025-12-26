@@ -5,6 +5,32 @@
  * Use this for stdio transport (local development)
  */
 
+// Initialize Sentry as early as possible, before other imports
+import * as Sentry from '@sentry/node';
+
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || 'development',
+  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+  beforeSend(event, hint) {
+    // Filter out expected errors
+    if (event.exception) {
+      const error = hint.originalException;
+      // Don't capture validation errors as errors (they're expected)
+      if (error && typeof error === 'object' && 'code' in error) {
+        const code = (error as { code?: string }).code;
+        if (code === 'INVALID_PARAMS' || code === 'NOT_FOUND') {
+          return null; // Don't send to Sentry
+        }
+      }
+    }
+    return event;
+  },
+  ignoreErrors: [
+    'ValidationError',
+  ],
+});
+
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createMCPServer, type AuthContextProvider } from './serverFactory';
 
@@ -32,7 +58,17 @@ async function main() {
 
 main().catch((error) => {
   console.error('Fatal error:', error);
-  process.exit(1);
+  // Capture fatal errors to Sentry before exiting
+  Sentry.captureException(error, {
+    level: 'fatal',
+    tags: {
+      component: 'mcp-server-cli',
+    },
+  });
+  // Flush Sentry events before exiting
+  Sentry.flush(2000).then(() => {
+    process.exit(1);
+  });
 });
 
 

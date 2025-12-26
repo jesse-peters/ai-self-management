@@ -2,6 +2,38 @@
  * Custom error classes for ProjectFlow domain
  */
 
+// Lazy load Sentry to avoid initialization issues if DSN is not set
+// Only works in Node.js environment (server-side)
+let Sentry: any = null;
+
+function getSentry(): any {
+  // Skip Sentry in browser environments (client-side)
+  // Check for browser globals that don't exist in Node.js
+  if (typeof process === 'undefined' || (globalThis as any).window !== undefined) {
+    return null;
+  }
+
+  if (Sentry !== null) {
+    return Sentry;
+  }
+
+  // Only try to load Sentry if DSN is available and we're in Node.js
+  // Use extremely dynamic require to prevent Turbopack/webpack static analysis
+  if (process.env.SENTRY_DSN && typeof require !== 'undefined') {
+    try {
+      // Use Function constructor to make require truly dynamic and prevent static analysis
+      const requireFunc = new Function('moduleName', 'return require(moduleName)');
+      Sentry = requireFunc('@sentry/node');
+      return Sentry;
+    } catch {
+      // Sentry not available, return null
+      return null;
+    }
+  }
+
+  return null;
+}
+
 /**
  * Base error class for all domain errors
  */
@@ -10,6 +42,23 @@ export class ProjectFlowError extends Error {
     super(message);
     this.name = this.constructor.name;
     Error.captureStackTrace(this, this.constructor);
+
+    // Capture to Sentry if available (graceful degradation)
+    const sentry = getSentry();
+    if (sentry) {
+      sentry.captureException(this, {
+        level: 'error',
+        tags: {
+          error_type: 'domain_error',
+          error_code: this.code,
+          error_class: this.constructor.name,
+        },
+        extra: {
+          errorCode: this.code,
+          errorMessage: message,
+        },
+      });
+    }
   }
 }
 
@@ -37,6 +86,9 @@ export class UnauthorizedError extends ProjectFlowError {
 export class ValidationError extends ProjectFlowError {
   constructor(message: string, public field?: string) {
     super(message, 'VALIDATION_ERROR');
+
+    // Validation errors are expected, so we don't capture them to Sentry
+    // They're handled by the application logic
   }
 }
 

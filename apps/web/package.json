@@ -17,6 +17,7 @@
     "@projectflow/core": "workspace:*",
     "@projectflow/db": "workspace:*",
     "@projectflow/mcp-server": "workspace:*",
+    "@sentry/nextjs": "^10.32.1",
     "@supabase/ssr": "^0.4.0",
     "@supabase/supabase-js": "^2.39.0",
     "jose": "^5.9.6",

@@ -195,71 +195,38 @@ export async function GET(request: NextRequest) {
                     });
 
                 if (insertError) {
-                    // Check if it's a unique constraint violation (concurrent request already inserted)
+                    // Handle specific database errors gracefully
                     const errorMessage = insertError.message || '';
-                    const isUniqueViolation = errorMessage.includes('duplicate key') ||
+                    const isTableNotFound = errorMessage.includes('Could not find the table') ||
+                        errorMessage.includes('relation') ||
+                        errorMessage.includes('does not exist');
+                    const isConstraintViolation = errorMessage.includes('duplicate key') ||
                         errorMessage.includes('unique constraint') ||
-                        errorMessage.includes('already exists') ||
                         errorMessage.includes('violates unique constraint');
 
-                    if (isUniqueViolation) {
-                        // Another concurrent request already inserted - update it instead
-                        logger.info({
-                            clientId,
-                            codeChallenge: codeChallenge?.substring(0, 20) + '...',
+                    if (isTableNotFound) {
+                        logger.warn({
+                            insertError: insertError.message,
                             correlationId,
-                        }, 'Concurrent request detected (unique constraint violation), updating existing pending request');
-
-                        const { error: updateError } = await serviceRoleClient
-                            .from('oauth_pending_requests')
-                            .update({
-                                code_challenge: codeChallenge, // Latest wins
-                                code_challenge_method: codeChallengeMethod || 'S256',
-                                redirect_uri: redirectUri,
-                                state: state || null,
-                                scope: scope || null,
-                                expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-                                status: 'pending',
-                            })
-                            .eq('client_id', clientId)
-                            .eq('status', 'pending');
-
-                        if (updateError) {
-                            logger.warn({
-                                updateError: updateError.message,
-                                correlationId,
-                                codeChallengeFull: codeChallenge,
-                                fallback: 'self-contained-code',
-                            }, 'Failed to update after unique constraint violation - will use self-contained authorization code');
-                        } else {
-                            logger.info({
-                                clientId,
-                                codeChallenge: codeChallenge?.substring(0, 20) + '...',
-                                correlationId,
-                                timestamp: new Date().toISOString(),
-                            }, 'Updated existing pending request after unique constraint violation (deduplication - latest wins)');
-                        }
+                            codeChallengeFull: codeChallenge,
+                            fallback: 'self-contained-code',
+                        }, 'Database table not found (schema cache issue) - will use self-contained authorization code');
+                    } else if (isConstraintViolation) {
+                        // This should not happen with upsert, but log it for debugging
+                        logger.warn({
+                            insertError: insertError.message,
+                            correlationId,
+                            codeChallengeFull: codeChallenge,
+                            clientId,
+                            fallback: 'self-contained-code',
+                        }, 'Constraint violation during upsert (unexpected) - will use self-contained authorization code');
                     } else {
-                        // Some other error
-                        const isTableNotFound = errorMessage.includes('Could not find the table') ||
-                            errorMessage.includes('relation') ||
-                            errorMessage.includes('does not exist');
-
-                        if (isTableNotFound) {
-                            logger.warn({
-                                insertError: insertError.message,
-                                correlationId,
-                                codeChallengeFull: codeChallenge,
-                                fallback: 'self-contained-code',
-                            }, 'Database table not found (schema cache issue) - will use self-contained authorization code');
-                        } else {
-                            logger.warn({
-                                insertError: insertError.message,
-                                correlationId,
-                                codeChallengeFull: codeChallenge,
-                                fallback: 'self-contained-code',
-                            }, 'Failed to store pending request in Supabase - will use self-contained authorization code');
-                        }
+                        logger.warn({
+                            insertError: insertError.message,
+                            correlationId,
+                            codeChallengeFull: codeChallenge,
+                            fallback: 'self-contained-code',
+                        }, 'Failed to store pending request in Supabase - will use self-contained authorization code');
                     }
                     // Continue anyway - authorization code will be self-contained with all necessary information
                 } else {
@@ -272,7 +239,7 @@ export async function GET(request: NextRequest) {
                         state: state?.substring(0, 20) + '...',
                         correlationId,
                         timestamp: new Date().toISOString(),
-                    }, 'Stored new pending request in Supabase with full challenge');
+                    }, 'Stored pending request in Supabase with full challenge');
                 }
             }
         } catch (error) {
@@ -301,25 +268,39 @@ export async function GET(request: NextRequest) {
         // Build OAuth authorize URL with all parameters preserved
         // Use absolute URL to ensure proper redirects
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
-        const oauthAuthorizeUrl = new URL('/api/oauth/authorize', baseUrl);
-        if (clientId) oauthAuthorizeUrl.searchParams.set('client_id', clientId);
-        if (redirectUri) oauthAuthorizeUrl.searchParams.set('redirect_uri', redirectUri);
-        if (state) oauthAuthorizeUrl.searchParams.set('state', state);
-        if (codeChallenge) oauthAuthorizeUrl.searchParams.set('code_challenge', codeChallenge);
-        if (codeChallengeMethod) oauthAuthorizeUrl.searchParams.set('code_challenge_method', codeChallengeMethod);
-        if (scope) oauthAuthorizeUrl.searchParams.set('scope', scope);
 
         // Detect if this is a browser request or programmatic request (like from Cursor)
-        // Check redirect_uri first - cursor:// scheme indicates Cursor MCP client
-        const isCursorClient = redirectUri?.startsWith('cursor://');
+        // Check user-agent FIRST - if it's a browser, treat it as a browser request regardless of redirect_uri
+        // The redirect_uri is just where to send the user after auth, not an indicator of the current request type
         const userAgent = request.headers.get('user-agent') || '';
-        const isBrowser = !isCursorClient && (userAgent.includes('Mozilla') || userAgent.includes('WebKit') || userAgent.includes('Chrome') || userAgent.includes('Safari'));
+        const isBrowser = userAgent.includes('Mozilla') || userAgent.includes('WebKit') || userAgent.includes('Chrome') || userAgent.includes('Safari') || userAgent.includes('Firefox') || userAgent.includes('Edg');
+        const isCursorClient = redirectUri?.startsWith('cursor://');
+
+        // #region agent log - H-A
+        fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:detectBrowser', message: 'Browser detection', data: { userAgent: userAgent.substring(0, 100), isBrowser, isCursorClient, redirectUri }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'A' }) }).catch(() => { });
+        // #endregion
 
         if (isBrowser) {
-            // Browser request - redirect to user-friendly OAuth page
+            // Browser request - redirect to user-friendly OAuth page (not the API route)
+            const oauthPageUrl = new URL('/oauth/authorize', baseUrl);
+            if (clientId) oauthPageUrl.searchParams.set('client_id', clientId);
+            if (redirectUri) oauthPageUrl.searchParams.set('redirect_uri', redirectUri);
+            if (state) oauthPageUrl.searchParams.set('state', state);
+            if (codeChallenge) oauthPageUrl.searchParams.set('code_challenge', codeChallenge);
+            if (codeChallengeMethod) oauthPageUrl.searchParams.set('code_challenge_method', codeChallengeMethod);
+            if (scope) oauthPageUrl.searchParams.set('scope', scope);
             logger.info({ isBrowser: true, userAgent: userAgent.substring(0, 50) }, 'Browser request detected, redirecting to OAuth page');
-            return NextResponse.redirect(oauthAuthorizeUrl);
+            return NextResponse.redirect(oauthPageUrl);
         } else {
+            // Programmatic request - build API authorize URL for authorization_pending response
+            const oauthAuthorizeUrl = new URL('/api/oauth/authorize', baseUrl);
+            if (clientId) oauthAuthorizeUrl.searchParams.set('client_id', clientId);
+            if (redirectUri) oauthAuthorizeUrl.searchParams.set('redirect_uri', redirectUri);
+            if (state) oauthAuthorizeUrl.searchParams.set('state', state);
+            if (codeChallenge) oauthAuthorizeUrl.searchParams.set('code_challenge', codeChallenge);
+            if (codeChallengeMethod) oauthAuthorizeUrl.searchParams.set('code_challenge_method', codeChallengeMethod);
+            if (scope) oauthAuthorizeUrl.searchParams.set('scope', scope);
+
             // Programmatic request (like from Cursor) - return error that triggers browser launch
             logger.info({ isBrowser: false, isCursorClient, userAgent: userAgent.substring(0, 50) }, 'Programmatic request detected, returning authorization_pending');
 
@@ -343,6 +324,9 @@ export async function GET(request: NextRequest) {
 
     // User is authenticated - get session tokens (safe after getUser() verification)
     // We need the tokens to encode in the authorization code
+    // #region agent log - H-A,H-B
+    fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:beforeGetSession', message: 'User authenticated, getting session tokens', data: { userId: user.id, hasCodeChallenge: !!codeChallenge, codeChallenge: codeChallenge?.substring(0, 20) + '...', clientId }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'A,B' }) }).catch(() => { });
+    // #endregion
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
     if (sessionError || !session) {
@@ -353,24 +337,34 @@ export async function GET(request: NextRequest) {
         // Build OAuth authorize URL with all parameters preserved
         // Use absolute URL to ensure proper redirects
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
-        const oauthAuthorizeUrl = new URL('/api/oauth/authorize', baseUrl);
-        if (clientId) oauthAuthorizeUrl.searchParams.set('client_id', clientId);
-        if (redirectUri) oauthAuthorizeUrl.searchParams.set('redirect_uri', redirectUri);
-        if (state) oauthAuthorizeUrl.searchParams.set('state', state);
-        if (codeChallenge) oauthAuthorizeUrl.searchParams.set('code_challenge', codeChallenge);
-        if (codeChallengeMethod) oauthAuthorizeUrl.searchParams.set('code_challenge_method', codeChallengeMethod);
-        if (scope) oauthAuthorizeUrl.searchParams.set('scope', scope);
 
         // Detect if this is a browser request or programmatic request
-        // Check redirect_uri first - cursor:// scheme indicates Cursor MCP client
-        const isCursorClient = redirectUri?.startsWith('cursor://');
+        // Check user-agent FIRST - if it's a browser, treat it as a browser request regardless of redirect_uri
+        // The redirect_uri is just where to send the user after auth, not an indicator of the current request type
         const userAgent = request.headers.get('user-agent') || '';
-        const isBrowser = !isCursorClient && (userAgent.includes('Mozilla') || userAgent.includes('WebKit') || userAgent.includes('Chrome') || userAgent.includes('Safari'));
+        const isBrowser = userAgent.includes('Mozilla') || userAgent.includes('WebKit') || userAgent.includes('Chrome') || userAgent.includes('Safari') || userAgent.includes('Firefox') || userAgent.includes('Edg');
+        const isCursorClient = redirectUri?.startsWith('cursor://');
 
         if (isBrowser) {
-            // Browser request - redirect to user-friendly OAuth page
-            return NextResponse.redirect(oauthAuthorizeUrl);
+            // Browser request - redirect to user-friendly OAuth page (not the API route)
+            const oauthPageUrl = new URL('/oauth/authorize', baseUrl);
+            if (clientId) oauthPageUrl.searchParams.set('client_id', clientId);
+            if (redirectUri) oauthPageUrl.searchParams.set('redirect_uri', redirectUri);
+            if (state) oauthPageUrl.searchParams.set('state', state);
+            if (codeChallenge) oauthPageUrl.searchParams.set('code_challenge', codeChallenge);
+            if (codeChallengeMethod) oauthPageUrl.searchParams.set('code_challenge_method', codeChallengeMethod);
+            if (scope) oauthPageUrl.searchParams.set('scope', scope);
+            return NextResponse.redirect(oauthPageUrl);
         } else {
+            // Programmatic request - build API authorize URL for authorization_pending response
+            const oauthAuthorizeUrl = new URL('/api/oauth/authorize', baseUrl);
+            if (clientId) oauthAuthorizeUrl.searchParams.set('client_id', clientId);
+            if (redirectUri) oauthAuthorizeUrl.searchParams.set('redirect_uri', redirectUri);
+            if (state) oauthAuthorizeUrl.searchParams.set('state', state);
+            if (codeChallenge) oauthAuthorizeUrl.searchParams.set('code_challenge', codeChallenge);
+            if (codeChallengeMethod) oauthAuthorizeUrl.searchParams.set('code_challenge_method', codeChallengeMethod);
+            if (scope) oauthAuthorizeUrl.searchParams.set('scope', scope);
+
             // Programmatic request - return error that triggers browser launch
             const authorizationUri = oauthAuthorizeUrl.toString();
             return NextResponse.json(
@@ -421,7 +415,11 @@ export async function GET(request: NextRequest) {
 
     // Base64 encode the code data
     const encodedCode = Buffer.from(JSON.stringify(codeData)).toString('base64url');
-    let finalCode = `${authCode}.${encodedCode}`; // Use let so it can be reassigned from pending request
+    let finalCode = `${authCode}.${encodedCode}`;
+
+    // #region agent log - H-A,H-E
+    fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:codeGenerated', message: 'Authorization code generated', data: { userId: user.id, codeChallenge, codeChallengeInCodeData: codeData.codeChallenge, challengesMatch: codeChallenge === codeData.codeChallenge, finalCodeLength: finalCode.length, hasAccessToken: !!codeData.accessToken, hasRefreshToken: !!codeData.refreshToken }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'A,E' }) }).catch(() => { });
+    // #endregion
 
     // Log code challenge storage with full details
     logger.info({
@@ -431,7 +429,23 @@ export async function GET(request: NextRequest) {
         userId: user.id,
         correlationId,
         timestamp: new Date().toISOString(),
-    }, 'Prepared default authorization code (will use pending request challenge if found)');
+    }, 'Storing code challenge in authorization code');
+
+    // Enhanced logging: Verify challenge is correctly stored in code data
+    logger.info({
+        userId: user.id,
+        codeChallenge,
+        codeChallengeInCodeData: codeData.codeChallenge,
+        codeChallengeMatches: codeChallenge === codeData.codeChallenge,
+        finalCodeLength: finalCode.length,
+        finalCodePreview: finalCode.substring(0, 50) + '...',
+        authCodePart: authCode,
+        encodedDataLength: encodedCode.length,
+        hasAccessToken: !!codeData.accessToken,
+        hasRefreshToken: !!codeData.refreshToken,
+        redirectUriInCodeData: codeData.redirectUri,
+        correlationId,
+    }, 'Generated authorization code - VERIFY CHALLENGE STORED IN CODE');
 
     // Look up THE SINGLE pending request for this client (deduplication)
     // Generate ONE authorization code using that request's challenge
@@ -626,10 +640,17 @@ export async function GET(request: NextRequest) {
             codeLength: finalCode.length,
             codePreview: finalCode.substring(0, 100) + '...',
             codeChallengeInCode: codeChallenge,
+            codeChallengeInCodeData: codeData.codeChallenge,
+            challengesMatch: codeChallenge === codeData.codeChallenge,
             hasState: !!state,
             redirectTarget: 'callback-page',
+            callbackUrl: callbackPage.toString().substring(0, 150) + '...',
             correlationId,
-        }, 'Redirecting to callback page for cursor:// redirect - code being sent to client');
+        }, 'Redirecting to callback page for cursor:// redirect - VERIFY CHALLENGE IN CODE');
+
+        // #region agent log - H-B
+        fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:redirectingToCallback', message: 'Redirecting to callback page with code', data: { codeLength: finalCode.length, codeChallenge, codeChallengeInCodeData: codeData.codeChallenge, challengesMatch: codeChallenge === codeData.codeChallenge, callbackUrl: callbackPage.toString().substring(0, 100) }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'B' }) }).catch(() => { });
+        // #endregion
 
         return NextResponse.redirect(callbackPage.toString());
     }
@@ -645,9 +666,12 @@ export async function GET(request: NextRequest) {
         codeLength: finalCode.length,
         codePreview: finalCode.substring(0, 100) + '...',
         codeChallengeInCode: codeChallenge,
+        codeChallengeInCodeData: codeData.codeChallenge,
+        challengesMatch: codeChallenge === codeData.codeChallenge,
         redirectUri,
+        redirectUrl: redirectUrl.toString().substring(0, 150) + '...',
         correlationId,
-    }, 'Redirecting to client with authorization code - code being sent to client');
+    }, 'Redirecting to client with authorization code - VERIFY CHALLENGE IN CODE');
 
     // #region agent log - H-B, H-D
     fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/authorize/route.ts:redirect', message: 'Redirecting to client with auth code', data: { redirectTarget: redirectUrl.toString().substring(0, 100) + '...', codeLength: finalCode.length, hasState: !!state }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'B-D' }) }).catch(() => { });

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createBrowserClient } from '@/lib/supabaseClient';
+import { createServerClient } from '@/lib/supabaseClient';
 import { listOutcomes } from '@projectflow/core';
 
 /**
@@ -24,17 +24,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             return NextResponse.json({ error: 'projectId is required' }, { status: 400 });
         }
 
-        // Get user ID from Supabase session
-        const supabase = createBrowserClient();
+        // Get authenticated user
+        const supabase = await createServerClient();
         const {
-            data: { session },
-        } = await supabase.auth.getSession();
+            data: { user },
+            error: userError,
+        } = await supabase.auth.getUser();
 
-        if (!session) {
+        if (userError || !user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const userId = session.user.id;
+        const userId = user.id;
 
         // Build filters
         const filters: any = {};

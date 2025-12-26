@@ -26,10 +26,10 @@
   },
   "dependencies": {
     "@projectflow/db": "workspace:*",
+    "@sentry/node": "^10.32.1",
     "jose": "^5.9.6"
   },
   "devDependencies": {
     "@projectflow/config": "workspace:*"
   }
 }
-

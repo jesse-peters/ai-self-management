@@ -4,6 +4,7 @@ import { createHash } from 'crypto';
 import { createRequestLogger } from '@/lib/logger';
 import { getCorrelationId } from '@/lib/correlationId';
 import { createServiceRoleClient } from '@projectflow/db';
+import * as Sentry from '@sentry/nextjs';
 
 /**
  * OAuth 2.1 Token Endpoint
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
         if (grantType === 'authorization_code') {
             result = await handleAuthorizationCodeGrant(body, logger, correlationId);
         } else if (grantType === 'refresh_token') {
-            result = await handleRefreshTokenGrant(body, logger);
+            result = await handleRefreshTokenGrant(body, logger, correlationId);
         } else {
             logger.warn({ grantType }, 'Unsupported grant type');
             result = NextResponse.json(
@@ -147,7 +148,11 @@ async function handleAuthorizationCodeGrant(
         codeVerifierFull: code_verifier, // Log full verifier for debugging PKCE issues
         codeVerifierFormatValid: code_verifier ? /^[A-Za-z0-9._~\-]+$/.test(code_verifier) : false,
         correlationId,
-    }, 'Processing authorization code grant - code received from client');
+    }, 'Token exchange request received - STARTING PKCE FLOW');
+
+    // #region agent log - H-C
+    fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/token/route.ts:tokenExchangeStart', message: 'Token exchange request received', data: { hasCode: !!code, codeLength: code?.length, hasCodeVerifier: !!code_verifier, codeVerifierLength: code_verifier?.length, codeVerifier: code_verifier }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'C' }) }).catch(() => { });
+    // #endregion
 
     // Validate required parameters with specific error messages
     if (!code) {
@@ -315,21 +320,31 @@ async function handleAuthorizationCodeGrant(
             decodedCode = code;
         }
 
-        logger.debug({
+        logger.info({
             codeLength: code.length,
             decodedCodeLength: decodedCode.length,
             wasUrlEncoded,
             codePreview: code.substring(0, 50) + '...',
-        }, 'Processing authorization code');
+            correlationId,
+        }, 'Processing authorization code - checking encoding');
 
         // Decode the authorization code
         const codeParts = decodedCode.split('.');
+        logger.info({
+            codeParts: codeParts.length,
+            authCodePart: codeParts[0]?.substring(0, 50),
+            encodedDataLength: codeParts[1]?.length,
+            wasUrlEncoded,
+            correlationId,
+        }, 'Split authorization code into parts');
+
         if (codeParts.length < 2) {
             logger.warn({
                 codeLength: decodedCode.length,
                 parts: codeParts.length,
                 wasUrlEncoded,
                 decodedCodePreview: decodedCode.substring(0, 50),
+                correlationId,
             }, 'Invalid authorization code format - missing parts');
             return NextResponse.json(
                 {
@@ -345,6 +360,7 @@ async function handleAuthorizationCodeGrant(
             logger.warn({
                 wasUrlEncoded,
                 decodedCodePreview: decodedCode.substring(0, 50),
+                correlationId,
             }, 'Missing encoded data in authorization code');
             return NextResponse.json(
                 {
@@ -366,11 +382,21 @@ async function handleAuthorizationCodeGrant(
                 codeChallengeInCodeLength: codeData.codeChallenge?.length,
                 codeChallengeMethod: codeData.codeChallengeMethod,
                 hasTokens: !!(codeData.accessToken && codeData.refreshToken),
+                hasAccessToken: !!codeData.accessToken,
+                hasRefreshToken: !!codeData.refreshToken,
                 hasRedirectUri: !!codeData.redirectUri,
+                redirectUriInCode: codeData.redirectUri,
                 hasState: !!codeData.state,
-                expiresAt: codeData.expiresAt,
+                expiresAt: codeData.expiresAt ? new Date(codeData.expiresAt).toISOString() : null,
+                expiresAtTimestamp: codeData.expiresAt,
+                nowTimestamp: Date.now(),
+                isExpired: codeData.expiresAt ? Date.now() > codeData.expiresAt : false,
                 correlationId,
-            }, 'Decoded authorization code data - extracted challenge from code');
+            }, 'Decoded authorization code data - EXTRACTED CHALLENGE FROM CODE');
+
+            // #region agent log - H-C,H-D,H-E
+            fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/token/route.ts:codeDecoded', message: 'Code decoded, extracted challenge', data: { userId: codeData.userId, codeChallengeInCode: codeData.codeChallenge, codeChallengeLength: codeData.codeChallenge?.length, hasAccessToken: !!codeData.accessToken, hasRefreshToken: !!codeData.refreshToken, isExpired: codeData.expiresAt ? Date.now() > codeData.expiresAt : false }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'C,D,E' }) }).catch(() => { });
+            // #endregion
         } catch (decodeError) {
             logger.warn({ error: decodeError, encodedDataLength: encodedData.length, correlationId }, 'Failed to decode authorization code data');
             return NextResponse.json(
@@ -472,6 +498,7 @@ async function handleAuthorizationCodeGrant(
             method: codeChallengeMethod,
             codeVerifierLength: code_verifier.length,
             codeVerifierPreview: code_verifier.substring(0, 20) + '...',
+            codeVerifierFull: code_verifier, // Log full verifier for debugging
             storedChallengeInCode: codeData.codeChallenge, // Challenge stored in the code
             storedChallengeLength: codeData.codeChallenge?.length,
             computedChallengeFromVerifier: computedChallenge, // Challenge computed from verifier
@@ -481,7 +508,11 @@ async function handleAuthorizationCodeGrant(
             correlationId,
             userId: codeData.userId,
             timestamp: new Date().toISOString(),
-        }, 'Verifying PKCE code challenge - comparing computed vs stored');
+        }, 'PKCE VERIFICATION - comparing computed challenge vs stored challenge');
+
+        // #region agent log - H-D,H-E
+        fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/token/route.ts:pkceVerification', message: 'PKCE verification comparison', data: { storedChallenge: codeData.codeChallenge, computedChallenge, challengesMatch: computedChallenge === codeData.codeChallenge, codeVerifier: code_verifier, codeVerifierLength: code_verifier.length }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'D,E' }) }).catch(() => { });
+        // #endregion
 
         if (computedChallenge !== codeData.codeChallenge) {
             // Find where they differ
@@ -571,7 +602,18 @@ async function handleAuthorizationCodeGrant(
             );
         }
 
-        logger.info({ userId: codeData.userId }, 'Authorization code grant successful');
+        logger.info({
+            userId: codeData.userId,
+            codeChallenge: codeData.codeChallenge,
+            pkceVerified: true,
+            hasAccessToken: !!codeData.accessToken,
+            hasRefreshToken: !!codeData.refreshToken,
+            correlationId,
+        }, 'Authorization code grant successful - PKCE VERIFIED');
+
+        // #region agent log - H-C,H-D
+        fetch('http://127.0.0.1:7246/ingest/e27fe125-aa67-4121-8824-12e85572d45c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'oauth/token/route.ts:pkceSuccess', message: 'PKCE verification successful, returning tokens', data: { userId: codeData.userId, hasAccessToken: !!codeData.accessToken, hasRefreshToken: !!codeData.refreshToken }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'C,D' }) }).catch(() => { });
+        // #endregion
 
         // Delete pending request after successful token exchange (single-use enforcement)
         if (pendingRequestId) {
@@ -615,6 +657,20 @@ async function handleAuthorizationCodeGrant(
         });
     } catch (error) {
         logger.error({ error, codeLength: code?.length }, 'Error handling authorization code grant');
+
+        // Capture error to Sentry
+        Sentry.captureException(error, {
+            level: 'error',
+            tags: {
+                component: 'oauth-token-route',
+                grant_type: 'authorization_code',
+                correlationId,
+            },
+            extra: {
+                codeLength: code?.length,
+            },
+        });
+
         return NextResponse.json(
             {
                 error: 'invalid_grant',
@@ -629,7 +685,8 @@ async function handleAuthorizationCodeGrant(
 
 async function handleRefreshTokenGrant(
     body: Record<string, string>,
-    logger: ReturnType<typeof createRequestLogger>
+    logger: ReturnType<typeof createRequestLogger>,
+    correlationId: string
 ): Promise<NextResponse> {
     const { refresh_token } = body;
 
@@ -673,6 +730,17 @@ async function handleRefreshTokenGrant(
         });
     } catch (error) {
         logger.error({ error }, 'Error refreshing token');
+
+        // Capture error to Sentry
+        Sentry.captureException(error, {
+            level: 'error',
+            tags: {
+                component: 'oauth-token-route',
+                grant_type: 'refresh_token',
+                correlationId,
+            },
+        });
+
         return NextResponse.json(
             {
                 error: 'server_error',

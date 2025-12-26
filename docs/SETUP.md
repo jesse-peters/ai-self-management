@@ -199,6 +199,23 @@ SUPABASE_ACCESS_TOKEN=your-access-token  # For migrations
 SUPABASE_PROJECT_ID=your-project-ref     # For migrations
 ```
 
+#### Sentry Error Tracking (Optional but Recommended)
+
+```bash
+# Get your DSN from: https://sentry.io/settings/[org]/projects/[project]/keys/
+SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
+NEXT_PUBLIC_SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx  # Same DSN for client-side
+SENTRY_ENVIRONMENT=production  # or development, preview
+SENTRY_AUTH_TOKEN=sntrys_...  # Optional: for release tracking
+```
+
+**To get your Sentry DSN:**
+1. Go to [Sentry.io](https://sentry.io) and sign up/login
+2. Create a new project (or use existing)
+3. Select your platform (Next.js for web app, Node.js for MCP server)
+4. Copy the DSN from the project settings
+5. Add it to your environment variables
+
 ### Deploy
 
 ```bash
@@ -416,6 +433,7 @@ Before going to production:
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public anon key      | `eyJhbG...`               |
 | `NEXT_PUBLIC_APP_URL`           | Your app URL         | `https://app.vercel.app`  |
 | `LOG_LEVEL`                     | Log verbosity        | `info`, `debug`, `trace`  |
+| `NEXT_PUBLIC_SENTRY_DSN`        | Sentry DSN (client-side) | `https://xxx@xxx.ingest.sentry.io/xxx` |
 
 ### Private (Server-Side Only)
 
@@ -425,6 +443,9 @@ Before going to production:
 | `SUPABASE_JWT_SECRET`       | **CRITICAL** - Signs OAuth tokens | `your-secret`  |
 | `SUPABASE_ACCESS_TOKEN`     | For Supabase Management API       | `sbp_...`      |
 | `SUPABASE_PROJECT_ID`       | Your project reference            | `abc123def456` |
+| `SENTRY_DSN`                | Sentry DSN (server-side)          | `https://xxx@xxx.ingest.sentry.io/xxx` |
+| `SENTRY_ENVIRONMENT`        | Sentry environment (optional)     | `development`, `production` |
+| `SENTRY_AUTH_TOKEN`         | Sentry auth token for releases (optional) | `sntrys_...` |
 
 ⚠️ **Never commit these to git!** They're in `.gitignore` and should stay server-side.
 
