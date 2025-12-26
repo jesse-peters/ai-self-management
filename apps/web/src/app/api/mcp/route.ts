@@ -45,10 +45,11 @@ async function extractAuthInfo(request: NextRequest, audience: string): Promise<
         // Use our existing Supabase JWT verification
         const claims = await verifyAccessToken(token, audience);
 
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-        if (!appUrl) {
-            throw new Error('NEXT_PUBLIC_APP_URL not configured');
-        }
+        // Derive app URL from audience or use environment variable with fallback to request origin
+        // Audience format is: ${apiUrl}/api/mcp, so we can extract the base URL
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 
+                      (audience.endsWith('/api/mcp') ? audience.slice(0, -8) : null) ||
+                      request.nextUrl.origin;
 
         if (debug) {
             console.log('[AUTH] Token verified successfully', {

@@ -104,6 +104,20 @@ export async function GET(request: NextRequest) {
                 .gt('expires_at', new Date().toISOString())
                 .maybeSingle();
 
+            // Detailed logging to diagnose deduplication issues
+            logger.info({
+                clientId,
+                lookupError: lookupError?.message,
+                foundExisting: !!existingPending,
+                existingPendingId: existingPending?.id,
+                existingPendingStatus: existingPending?.status,
+                existingPendingExpiresAt: existingPending?.expires_at,
+                existingPendingChallenge: existingPending?.code_challenge?.substring(0, 20) + '...',
+                currentRequestChallenge: codeChallenge?.substring(0, 20) + '...',
+                currentTime: new Date().toISOString(),
+                correlationId,
+            }, 'Pending request lookup result (unauthenticated user)');
+
             if (lookupError) {
                 // Handle specific database errors gracefully
                 const errorMessage = lookupError.message || '';
@@ -434,6 +448,20 @@ export async function GET(request: NextRequest) {
             .eq('status', 'pending')
             .gt('expires_at', new Date().toISOString())
             .maybeSingle();
+
+        // Detailed logging to diagnose deduplication issues
+        logger.info({
+            clientId,
+            lookupError: lookupError?.message,
+            foundPending: !!pendingRequest,
+            pendingId: pendingRequest?.id,
+            pendingStatus: pendingRequest?.status,
+            pendingExpiresAt: pendingRequest?.expires_at,
+            pendingChallenge: pendingRequest?.code_challenge?.substring(0, 20) + '...',
+            currentTime: new Date().toISOString(),
+            currentRequestChallenge: codeChallenge?.substring(0, 20) + '...',
+            correlationId,
+        }, 'Pending request lookup result (authenticated user)');
 
         if (lookupError) {
             // Handle specific database errors gracefully
