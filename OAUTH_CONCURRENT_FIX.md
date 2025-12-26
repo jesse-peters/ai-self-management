@@ -13,12 +13,14 @@ When Cursor made concurrent OAuth requests with different PKCE challenges, the f
 ## Root Cause
 
 The authorization endpoint was:
+
 1. Generating a simple auth code: `authCode = "userid-timestamp-random"`
 2. Storing this simple code in the DB as `authorization_code`
 3. Later encoding it with session data: `finalCode = authCode.base64url(codeData)`
 4. Returning `finalCode` to client
 
 But the token endpoint would:
+
 1. Retrieve the simple code from DB
 2. Use it directly, without the encoded session data
 3. Try to decode it, which would fail because it had no `codeChallenge` info
@@ -28,12 +30,13 @@ But the token endpoint would:
 Now the full encoded code is stored in the database:
 
 ### Authorize Endpoint (NEW FLOW)
+
 ```typescript
 // 1. Create full code data with challenge, tokens, etc.
 const codeData = {
   userId: user.id,
-  codeChallenge,  // ✅ Includes the challenge
-  codeChallengeMethod: 'S256',
+  codeChallenge, // ✅ Includes the challenge
+  codeChallengeMethod: "S256",
   scope: scope,
   redirectUri,
   accessToken: session.access_token,
@@ -42,44 +45,45 @@ const codeData = {
 };
 
 // 2. Encode everything
-const encodedCode = Buffer.from(JSON.stringify(codeData)).toString('base64url');
-const finalCode = `${authCode}.${encodedCode}`;  // ← Full code
+const encodedCode = Buffer.from(JSON.stringify(codeData)).toString("base64url");
+const finalCode = `${authCode}.${encodedCode}`; // ← Full code
 
 // 3. Store FULL code in database
 await serviceRoleClient
-  .from('oauth_pending_requests')
+  .from("oauth_pending_requests")
   .update({
     user_id: user.id,
-    authorization_code: finalCode,  // ← Now stores complete code
+    authorization_code: finalCode, // ← Now stores complete code
   })
-  .eq('id', pending.id);
+  .eq("id", pending.id);
 
 // 4. Return the full code to client
-redirectUrl.searchParams.set('code', finalCode);
+redirectUrl.searchParams.set("code", finalCode);
 ```
 
 ### Token Endpoint (UNCHANGED USAGE)
+
 ```typescript
 // 1. Lookup pending request by computed challenge
 const { data: pending } = await serviceRoleClient
-  .from('oauth_pending_requests')
-  .select('*')
-  .eq('code_challenge', computedChallenge)
+  .from("oauth_pending_requests")
+  .select("*")
+  .eq("code_challenge", computedChallenge)
   .maybeSingle();
 
 // 2. Get full code from pending request
 if (pending && pending.authorization_code) {
-  code = pending.authorization_code;  // ← Now has all data
+  code = pending.authorization_code; // ← Now has all data
 }
 
 // 3. Decode the code (now has all metadata)
-const codeParts = code.split('.');
-const codeData = JSON.parse(Buffer.from(codeParts[1], 'base64url').toString());
+const codeParts = code.split(".");
+const codeData = JSON.parse(Buffer.from(codeParts[1], "base64url").toString());
 
 // 4. PKCE verification now works ✅
-const computedChallenge = createHash('sha256')
+const computedChallenge = createHash("sha256")
   .update(code_verifier)
-  .digest('base64url');
+  .digest("base64url");
 
 if (computedChallenge !== codeData.codeChallenge) {
   // This check now passes because codeData has the challenge
@@ -112,14 +116,16 @@ if (computedChallenge !== codeData.codeChallenge) {
 ## Why This Works for Concurrent Requests
 
 Before fix:
+
 ```
 Request 1 (challenge_1) → Pending request stored
-Request 2 (challenge_2) → Pending request stored  
+Request 2 (challenge_2) → Pending request stored
 User authenticates → Both get SIMPLE codes (no challenge data)
 Exchange with verifier_1 → code has NO challenge info → FAILS
 ```
 
 After fix:
+
 ```
 Request 1 (challenge_1) → Pending request stored
 Request 2 (challenge_2) → Pending request stored
@@ -134,4 +140,3 @@ Exchange with verifier_2 → code has challenge_2 → SUCCEEDS
 ✅ No database schema changes
 ✅ Just storing complete data instead of partial data
 ✅ Token exchange logic unchanged (it gets better data now)
-

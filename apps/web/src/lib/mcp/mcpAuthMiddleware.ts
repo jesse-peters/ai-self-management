@@ -13,13 +13,13 @@
  * @returns true if the method requires authentication
  */
 export function methodRequiresAuth(method: string): boolean {
-  // Methods that don't require auth
-  const publicMethods = [
-    'initialize',
-    'ping',
-    'notifications/initialized',
-  ];
+    // Methods that don't require auth
+    const publicMethods = [
+        'initialize',
+        'ping',
+        'notifications/initialized',
+    ];
 
-  return !publicMethods.includes(method);
+    return !publicMethods.includes(method);
 }
 

@@ -66,8 +66,14 @@ export async function verifyAccessToken(
       try {
         const JWT_SECRET = getJWTSecret();
         const secret = new TextEncoder().encode(JWT_SECRET);
+
+        // Accept both "authenticated" (Supabase default) and expected audience in development
+        const validAudiences = process.env.NODE_ENV === 'development'
+          ? [expectedAudience, 'authenticated']
+          : [expectedAudience];
+
         const result = await jose.jwtVerify(token, secret, {
-          audience: expectedAudience,
+          audience: validAudiences,
         });
         payload = result.payload;
         if (debug) console.log('[JWT] HS256 verification succeeded');
@@ -105,9 +111,15 @@ export async function verifyAccessToken(
             throw new Error('Invalid token claims: missing sub or role');
           }
 
-          // Check audience
-          if (decoded.aud && decoded.aud !== expectedAudience) {
-            throw new Error(`Token audience mismatch: expected ${expectedAudience}, got ${decoded.aud}`);
+          // Check audience - accept both "authenticated" (Supabase default) and expected audience in development
+          if (decoded.aud) {
+            const validAudiences = process.env.NODE_ENV === 'development'
+              ? [expectedAudience, 'authenticated']
+              : [expectedAudience];
+
+            if (!validAudiences.includes(decoded.aud as string)) {
+              throw new Error(`Token audience mismatch: expected one of ${validAudiences.join(', ')}, got ${decoded.aud}`);
+            }
           }
 
           // Check expiration
@@ -142,8 +154,14 @@ export async function verifyAccessToken(
           for (const jwksUrl of possibleJwksUrls) {
             try {
               const JWKS = jose.createRemoteJWKSet(new URL(jwksUrl));
+
+              // Accept both "authenticated" (Supabase default) and expected audience in development
+              const validAudiences = process.env.NODE_ENV === 'development'
+                ? [expectedAudience, 'authenticated']
+                : [expectedAudience];
+
               const result = await jose.jwtVerify(token, JWKS, {
-                audience: expectedAudience,
+                audience: validAudiences,
               });
               payload = result.payload;
               if (debug) console.log('[JWT] JWKS verification succeeded', { jwksUrl });

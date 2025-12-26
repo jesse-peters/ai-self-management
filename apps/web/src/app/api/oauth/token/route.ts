@@ -212,6 +212,9 @@ async function handleAuthorizationCodeGrant(
         }, 'Looking up pending request in Supabase');
 
         // Look up pending request by computed challenge
+        // Note: This lookup is optional - the authorization code is self-contained
+        // and contains all necessary information. Database lookup is only for
+        // handling concurrent requests. If lookup fails, we continue with self-contained verification.
         try {
             const serviceRoleClient = createServiceRoleClient();
             const { data: pending, error: lookupError } = await serviceRoleClient
@@ -222,10 +225,26 @@ async function handleAuthorizationCodeGrant(
                 .maybeSingle();
 
             if (lookupError) {
-                logger.warn({
-                    lookupError: lookupError.message,
-                    correlationId,
-                }, 'Failed to lookup pending request from Supabase');
+                // Handle specific database errors gracefully
+                const errorMessage = lookupError.message || '';
+                const isTableNotFound = errorMessage.includes('Could not find the table') ||
+                    errorMessage.includes('relation') ||
+                    errorMessage.includes('does not exist');
+
+                if (isTableNotFound) {
+                    logger.warn({
+                        lookupError: lookupError.message,
+                        correlationId,
+                        fallback: 'self-contained-code-verification',
+                    }, 'Database table not found (schema cache issue) - continuing with self-contained code verification');
+                } else {
+                    logger.warn({
+                        lookupError: lookupError.message,
+                        correlationId,
+                        fallback: 'self-contained-code-verification',
+                    }, 'Failed to lookup pending request from Supabase - continuing with self-contained code verification');
+                }
+                // Continue with self-contained code verification - code contains all necessary data
             } else if (pending && pending.authorization_code) {
                 const codeFromRequest = code; // Save original code from request
                 const codeFromDB = pending.authorization_code;
@@ -281,19 +300,44 @@ async function handleAuthorizationCodeGrant(
                     correlationId,
                 }, 'Found pending request but no authorization code yet - user may not have authenticated');
             } else {
-                logger.warn({
+                logger.info({
                     computedChallengeFull: computedChallengeForLookup,
                     computedChallengePreview: computedChallengeForLookup.substring(0, 20) + '...',
                     correlationId,
-                }, 'No pending request found for this code challenge - checking if code is self-contained');
+                    fallback: 'self-contained-code-verification',
+                }, 'No pending request found for this code challenge - using self-contained code verification');
             }
         } catch (error) {
-            logger.warn({
-                error: error instanceof Error ? error.message : 'Unknown error',
-                correlationId,
-            }, 'Exception looking up pending request');
-            // Continue anyway - code might be self-contained
+            // Handle any exceptions during database lookup gracefully
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            const isTableNotFound = errorMessage.includes('Could not find the table') ||
+                errorMessage.includes('relation') ||
+                errorMessage.includes('does not exist');
+
+            if (isTableNotFound) {
+                logger.warn({
+                    error: errorMessage,
+                    correlationId,
+                    fallback: 'self-contained-code-verification',
+                }, 'Database table not found (schema cache issue) - continuing with self-contained code verification');
+            } else {
+                logger.warn({
+                    error: errorMessage,
+                    correlationId,
+                    fallback: 'self-contained-code-verification',
+                }, 'Exception looking up pending request - continuing with self-contained code verification');
+            }
+            // Continue with self-contained code verification - authorization code contains all necessary information
         }
+
+        // Continue with self-contained code verification
+        // The authorization code is self-contained and includes:
+        // - codeChallenge (for PKCE verification)
+        // - accessToken and refreshToken (to return to client)
+        // - redirectUri (for validation)
+        // - expiresAt (for expiration check)
+        // - userId and other metadata
+        // Database lookup was optional - we can verify everything from the code itself
 
         // Handle URL-encoded authorization code (comes through redirect URIs)
         // The code might be URL-encoded, so decode it first

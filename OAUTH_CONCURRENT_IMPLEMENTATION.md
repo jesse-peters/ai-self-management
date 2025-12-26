@@ -3,6 +3,7 @@
 ## Problem Statement
 
 Cursor MCP client was making multiple concurrent authorization requests with different PKCE code challenges, causing:
+
 1. PKCE verification failures
 2. "authorization_pending" responses not being handled correctly
 3. Each request getting a new state instead of being tracked
@@ -31,7 +32,7 @@ Instead of handling all requests in-memory (which doesn't work on Vercel's state
              │
              └─► Programmatic (cursor://): Return authorization_pending
                  + verification_uri
-             
+
              ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  User Authenticates (Browser)                               │
@@ -91,12 +92,13 @@ CREATE TABLE oauth_pending_requests (
   authorization_code TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '10 minutes',
-  
+
   UNIQUE(client_id, code_challenge)
 );
 ```
 
 **Key Features:**
+
 - ✅ **UUID Primary Key** - Supabase native
 - ✅ **Automatic Timestamps** - created_at, expires_at with NOW()
 - ✅ **RLS Policies** - Service role can manage all, users can see their own
@@ -109,10 +111,11 @@ CREATE TABLE oauth_pending_requests (
 **File**: `apps/web/src/app/api/oauth/authorize/route.ts`
 
 **When User Not Authenticated:**
+
 ```typescript
 // Store pending request in Supabase
 const { error } = await serviceRoleClient
-  .from('oauth_pending_requests' as any)
+  .from("oauth_pending_requests" as any)
   .insert({
     client_id,
     code_challenge,
@@ -125,32 +128,33 @@ const { error } = await serviceRoleClient
 
 // Return authorization_pending for programmatic clients
 return NextResponse.json({
-  error: 'authorization_pending',
+  error: "authorization_pending",
   verification_uri: authorizationUri,
 });
 ```
 
 **When User Authenticates:**
+
 ```typescript
 // Lookup pending request
 const { data: pending } = await serviceRoleClient
-  .from('oauth_pending_requests')
-  .select('*')
-  .eq('client_id', clientId)
-  .eq('code_challenge', codeChallenge)
-  .gt('expires_at', new Date().toISOString())
+  .from("oauth_pending_requests")
+  .select("*")
+  .eq("client_id", clientId)
+  .eq("code_challenge", codeChallenge)
+  .gt("expires_at", new Date().toISOString())
   .maybeSingle();
 
 if (pending) {
   // Update with authorization code
   const authCode = generateAuthorizationCode();
   await serviceRoleClient
-    .from('oauth_pending_requests')
+    .from("oauth_pending_requests")
     .update({
       user_id: user.id,
       authorization_code: authCode,
     })
-    .eq('id', pending.id);
+    .eq("id", pending.id);
 }
 
 // Redirect with code
@@ -161,45 +165,50 @@ if (pending) {
 **File**: `apps/web/src/app/api/oauth/token/route.ts`
 
 **Lazy Code Creation:**
+
 ```typescript
 // Compute challenge from verifier
-const computedChallenge = createHash('sha256')
+const computedChallenge = createHash("sha256")
   .update(code_verifier)
-  .digest('base64url');
+  .digest("base64url");
 
 // Lookup pending request
 const { data: pending } = await serviceRoleClient
-  .from('oauth_pending_requests')
-  .select('*')
-  .eq('code_challenge', computedChallenge)
-  .gt('expires_at', new Date().toISOString())
+  .from("oauth_pending_requests")
+  .select("*")
+  .eq("code_challenge", computedChallenge)
+  .gt("expires_at", new Date().toISOString())
   .maybeSingle();
 
 if (pending && pending.authorization_code) {
   // Use code from pending request
   code = pending.authorization_code;
-  
+
   // Delete pending request (single-use enforcement)
   await serviceRoleClient
-    .from('oauth_pending_requests')
+    .from("oauth_pending_requests")
     .delete()
-    .eq('id', pending.id);
+    .eq("id", pending.id);
 }
 ```
 
 **PKCE Verification:**
+
 ```typescript
 // Compute challenge from verifier
-const computedChallenge = createHash('sha256')
+const computedChallenge = createHash("sha256")
   .update(code_verifier)
-  .digest('base64url');
+  .digest("base64url");
 
 // Compare with stored challenge
 if (computedChallenge !== codeData.codeChallenge) {
-  return NextResponse.json({
-    error: 'invalid_grant',
-    error_description: 'Code verifier does not match code challenge',
-  }, { status: 400 });
+  return NextResponse.json(
+    {
+      error: "invalid_grant",
+      error_description: "Code verifier does not match code challenge",
+    },
+    { status: 400 }
+  );
 }
 ```
 
@@ -241,12 +250,15 @@ if (computedChallenge !== codeData.codeChallenge) {
 ### Manual Testing
 
 1. **Single Request Test**:
+
    ```bash
    npx ts-node test-oauth-concurrent.ts
    ```
+
    This sends a single authorization request and verifies the response.
 
 2. **Concurrent Requests Test**:
+
    ```bash
    # Edit test-oauth-concurrent.ts to increase concurrency
    # Run with 3, 5, or 10 concurrent requests
@@ -263,6 +275,7 @@ if (computedChallenge !== codeData.codeChallenge) {
 ### Integration Testing
 
 The test suite in `test-oauth-concurrent.ts` validates:
+
 1. Single authorization request → authorization_pending response
 2. Concurrent authorization requests → each gets pending response
 3. Unique code challenges tracked correctly
@@ -296,15 +309,18 @@ The test suite in `test-oauth-concurrent.ts` validates:
 ## Files Modified
 
 1. **Migration File** (NEW):
+
    - `packages/db/supabase/migrations/20251225000003_oauth_pending_requests.sql`
    - Creates table with indexes and RLS policies
 
 2. **Authorization Endpoint**:
+
    - `apps/web/src/app/api/oauth/authorize/route.ts`
    - Stores pending requests in Supabase
    - Looks up and updates pending requests when authenticated
 
 3. **Token Endpoint**:
+
    - `apps/web/src/app/api/oauth/token/route.ts`
    - Looks up pending requests by code_challenge
    - Gets authorization code from pending request
@@ -339,22 +355,26 @@ LIMIT 10;
 ### Verify Code Challenge Format
 
 The code challenge must be base64url-encoded:
+
 - Allowed characters: `A-Z`, `a-z`, `0-9`, `-`, `_`
 - Length: 43-128 characters
 
 ## Migration Steps
 
 1. **Apply Migration**:
+
    ```bash
    pnpm db:migrate
    ```
 
 2. **Generate Types**:
+
    ```bash
    pnpm db:generate-types
    ```
 
 3. **Restart Services**:
+
    ```bash
    pnpm dev
    ```
@@ -377,4 +397,3 @@ The code challenge must be base64url-encoded:
 - Metrics on authorization_pending flow duration
 - Rate limiting per client_id
 - Support for other grant types (client credentials, etc.)
-

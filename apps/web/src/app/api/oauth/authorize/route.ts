@@ -61,6 +61,8 @@ export async function GET(request: NextRequest) {
         // #endregion
 
         // Store pending request in Supabase for later processing
+        // Note: This is optional - if database operations fail, we can still proceed
+        // The authorization code will be self-contained with all necessary information
         try {
             const serviceRoleClient = createServiceRoleClient();
 
@@ -93,12 +95,28 @@ export async function GET(request: NextRequest) {
                 });
 
             if (insertError) {
-                logger.warn({
-                    insertError: insertError.message,
-                    correlationId,
-                    codeChallengeFull: codeChallenge,
-                }, 'Failed to store pending request in Supabase');
-                // Continue anyway - we can still proceed without persistence
+                // Handle specific database errors gracefully
+                const errorMessage = insertError.message || '';
+                const isTableNotFound = errorMessage.includes('Could not find the table') ||
+                    errorMessage.includes('relation') ||
+                    errorMessage.includes('does not exist');
+
+                if (isTableNotFound) {
+                    logger.warn({
+                        insertError: insertError.message,
+                        correlationId,
+                        codeChallengeFull: codeChallenge,
+                        fallback: 'self-contained-code',
+                    }, 'Database table not found (schema cache issue) - will use self-contained authorization code');
+                } else {
+                    logger.warn({
+                        insertError: insertError.message,
+                        correlationId,
+                        codeChallengeFull: codeChallenge,
+                        fallback: 'self-contained-code',
+                    }, 'Failed to store pending request in Supabase - will use self-contained authorization code');
+                }
+                // Continue anyway - authorization code will be self-contained with all necessary information
             } else {
                 logger.info({
                     clientId,
@@ -112,15 +130,32 @@ export async function GET(request: NextRequest) {
                 }, 'Stored pending request in Supabase with full challenge');
             }
         } catch (error) {
-            logger.warn({
-                error: error instanceof Error ? error.message : 'Unknown error',
-                correlationId,
-            }, 'Exception storing pending request');
-            // Continue anyway
+            // Handle any exceptions during database operations gracefully
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            const isTableNotFound = errorMessage.includes('Could not find the table') ||
+                errorMessage.includes('relation') ||
+                errorMessage.includes('does not exist');
+
+            if (isTableNotFound) {
+                logger.warn({
+                    error: errorMessage,
+                    correlationId,
+                    fallback: 'self-contained-code',
+                }, 'Database table not found (schema cache issue) - will use self-contained authorization code');
+            } else {
+                logger.warn({
+                    error: errorMessage,
+                    correlationId,
+                    fallback: 'self-contained-code',
+                }, 'Exception storing pending request - will use self-contained authorization code');
+            }
+            // Continue anyway - authorization code will be self-contained with all necessary information
         }
 
         // Build OAuth authorize URL with all parameters preserved
-        const oauthAuthorizeUrl = new URL('/oauth/authorize', request.url);
+        // Use absolute URL to ensure proper redirects
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+        const oauthAuthorizeUrl = new URL('/oauth/authorize', baseUrl);
         if (clientId) oauthAuthorizeUrl.searchParams.set('client_id', clientId);
         if (redirectUri) oauthAuthorizeUrl.searchParams.set('redirect_uri', redirectUri);
         if (state) oauthAuthorizeUrl.searchParams.set('state', state);
@@ -170,7 +205,9 @@ export async function GET(request: NextRequest) {
         // #endregion
 
         // Build OAuth authorize URL with all parameters preserved
-        const oauthAuthorizeUrl = new URL('/oauth/authorize', request.url);
+        // Use absolute URL to ensure proper redirects
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+        const oauthAuthorizeUrl = new URL('/oauth/authorize', baseUrl);
         if (clientId) oauthAuthorizeUrl.searchParams.set('client_id', clientId);
         if (redirectUri) oauthAuthorizeUrl.searchParams.set('redirect_uri', redirectUri);
         if (state) oauthAuthorizeUrl.searchParams.set('state', state);
@@ -251,6 +288,8 @@ export async function GET(request: NextRequest) {
     }, 'Storing code challenge in authorization code');
 
     // Check if there's a pending request for this client+challenge to update
+    // Note: This is optional - if database operations fail, we continue with self-contained code
+    // The authorization code is self-contained and contains all necessary information
     try {
         const serviceRoleClient = createServiceRoleClient();
 
@@ -264,10 +303,26 @@ export async function GET(request: NextRequest) {
             .maybeSingle();
 
         if (lookupError) {
-            logger.warn({
-                lookupError: lookupError.message,
-                correlationId,
-            }, 'Failed to lookup pending request from Supabase');
+            // Handle specific database errors gracefully
+            const errorMessage = lookupError.message || '';
+            const isTableNotFound = errorMessage.includes('Could not find the table') ||
+                errorMessage.includes('relation') ||
+                errorMessage.includes('does not exist');
+
+            if (isTableNotFound) {
+                logger.warn({
+                    lookupError: lookupError.message,
+                    correlationId,
+                    fallback: 'self-contained-code',
+                }, 'Database table not found (schema cache issue) - using self-contained authorization code');
+            } else {
+                logger.warn({
+                    lookupError: lookupError.message,
+                    correlationId,
+                    fallback: 'self-contained-code',
+                }, 'Failed to lookup pending request from Supabase - using self-contained authorization code');
+            }
+            // Continue with self-contained code - it contains all necessary information
         } else if (pending) {
             // Found pending request - store the full encoded code
             logger.info({
@@ -304,11 +359,28 @@ export async function GET(request: NextRequest) {
                 .eq('id', pending.id);
 
             if (updateError) {
-                logger.warn({
-                    updateError: updateError.message,
-                    correlationId,
-                    pendingId: pending.id,
-                }, 'Failed to update pending request with code');
+                // Handle update errors gracefully - code is already self-contained
+                const errorMessage = updateError.message || '';
+                const isTableNotFound = errorMessage.includes('Could not find the table') ||
+                    errorMessage.includes('relation') ||
+                    errorMessage.includes('does not exist');
+
+                if (isTableNotFound) {
+                    logger.warn({
+                        updateError: updateError.message,
+                        correlationId,
+                        pendingId: pending.id,
+                        fallback: 'self-contained-code',
+                    }, 'Database table not found (schema cache issue) - authorization code is self-contained');
+                } else {
+                    logger.warn({
+                        updateError: updateError.message,
+                        correlationId,
+                        pendingId: pending.id,
+                        fallback: 'self-contained-code',
+                    }, 'Failed to update pending request with code - authorization code is self-contained');
+                }
+                // Continue - authorization code is self-contained and can be used directly
             } else {
                 logger.info({
                     pendingId: pending.id,
@@ -326,19 +398,38 @@ export async function GET(request: NextRequest) {
                 clientId,
                 codeChallenge: codeChallenge?.substring(0, 20) + '...',
                 correlationId,
-            }, 'No pending request found, using direct code');
+                fallback: 'self-contained-code',
+            }, 'No pending request found, using self-contained authorization code');
         }
     } catch (error) {
-        logger.warn({
-            error: error instanceof Error ? error.message : 'Unknown error',
-            correlationId,
-        }, 'Exception updating pending request');
+        // Handle any exceptions during database operations gracefully
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const isTableNotFound = errorMessage.includes('Could not find the table') ||
+            errorMessage.includes('relation') ||
+            errorMessage.includes('does not exist');
+
+        if (isTableNotFound) {
+            logger.warn({
+                error: errorMessage,
+                correlationId,
+                fallback: 'self-contained-code',
+            }, 'Database table not found (schema cache issue) - authorization code is self-contained');
+        } else {
+            logger.warn({
+                error: errorMessage,
+                correlationId,
+                fallback: 'self-contained-code',
+            }, 'Exception updating pending request - authorization code is self-contained');
+        }
+        // Continue - authorization code is self-contained and contains all necessary information
     }
 
     // For cursor:// redirects, use intermediate callback page
     if (redirectUri?.startsWith('cursor://')) {
         // Encode the final URL as a parameter so the callback page can redirect to it
-        const callbackPage = new URL('/oauth/callback', request.url);
+        // Use absolute URL to ensure proper redirects
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+        const callbackPage = new URL('/oauth/callback', baseUrl);
         callbackPage.searchParams.set('code', finalCode);
         if (state) {
             callbackPage.searchParams.set('state', state);
