@@ -64,6 +64,7 @@ export {
   createProject,
   listProjects,
   getProject,
+  deleteProject,
   initProject,
   getProjectStatus,
   createTask,
@@ -81,15 +82,18 @@ export {
   // Artifacts
   appendArtifact,
   listArtifacts,
+  deleteArtifact,
   // Checkpoints
   createCheckpoint,
   getCheckpoint,
   listCheckpoints,
   getLatestCheckpoint,
+  deleteCheckpoint,
   // Decisions
   recordDecision,
   listDecisions,
   getDecision,
+  deleteDecision,
   type DecisionRecordResult,
   // Constraints
   createConstraint,
@@ -102,6 +106,7 @@ export {
   listOutcomes,
   getOutcomesBySubject,
   getOutcome,
+  deleteOutcome,
   // Memory recall
   recall,
   // Wizard
@@ -117,6 +122,7 @@ export {
   getWorkItem,
   updateWorkItemStatus,
   updateWorkItem,
+  deleteWorkItem,
   // Agent Tasks
   createAgentTask,
   listAgentTasks,
@@ -124,11 +130,14 @@ export {
   updateTaskStatus,
   updateAgentTask,
   addDependency,
+  recordTouchedFiles,
+  deleteAgentTask,
   // Evidence
   addEvidence,
   listEvidence,
   getEvidenceCount,
   getEvidence,
+  deleteEvidence,
   // Interview
   getInterviewQuestions,
   processInterviewResponses,

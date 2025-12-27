@@ -10,7 +10,7 @@ import { createSuccessResponse } from '@/lib/errors/responses';
  */
 export const GET = withErrorHandler(async (
   request: NextRequest,
-  { params }: { params: { taskId: string } }
+  context?: { params?: Promise<Record<string, string>> }
 ): Promise<NextResponse> => {
   const supabase = await createServerClient();
   const {
@@ -22,7 +22,8 @@ export const GET = withErrorHandler(async (
     throw new UnauthorizedError('Authentication required');
   }
 
-  const taskId = params.taskId;
+  const params = await context?.params;
+  const taskId = params?.taskId;
   const searchParams = request.nextUrl.searchParams;
   const limitParam = searchParams.get('limit');
 

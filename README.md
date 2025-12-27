@@ -183,6 +183,7 @@ Agents work on one locked task at a time:
 
 ## 📚 Documentation
 
+- **[docs/USER_GUIDE.md](./docs/USER_GUIDE.md)** - Complete user guide for using ProjectFlow via MCP (start here!)
 - **[docs/SETUP.md](./docs/SETUP.md)** - Complete setup guide (local, Vercel, GitHub)
 - **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** - Common issues and solutions
 - **[projectflow-plan.md](./projectflow-plan.md)** - Original implementation plan

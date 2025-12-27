@@ -324,3 +324,51 @@ export async function getOutcome(
   }
 }
 
+/**
+ * Deletes an outcome
+ * 
+ * @param userId - User ID
+ * @param outcomeId - Outcome ID
+ */
+export async function deleteOutcome(
+  userId: string,
+  outcomeId: string
+): Promise<void> {
+  try {
+    validateUUID(userId, 'userId');
+    validateUUID(outcomeId, 'outcomeId');
+
+    const supabase = createServerClient();
+
+    // First verify the outcome exists and user owns it
+    const outcome = await getOutcome(userId, outcomeId);
+
+    const { error } = await (supabase as any)
+      .from('outcomes')
+      .delete()
+      .eq('id', outcomeId)
+      .eq('user_id', userId);
+
+    if (error) {
+      throw mapSupabaseError(error);
+    }
+
+    // Emit OutcomeDeleted event
+    await emitEvent({
+      project_id: outcome.project_id,
+      user_id: userId,
+      event_type: 'OutcomeDeleted',
+      payload: {
+        outcome_id: outcomeId,
+        subject_type: outcome.subject_type,
+        subject_id: outcome.subject_id,
+      },
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name.includes('Error')) {
+      throw error;
+    }
+    throw mapSupabaseError(error);
+  }
+}
+

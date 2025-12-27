@@ -252,7 +252,7 @@ export async function finishWizard(
         defaultGates,
         constraints: data.do_not_touch || [],
       },
-    } as any);
+    } as any, userId);
     
     // Step 2: Create project spec
     const projectSpec = await createProjectSpec(client, project.id, {

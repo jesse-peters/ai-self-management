@@ -47,6 +47,8 @@ const nextConfig: NextConfig = {
         'module': false,
         'worker_threads': false,
         'import-in-the-middle': false,
+        'child_process': false,
+        'util': false,
       };
 
       // Use webpack.IgnorePlugin to completely ignore these modules
@@ -63,6 +65,16 @@ const nextConfig: NextConfig = {
         })
       );
     }
+
+    // Ignore gitUtils.js imports from MCP server (server-only, shouldn't be bundled)
+    config.plugins = config.plugins || [];
+    config.plugins.push(
+      new webpack.IgnorePlugin({
+        resourceRegExp: /gitUtils\.js$/,
+        contextRegExp: /@projectflow\/mcp-server/,
+      })
+    );
+
     return config;
   },
 };

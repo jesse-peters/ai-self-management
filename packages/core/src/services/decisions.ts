@@ -234,3 +234,50 @@ export async function getDecision(
   }
 }
 
+/**
+ * Deletes a decision
+ * 
+ * @param userId - User ID
+ * @param decisionId - Decision ID
+ */
+export async function deleteDecision(
+  userId: string,
+  decisionId: string
+): Promise<void> {
+  try {
+    validateUUID(userId, 'userId');
+    validateUUID(decisionId, 'decisionId');
+
+    const supabase = createServerClient();
+
+    // First verify the decision exists and user owns it
+    const decision = await getDecision(userId, decisionId);
+
+    const { error } = await (supabase as any)
+      .from('decisions')
+      .delete()
+      .eq('id', decisionId)
+      .eq('user_id', userId);
+
+    if (error) {
+      throw mapSupabaseError(error);
+    }
+
+    // Emit DecisionDeleted event
+    await emitEvent({
+      project_id: decision.project_id,
+      user_id: userId,
+      event_type: 'DecisionDeleted',
+      payload: {
+        decision_id: decisionId,
+        title: decision.title,
+      },
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name.includes('Error')) {
+      throw error;
+    }
+    throw mapSupabaseError(error);
+  }
+}
+

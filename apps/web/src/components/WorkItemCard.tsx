@@ -5,13 +5,30 @@ import { useRouter } from 'next/navigation';
 import { GateStatusIndicator, GateStatusCompact } from './GateStatusIndicator';
 import { TaskProgressBar } from './TaskProgressBar';
 import { TaskTypeIconRow } from './TaskTypeIcon';
+import { DeleteButton } from './DeleteButton';
 
 interface WorkItemCardProps {
   workItem: WorkItemSummary;
+  onDeleted?: (workItemId: string) => void;
 }
 
-export function WorkItemCard({ workItem }: WorkItemCardProps) {
+export function WorkItemCard({ workItem, onDeleted }: WorkItemCardProps) {
   const router = useRouter();
+
+  const handleDelete = async () => {
+    const response = await fetch(`/api/work-items/${workItem.id}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to delete work item');
+    }
+
+    if (onDeleted) {
+      onDeleted(workItem.id);
+    }
+  };
   const progress = workItem.total_tasks > 0 
     ? (workItem.done_tasks / workItem.total_tasks) * 100 
     : 0;
@@ -64,13 +81,24 @@ export function WorkItemCard({ workItem }: WorkItemCardProps) {
             </a>
           )}
         </div>
-        <span
-          className={`text-xs font-semibold px-2 py-1 rounded flex-shrink-0 ml-2 ${
-            statusColors[workItem.status]
-          }`}
-        >
-          {statusLabels[workItem.status]}
-        </span>
+        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+          <span
+            className={`text-xs font-semibold px-2 py-1 rounded ${
+              statusColors[workItem.status]
+            }`}
+          >
+            {statusLabels[workItem.status]}
+          </span>
+          <div onClick={(e) => e.stopPropagation()}>
+            <DeleteButton
+              onDelete={handleDelete}
+              entityName="work item"
+              entityId={workItem.id}
+              size="sm"
+              variant="icon"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Description */}

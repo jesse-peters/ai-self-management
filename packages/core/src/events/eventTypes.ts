@@ -178,6 +178,13 @@ export interface AgentTaskCompletedPayload {
   new_status: string;
 }
 
+export interface AgentTaskFilesTouchedPayload {
+  task_id: string;
+  files_count: number;
+  expected_count: number;
+  warnings: string[];
+}
+
 export interface EvidenceAddedPayload {
   evidence_id?: string;
   task_id?: string | null;
@@ -227,6 +234,7 @@ export type EventPayloadMap = {
   AgentTaskStarted: AgentTaskStartedPayload;
   AgentTaskBlocked: AgentTaskBlockedPayload;
   AgentTaskCompleted: AgentTaskCompletedPayload;
+  AgentTaskFilesTouched: AgentTaskFilesTouchedPayload;
   EvidenceAdded: EvidenceAddedPayload;
   GateConfigured: GateConfiguredPayload;
   GateExecuted: GateExecutedPayload;
@@ -235,7 +243,7 @@ export type EventPayloadMap = {
 /**
  * Type-safe event creation helper
  */
-export type TypedEvent<T extends EventType> = BaseEvent & {
+export type TypedEvent<T extends keyof EventPayloadMap> = BaseEvent & {
   event_type: T;
   payload: EventPayloadMap[T];
 };

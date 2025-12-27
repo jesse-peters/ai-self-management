@@ -92,8 +92,8 @@ export async function configureGates(
     // Use provided authenticated client, or create a new one (for backward compatibility)
     const supabase = client || createServerClient();
 
-    // Verify user owns the project
-    await getProject(supabase, projectId);
+    // Verify user owns the project - pass userId to avoid auth.getUser() call for OAuth clients
+    await getProject(supabase, projectId, userId);
 
     const configuredGates: Gate[] = [];
 
@@ -208,8 +208,8 @@ export async function listGates(
     // Use provided authenticated client, or create a new one (for backward compatibility)
     const supabase = client || createServerClient();
 
-    // Verify user owns the project
-    await getProject(supabase, projectId);
+    // Verify user owns the project - pass userId to avoid auth.getUser() call for OAuth clients
+    await getProject(supabase, projectId, userId);
 
     const { data: gates, error } = await (supabase as any)
       .from('gates')
@@ -314,8 +314,8 @@ export async function runGate(
     // Use provided authenticated client, or create a new one (for backward compatibility)
     const supabase = client || createServerClient();
 
-    // Verify user owns the project
-    await getProject(supabase, projectId);
+    // Verify user owns the project - pass userId to avoid auth.getUser() call for OAuth clients
+    await getProject(supabase, projectId, userId);
 
     // Get the gate configuration
     const { data: gate, error: gateError } = await (supabase as any)
@@ -518,8 +518,8 @@ export async function getGateStatus(
     // Use provided authenticated client, or create a new one (for backward compatibility)
     const supabase = client || createServerClient();
 
-    // Verify user owns the project
-    await getProject(supabase, projectId);
+    // Verify user owns the project - pass userId to avoid auth.getUser() call for OAuth clients
+    await getProject(supabase, projectId, userId);
 
     // Get all gates for the project
     const gates = await listGates(userId, projectId, supabase);

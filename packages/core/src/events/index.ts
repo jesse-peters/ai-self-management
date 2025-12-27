@@ -30,6 +30,7 @@ export type {
   AgentTaskStartedPayload,
   AgentTaskBlockedPayload,
   AgentTaskCompletedPayload,
+  AgentTaskFilesTouchedPayload,
   EvidenceAddedPayload,
   GateConfiguredPayload,
   GateExecutedPayload,

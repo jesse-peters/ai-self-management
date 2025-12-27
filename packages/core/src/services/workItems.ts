@@ -419,3 +419,67 @@ async function getWorkItemGateStatus(
   }
 }
 
+/**
+ * Deletes a work item
+ * 
+ * @param client Authenticated Supabase client (session or OAuth)
+ * @param workItemId Work item ID to delete
+ * @throws NotFoundError if work item not found or user doesn't own it
+ * 
+ * RLS ensures the user can only delete their own work items.
+ * Cascading deletes will remove all related agent tasks.
+ */
+export async function deleteWorkItem(
+  client: SupabaseClient<Database>,
+  workItemId: string
+): Promise<void> {
+  try {
+    // Get existing work item to verify ownership and get project_id for event
+    const { data: existingWorkItem, error: fetchError } = await client
+      .from('work_items')
+      .select('*')
+      .eq('id', workItemId)
+      .single();
+
+    if (fetchError) {
+      throw mapSupabaseError(fetchError);
+    }
+
+    if (!existingWorkItem) {
+      throw new NotFoundError('Work item not found');
+    }
+
+    // Get userId for event
+    const { data: { user } } = await client.auth.getUser();
+    const userId = user?.id;
+
+    // Delete work item (cascades to agent tasks via FK)
+    const { error } = await client
+      .from('work_items')
+      .delete()
+      .eq('id', workItemId);
+
+    if (error) {
+      throw mapSupabaseError(error);
+    }
+
+    // Emit WorkItemDeleted event
+    if (userId) {
+      await emitEvent({
+        project_id: existingWorkItem.project_id,
+        user_id: userId,
+        event_type: 'WorkItemDeleted',
+        payload: {
+          work_item_id: workItemId,
+          title: existingWorkItem.title,
+        },
+      });
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name.includes('Error')) {
+      throw error;
+    }
+    throw mapSupabaseError(error);
+  }
+}
+

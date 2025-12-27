@@ -55,48 +55,108 @@ export interface InitProjectWithManifestsOptions {
 export async function initProjectWithManifests(
     client: SupabaseClient<Database>,
     options: InitProjectWithManifestsOptions,
-    userId?: string
+    userId: string
 ): Promise<InitProjectWithManifestsResult> {
     // Import file-system dependent functions (avoid at top-level)
     const { initializeManifests } = await import('./manifest');
     const { generatePrimer } = await import('./primer');
 
-    // Get userId from parameter or auth context
-    // If userId is provided, use it directly (for OAuth-scoped clients)
-    // Otherwise, try to get from auth context (for session-based clients)
-    let finalUserId: string | undefined = userId;
+    // Log initial state for debugging
+    console.log('[initProjectWithManifests] Initial userId state', {
+        userIdProvided: userId,
+        userIdType: typeof userId,
+        userIdLength: userId ? String(userId).length : 0,
+    });
 
-    // Validate provided userId if present
-    if (finalUserId !== undefined && finalUserId !== null) {
-        if (typeof finalUserId !== 'string' || finalUserId.trim() === '') {
-            throw new Error('Invalid userId provided: must be a non-empty string');
-        }
-        finalUserId = finalUserId.trim();
-    }
+    // Validate userId - it's now required, so it should always be provided
+    if (!userId || typeof userId !== 'string' || userId.trim() === '') {
+        const error = new Error('User authentication required: userId must be a non-empty string');
+        console.error('[initProjectWithManifests] Invalid userId', {
+            userId,
+            userIdType: typeof userId,
+        });
 
-    // Only try to get from auth context if userId wasn't provided
-    // Skip this for OAuth-scoped clients where getUser() may not work
-    if (!finalUserId) {
+        // Capture to Sentry using centralized error handling
         try {
-            const { data: { user }, error: userError } = await client.auth.getUser();
-            if (!userError && user?.id) {
-                finalUserId = user.id;
-            }
-        } catch (authError) {
-            // If getUser() fails (e.g., on OAuth-scoped clients), that's okay
-            // We'll throw the error below if userId is still missing
+            const { captureError } = await import('../errors/sentry');
+            captureError(error, {
+                component: 'initProjectWithManifests',
+                method: 'initProjectWithManifests',
+            }, {
+                level: 'error',
+                tags: {
+                    error_type: 'auth_required',
+                },
+                extra: {
+                    userIdProvided: userId,
+                    userIdType: typeof userId,
+                    hasClient: !!client,
+                    repoRoot: options.repoRoot,
+                },
+            });
+        } catch {
+            // Error handling failed, continue
         }
+
+        throw error;
     }
 
-    if (!finalUserId) {
-        throw new Error('User authentication required');
-    }
+    const finalUserId = userId.trim();
+    console.log('[initProjectWithManifests] Using provided userId', {
+        userId: finalUserId,
+        userIdLength: finalUserId.length,
+    });
 
     // Create the project with userId
-    const project = await createProject(client, {
-        name: options.name,
-        description: options.description || 'Managed by ProjectFlow',
-    }, finalUserId);
+    console.log('[initProjectWithManifests] Calling createProject', {
+        userId: finalUserId,
+        userIdLength: finalUserId.length,
+        projectName: options.name,
+    });
+
+    let project;
+    try {
+        project = await createProject(client, {
+            name: options.name,
+            description: options.description || 'Managed by ProjectFlow',
+        }, finalUserId);
+        console.log('[initProjectWithManifests] createProject succeeded', {
+            projectId: project.id,
+            projectName: project.name,
+        });
+    } catch (createError) {
+        console.error('[initProjectWithManifests] createProject failed', {
+            error: createError instanceof Error ? createError.message : String(createError),
+            errorType: createError?.constructor?.name,
+            errorStack: createError instanceof Error ? createError.stack : undefined,
+            userId: finalUserId,
+            projectName: options.name,
+        });
+
+        // Capture to Sentry
+        try {
+            const { captureError } = await import('../errors/sentry');
+            captureError(createError, {
+                component: 'initProjectWithManifests',
+                method: 'createProject',
+                userId: finalUserId,
+            }, {
+                level: 'error',
+                tags: {
+                    error_type: 'project_creation_failed',
+                },
+                extra: {
+                    userId: finalUserId,
+                    projectName: options.name,
+                    errorMessage: createError instanceof Error ? createError.message : String(createError),
+                },
+            });
+        } catch (sentryError) {
+            console.error('[initProjectWithManifests] Failed to capture error to Sentry', sentryError);
+        }
+
+        throw createError;
+    }
 
     let gates: Gate[] = [];
 

@@ -287,3 +287,50 @@ export async function getLatestCheckpoint(
   }
 }
 
+/**
+ * Deletes a checkpoint
+ * 
+ * @param userId - User ID
+ * @param checkpointId - Checkpoint ID
+ */
+export async function deleteCheckpoint(
+  userId: string,
+  checkpointId: string
+): Promise<void> {
+  try {
+    validateUUID(userId, 'userId');
+    validateUUID(checkpointId, 'checkpointId');
+
+    const supabase = createServerClient();
+
+    // First verify the checkpoint exists and user owns it
+    const checkpoint = await getCheckpoint(userId, checkpointId);
+
+    const { error } = await (supabase as any)
+      .from('checkpoints')
+      .delete()
+      .eq('id', checkpointId)
+      .eq('user_id', userId);
+
+    if (error) {
+      throw mapSupabaseError(error);
+    }
+
+    // Emit CheckpointDeleted event
+    await emitEvent({
+      project_id: checkpoint.project_id,
+      user_id: userId,
+      event_type: 'CheckpointDeleted',
+      payload: {
+        checkpoint_id: checkpointId,
+        label: checkpoint.label,
+      },
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name.includes('Error')) {
+      throw error;
+    }
+    throw mapSupabaseError(error);
+  }
+}
+

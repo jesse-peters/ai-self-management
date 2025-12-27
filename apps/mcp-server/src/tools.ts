@@ -159,6 +159,31 @@ export const tools: Tool[] = [
       required: ['taskId', 'status'],
     },
   },
+  {
+    name: 'pm.task_record_touched_files',
+    description: 'Records which files were touched during task execution. Compares against expected files and returns warnings.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        projectId: { type: 'string', description: 'Project ID' },
+        taskId: { type: 'string', description: 'Task ID' },
+        files: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Array of file paths that were modified (relative to repo root)'
+        },
+        autoDetect: {
+          type: 'boolean',
+          description: 'If true, automatically detect files using git diff (ignores files parameter)'
+        },
+        repoPath: {
+          type: 'string',
+          description: 'Optional path to git repository (defaults to cwd)'
+        },
+      },
+      required: ['projectId', 'taskId'],
+    },
+  },
 
   // ========== MEMORY (3 tools) ==========
   {

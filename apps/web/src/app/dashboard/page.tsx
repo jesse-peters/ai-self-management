@@ -75,6 +75,21 @@ export default function DashboardPage() {
     }
   }, [user, loadProjects]);
 
+  const handleProjectDeleted = useCallback((deletedProjectId: string) => {
+    // If the deleted project was selected, clear selection
+    if (selectedProjectId === deletedProjectId) {
+      setSelectedProjectId(undefined);
+      setWorkItems([]);
+    }
+    // Reload projects list
+    loadProjects();
+  }, [selectedProjectId, loadProjects]);
+
+  const handleWorkItemDeleted = useCallback((deletedWorkItemId: string) => {
+    // Remove deleted work item from list
+    setWorkItems((prev) => prev.filter((wi) => wi.id !== deletedWorkItemId));
+  }, []);
+
   // Load work items when project is selected
   useEffect(() => {
     if (selectedProjectId && user) {
@@ -164,13 +179,51 @@ export default function DashboardPage() {
                 ))}
               </select>
               {selectedProject && (
-                <button
-                  onClick={() => setManifestProject(selectedProject)}
-                  className="px-3 py-2 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 border border-blue-300 dark:border-blue-600 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-                  title="Generate .pm/project.json manifest"
-                >
-                  📄 Manifest
-                </button>
+                <>
+                  <button
+                    onClick={() => setManifestProject(selectedProject)}
+                    className="px-3 py-2 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 border border-blue-300 dark:border-blue-600 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                    title="Generate .pm/project.json manifest"
+                  >
+                    📄 Manifest
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!confirm(`Are you sure you want to delete "${selectedProject.name}"? This action cannot be undone.`)) {
+                        return;
+                      }
+                      try {
+                        const response = await fetch(`/api/projects/${selectedProject.id}`, {
+                          method: 'DELETE',
+                        });
+                        if (!response.ok) {
+                          const error = await response.json();
+                          throw new Error(error.message || 'Failed to delete project');
+                        }
+                        handleProjectDeleted(selectedProject.id);
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : 'Failed to delete project');
+                      }
+                    }}
+                    className="px-3 py-2 text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 border border-red-300 dark:border-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-1.5"
+                    title="Delete project"
+                  >
+                    <svg
+                      className="h-4 w-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth="2"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165l0.01-.004L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397M7.5 21.75h12m-12 0a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a2.25 2.25 0 002.244 2.077h.011M7.5 21.75v-5.25m0 0h12v5.25m-12 0a2.25 2.25 0 01-2.244-2.077L4.772 5.79"
+                      />
+                    </svg>
+                    Delete
+                  </button>
+                </>
               )}
             </div>
             {projectMetrics && (
@@ -280,7 +333,7 @@ export default function DashboardPage() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {workItems.map((workItem) => (
-                  <WorkItemCard key={workItem.id} workItem={workItem} />
+                  <WorkItemCard key={workItem.id} workItem={workItem} onDeleted={handleWorkItemDeleted} />
                 ))}
               </div>
             )}

@@ -1,0 +1,9 @@
+# Local user-specific settings (do not commit)
+local.json
+
+# Recon output (can be large and regenerated)
+recon.yml
+*.recon.log
+
+# Primer (regenerated from SaaS)
+primer.md

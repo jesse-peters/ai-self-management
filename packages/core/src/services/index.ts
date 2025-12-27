@@ -3,24 +3,26 @@
  * Re-exports all service functions for easy access
  */
 
-export { createProject, listProjects, getProject } from './projects';
+export { createProject, listProjects, getProject, deleteProject } from './projects';
 export { initProject, type InitResult, type InitOptions } from './init';
 export { getProjectStatus, type ProjectStatus } from './status';
 export { createTask, listTasks, updateTask, getTask } from './tasks';
 export { saveSessionContext, getLatestSession, getProjectContext } from './sessions';
 export { pickNextTask, startTask, blockTask, completeTask } from './taskLifecycle';
 export type { TaskPickingStrategy } from './taskLifecycle';
-export { appendArtifact, listArtifacts } from './artifacts';
+export { appendArtifact, listArtifacts, deleteArtifact } from './artifacts';
 export {
   createCheckpoint,
   getCheckpoint,
   listCheckpoints,
   getLatestCheckpoint,
+  deleteCheckpoint,
 } from './checkpoints';
 export {
   recordDecision,
   listDecisions,
   getDecision,
+  deleteDecision,
   type DecisionRecordResult,
 } from './decisions';
 export {
@@ -40,6 +42,7 @@ export {
   listOutcomes,
   getOutcomesBySubject,
   getOutcome,
+  deleteOutcome,
   type OutcomeSubjectType,
   type OutcomeResult,
   type OutcomeCreatedBy,
@@ -64,6 +67,7 @@ export {
   getWorkItem,
   updateWorkItemStatus,
   updateWorkItem,
+  deleteWorkItem,
   type WorkItemSummary,
 } from './workItems';
 export {
@@ -73,6 +77,8 @@ export {
   updateTaskStatus,
   updateAgentTask,
   addDependency,
+  recordTouchedFiles,
+  deleteAgentTask,
   type AgentTaskFilters,
   type AgentTaskWithDetails,
 } from './agentTasks';
@@ -81,6 +87,7 @@ export {
   listEvidence,
   getEvidenceCount,
   getEvidence,
+  deleteEvidence,
   type EvidenceType,
   type EvidenceCreatedBy,
 } from './evidence';

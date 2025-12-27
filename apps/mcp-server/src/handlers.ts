@@ -10,11 +10,16 @@ import { verifyAccessToken } from '@projectflow/core';
 import {
   implementInit,
   implementStatus,
+  implementWorkItemCreate,
+  implementWorkItemGet,
+  implementWorkItemList,
+  implementWorkItemSetStatus,
   implementAgentTaskCreate,
   implementAgentTaskSetStatus,
   implementMemoryRecall,
   implementRecordDecision,
   implementRecordOutcome,
+  implementGateConfigure,
   implementGateRun,
   implementGateStatus,
   implementCreateConstraint,
@@ -91,6 +96,130 @@ export async function handleStatus(
     };
   } catch (error) {
     // Context already set in routeToolCall
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles work_item_create tool calls
+ */
+export async function handleWorkItemCreate(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementWorkItemCreate(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles work_item_get tool calls
+ */
+export async function handleWorkItemGet(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementWorkItemGet(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles work_item_list tool calls
+ */
+export async function handleWorkItemList(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementWorkItemList(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles work_item_set_status tool calls
+ */
+export async function handleWorkItemSetStatus(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementWorkItemSetStatus(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
     const mcpError = mapErrorToMCP(error);
     return {
       content: [
@@ -362,6 +491,38 @@ export async function handleGateRun(
 }
 
 /**
+ * Handles gate_configure tool calls
+ */
+export async function handleGateConfigure(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementGateConfigure(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    // Context already set in routeToolCall
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
  * Handles gate_status tool calls
  */
 export async function handleGateStatus(
@@ -556,6 +717,9 @@ export async function handleInitWithInterview(
   params: Record<string, unknown>,
   accessToken: string
 ): Promise<ToolCallResult> {
+  // Extract userId for error context
+  const userId = await getUserIdFromToken(accessToken);
+
   try {
     const result = await implementInitWithInterview(accessToken, params);
     return {
@@ -567,7 +731,25 @@ export async function handleInitWithInterview(
       ],
     };
   } catch (error) {
-    const mcpError = mapErrorToMCP(error);
+    // Capture error with context for Sentry
+    Sentry.captureException(error, {
+      tags: {
+        tool: 'pm.init_with_interview',
+        error_type: 'init_failed',
+      },
+      extra: {
+        userId,
+        hasRepoRoot: !!params.repoRoot,
+        projectName: params.name,
+        interviewResponsesKeys: params.interviewResponses ? Object.keys(params.interviewResponses as Record<string, unknown>) : [],
+      },
+      level: 'error',
+    });
+
+    const mcpError = mapErrorToMCP(error, {
+      method: 'pm.init_with_interview',
+      userId: userId,
+    });
     return {
       content: [
         {
@@ -746,6 +928,18 @@ export async function routeToolCall(
       case 'pm.status':
         result = await handleStatus(params, accessToken);
         break;
+      case 'pm.work_item_create':
+        result = await handleWorkItemCreate(params, accessToken);
+        break;
+      case 'pm.work_item_get':
+        result = await handleWorkItemGet(params, accessToken);
+        break;
+      case 'pm.work_item_list':
+        result = await handleWorkItemList(params, accessToken);
+        break;
+      case 'pm.work_item_set_status':
+        result = await handleWorkItemSetStatus(params, accessToken);
+        break;
       case 'pm.task_create':
         result = await handleTaskCreate(params, accessToken);
         break;
@@ -760,6 +954,9 @@ export async function routeToolCall(
         break;
       case 'pm.record_outcome':
         result = await handleRecordOutcome(params, accessToken);
+        break;
+      case 'pm.gate_configure':
+        result = await handleGateConfigure(params, accessToken);
         break;
       case 'pm.gate_run':
         result = await handleGateRun(params, accessToken);
@@ -819,8 +1016,26 @@ export async function routeToolCall(
     }
     return result;
   } catch (error) {
-    // Context is already set in routeToolCall, just pass error
-    const mcpError = mapErrorToMCP(error);
+    // Context is already set in routeToolCall, pass it to error handler
+    const mcpError = mapErrorToMCP(error, {
+      method: toolName,
+      userId: userId,
+    });
+
+    // Also capture to Sentry with full context
+    Sentry.captureException(error, {
+      tags: {
+        tool: toolName,
+        error_type: 'tool_call_failed',
+      },
+      extra: {
+        userId,
+        toolName,
+        params: JSON.stringify(params),
+      },
+      level: 'error',
+    });
+
     return {
       content: [
         {

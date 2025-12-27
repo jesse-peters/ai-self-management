@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabaseClient';
-import { listConstraints, createConstraint, UnauthorizedError, ValidationError } from '@projectflow/core';
+import { listConstraints, createConstraint, deleteConstraint, UnauthorizedError, ValidationError } from '@projectflow/core';
 import { withErrorHandler } from '@/lib/api/withErrorHandler';
 import { createSuccessResponse } from '@/lib/errors/responses';
 
@@ -92,5 +92,34 @@ export const POST = withErrorHandler(async (request: NextRequest): Promise<NextR
   });
 
   return createSuccessResponse({ constraint }, 201);
+}, 'constraints-api');
+
+/**
+ * DELETE /api/constraints?id={id}
+ * Deletes a constraint
+ */
+export const DELETE = withErrorHandler(async (request: NextRequest): Promise<NextResponse> => {
+  const supabase = await createServerClient();
+
+  // Get authenticated user
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    throw new UnauthorizedError('Authentication required');
+  }
+
+  const searchParams = request.nextUrl.searchParams;
+  const id = searchParams.get('id');
+
+  if (!id) {
+    throw new ValidationError('id is required');
+  }
+
+  await deleteConstraint(user.id, id);
+
+  return createSuccessResponse({ success: true }, 200);
 }, 'constraints-api');
 

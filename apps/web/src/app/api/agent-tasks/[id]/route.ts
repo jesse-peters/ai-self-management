@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabaseClient';
-import { getAgentTask, updateAgentTask, updateTaskStatus, addDependency, UnauthorizedError } from '@projectflow/core';
+import { getAgentTask, updateAgentTask, updateTaskStatus, addDependency, deleteAgentTask, UnauthorizedError } from '@projectflow/core';
 import { withErrorHandler } from '@/lib/api/withErrorHandler';
 import { createSuccessResponse } from '@/lib/errors/responses';
 
@@ -76,5 +76,31 @@ export const PATCH = withErrorHandler(async (
   const task = await updateAgentTask(supabase, id, body);
 
   return createSuccessResponse({ task }, 200);
+}, 'agent-tasks-api');
+
+/**
+ * DELETE /api/agent-tasks/[id]
+ * Deletes an agent task
+ */
+export const DELETE = withErrorHandler(async (
+  request: NextRequest,
+  context?: { params?: Promise<Record<string, string>> }
+): Promise<NextResponse> => {
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    throw new UnauthorizedError('Authentication required');
+  }
+
+  const params = await context!.params!;
+  const id = params.id;
+
+  await deleteAgentTask(supabase, id);
+
+  return createSuccessResponse({ success: true }, 200);
 }, 'agent-tasks-api');
 

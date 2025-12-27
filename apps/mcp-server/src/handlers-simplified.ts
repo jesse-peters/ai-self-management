@@ -12,6 +12,7 @@ import {
   implementAgentTaskCreate,
   implementAgentTaskGet,
   implementAgentTaskSetStatus,
+  implementTaskRecordTouchedFiles,
   implementWorkItemCreate,
   implementWorkItemGet,
   implementWorkItemList,
@@ -169,6 +170,37 @@ export async function handleTaskSetStatus(
 ): Promise<ToolCallResult> {
   try {
     const result = await implementAgentTaskSetStatus(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles task_record_touched_files tool calls
+ */
+export async function handleTaskRecordTouchedFiles(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementTaskRecordTouchedFiles(accessToken, params);
     return {
       content: [
         {
@@ -664,6 +696,8 @@ export async function routeToolCall(
       return handleTaskGet(params, accessToken);
     case 'pm.task_set_status':
       return handleTaskSetStatus(params, accessToken);
+    case 'pm.task_record_touched_files':
+      return handleTaskRecordTouchedFiles(params, accessToken);
 
     // Memory
     case 'pm.memory_recall':

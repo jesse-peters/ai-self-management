@@ -36,7 +36,28 @@ export function mapErrorToMCP(error: unknown, context?: { method?: string; userI
   if (error instanceof ValidationError) {
     const field = error.field;
     const message = error.message;
-    // Don't capture validation errors - they're expected
+    
+    // Capture authentication-related validation errors to Sentry
+    // These are unexpected and indicate a real problem
+    if (message.includes('User authentication required') || message.includes('authentication')) {
+      captureError(error, {
+        component: 'mcp-server',
+        method: context?.method,
+        userId: context?.userId,
+      }, {
+        level: 'error',
+        tags: {
+          error_type: 'auth_validation_error',
+          mcp_error_code: 'INVALID_PARAMS',
+        },
+        extra: {
+          field,
+          message,
+        },
+      });
+    }
+    // Don't capture other validation errors - they're expected
+    
     return {
       code: 'INVALID_PARAMS',
       message: `Validation error${field ? ` on field "${field}"` : ''}: ${message}`,

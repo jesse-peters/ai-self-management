@@ -23,6 +23,8 @@ import {
   getAgentTask,
   importPlan,
   exportPlan,
+  recordTouchedFiles,
+  ValidationError,
   type AgentTaskFilters,
   type InitResult,
   type ProjectStatus,
@@ -167,7 +169,7 @@ export async function implementInit(
     name: params.name as string,
     description: params.description as string | undefined,
     skipGates: params.skipGates as boolean | undefined,
-  });
+  }, userId);
 
   return result;
 }
@@ -304,6 +306,7 @@ export async function implementWorkItemCreate(
     description: (params.description as string) || null,
     external_url: (params.externalUrl as string) || null,
     status: 'open',
+    definition_of_done: null,
   });
 }
 
@@ -375,6 +378,11 @@ export async function implementAgentTaskCreate(
     depends_on_ids: params.dependsOnIds as string[] | undefined || [],
     status: 'ready',
     risk: 'low',
+    task_key: null,
+    expected_files: [],
+    touched_files: [],
+    subtasks: null,
+    gates: null,
   });
 }
 
@@ -392,6 +400,62 @@ export async function implementAgentTaskSetStatus(
     params.taskId as string,
     params.status as 'ready' | 'doing' | 'blocked' | 'review' | 'done',
     params.blockedReason as string | undefined
+  );
+}
+
+/**
+ * Implements pm.task_record_touched_files tool
+ */
+export async function implementTaskRecordTouchedFiles(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<{
+  task: AgentTask;
+  comparison: {
+    expected_and_touched: string[];
+    missing_expected: string[];
+    unexpected_touched: string[];
+    warnings: string[];
+  };
+}> {
+  const { client } = await authenticateTool(accessToken, 'oauth');
+
+  let files: string[];
+
+  if (params.autoDetect) {
+    // Auto-detect using git diff (server-side only)
+    // Check if we're in a Node.js environment before attempting import
+    if (typeof process === 'undefined') {
+      throw new ValidationError(
+        'Auto-detect is only available in server environments. Please provide files explicitly.',
+        'autoDetect'
+      );
+    }
+    // Use require for server-side only code to avoid bundling issues
+    // This is only executed server-side (checked above)
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getChangedFiles } = require('./gitUtils');
+      const changedFiles = await getChangedFiles(params.repoPath as string | undefined);
+      files = changedFiles.all;
+    } catch (error) {
+      // If gitUtils can't be imported (e.g., in browser), throw a helpful error
+      throw new ValidationError(
+        'Auto-detect is only available in server environments. Please provide files explicitly.',
+        'autoDetect'
+      );
+    }
+  } else {
+    files = params.files as string[];
+    if (!Array.isArray(files)) {
+      throw new ValidationError('files must be an array when autoDetect is false', 'files');
+    }
+  }
+
+  return recordTouchedFiles(
+    client,
+    params.taskId as string,
+    files
   );
 }
 
@@ -583,15 +647,95 @@ export async function implementInitWithInterview(
   params: Record<string, unknown>
 ): Promise<any> {
   // Use consolidated auth helper - it handles validation
-  const { userId: validatedUserId, client } = await authenticateTool(accessToken, 'oauth');
+  let validatedUserId: string;
+  let client: ReturnType<typeof createOAuthScopedClient>;
+
+  try {
+    const authResult = await authenticateTool(accessToken, 'oauth');
+    validatedUserId = authResult.userId;
+    client = authResult.client;
+
+    // Log authentication success for debugging
+    console.log('[pm.init_with_interview] Authentication successful', {
+      userId: validatedUserId,
+      hasRepoRoot: !!params.repoRoot,
+      projectName: params.name,
+    });
+  } catch (authError) {
+    // Capture authentication failure with detailed context
+    const error = authError instanceof Error ? authError : new Error(String(authError));
+    console.error('[pm.init_with_interview] Authentication failed', {
+      error: error.message,
+      hasToken: !!accessToken,
+      tokenPreview: accessToken ? `${accessToken.substring(0, 20)}...` : 'none',
+    });
+
+    // Re-throw with more context
+    throw new Error(`Authentication failed: ${error.message}`);
+  }
+
+  // Validate userId is present and not empty
+  if (!validatedUserId || validatedUserId.trim() === '') {
+    const error = new Error('User authentication required: userId is empty or invalid after authentication');
+    console.error('[pm.init_with_interview] Invalid userId after authentication', {
+      userId: validatedUserId,
+      userIdType: typeof validatedUserId,
+    });
+    throw error;
+  }
 
   // If repoRoot is provided, use the server-only function that handles manifests
   if (params.repoRoot) {
-    const result: InitProjectWithManifestsResult = await initProjectWithManifests(client, {
+    try {
+      // Final validation before calling
+      if (!validatedUserId || typeof validatedUserId !== 'string' || validatedUserId.trim() === '') {
+        throw new Error(`CRITICAL: validatedUserId is invalid before initProjectWithManifests call: ${JSON.stringify({ validatedUserId, type: typeof validatedUserId })}`);
+      }
+
+      console.log('[pm.init_with_interview] Calling initProjectWithManifests', {
+        userId: validatedUserId,
+        userIdLength: validatedUserId.length,
+        userIdPreview: `${validatedUserId.substring(0, 8)}...`,
+        repoRoot: params.repoRoot,
+      });
+
+      const result: InitProjectWithManifestsResult = await initProjectWithManifests(client, {
+        name: params.name as string,
+        description: params.description as string | undefined,
+        skipGates: params.skipGates as boolean | undefined,
+        repoRoot: params.repoRoot as string,
+        interviewResponses: params.interviewResponses as Record<string, unknown>,
+      }, validatedUserId);
+
+      return {
+        project: result.project,
+        gates: result.gates,
+        message: result.message,
+        conventions: result.conventions,
+        reconProfile: result.reconProfile,
+        manifestPaths: result.manifestPaths,
+        primerPath: result.primerPath,
+      };
+    } catch (initError) {
+      console.error('[pm.init_with_interview] initProjectWithManifests failed', {
+        error: initError instanceof Error ? initError.message : String(initError),
+        userId: validatedUserId,
+        repoRoot: params.repoRoot,
+      });
+      throw initError;
+    }
+  }
+
+  // Otherwise, use the browser-safe version
+  try {
+    console.log('[pm.init_with_interview] Calling initProject (browser-safe)', {
+      userId: validatedUserId,
+    });
+
+    const result = await initProject(client, {
       name: params.name as string,
       description: params.description as string | undefined,
       skipGates: params.skipGates as boolean | undefined,
-      repoRoot: params.repoRoot as string,
       interviewResponses: params.interviewResponses as Record<string, unknown>,
     }, validatedUserId);
 
@@ -601,26 +745,14 @@ export async function implementInitWithInterview(
       message: result.message,
       conventions: result.conventions,
       reconProfile: result.reconProfile,
-      manifestPaths: result.manifestPaths,
-      primerPath: result.primerPath,
     };
+  } catch (initError) {
+    console.error('[pm.init_with_interview] initProject failed', {
+      error: initError instanceof Error ? initError.message : String(initError),
+      userId: validatedUserId,
+    });
+    throw initError;
   }
-
-  // Otherwise, use the browser-safe version
-  const result = await initProject(client, {
-    name: params.name as string,
-    description: params.description as string | undefined,
-    skipGates: params.skipGates as boolean | undefined,
-    interviewResponses: params.interviewResponses as Record<string, unknown>,
-  }, validatedUserId);
-
-  return {
-    project: result.project,
-    gates: result.gates,
-    message: result.message,
-    conventions: result.conventions,
-    reconProfile: result.reconProfile,
-  };
 }
 
 /**

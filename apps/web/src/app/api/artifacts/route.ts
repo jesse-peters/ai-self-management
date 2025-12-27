@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabaseClient';
-import { listArtifacts, UnauthorizedError, ValidationError } from '@projectflow/core';
+import { listArtifacts, deleteArtifact, UnauthorizedError, ValidationError } from '@projectflow/core';
 import { withErrorHandler } from '@/lib/api/withErrorHandler';
 import { createSuccessResponse } from '@/lib/errors/responses';
 
@@ -26,8 +26,35 @@ export const GET = withErrorHandler(async (request: NextRequest): Promise<NextRe
     throw new ValidationError('taskId is required', 'taskId');
   }
 
-  const artifacts = await listArtifacts(user.id, taskId);
+  const artifacts = await listArtifacts(supabase, taskId);
 
   return createSuccessResponse({ artifacts }, 200);
+}, 'artifacts-api');
+
+/**
+ * DELETE /api/artifacts?id={id}
+ * Deletes an artifact
+ */
+export const DELETE = withErrorHandler(async (request: NextRequest): Promise<NextResponse> => {
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    throw new UnauthorizedError('Authentication required');
+  }
+
+  const searchParams = request.nextUrl.searchParams;
+  const id = searchParams.get('id');
+
+  if (!id) {
+    throw new ValidationError('id is required');
+  }
+
+  await deleteArtifact(supabase, id);
+
+  return createSuccessResponse({ success: true }, 200);
 }, 'artifacts-api');
 

@@ -48,7 +48,7 @@ export interface AgentTaskWithDetails extends AgentTask {
  * @throws ValidationError if data is invalid
  * @throws NotFoundError if project or work item not found
  * 
- * RLS automatically sets user_id from authenticated context.
+ * RLS requires user_id to be set explicitly in the insert.
  */
 export async function createAgentTask(
   client: SupabaseClient<Database>,
@@ -109,9 +109,16 @@ export async function createAgentTask(
       }
     }
 
-    // Build insert data
+    // Get userId from auth context (required for RLS policy)
+    const { data: { user }, error: userError } = await client.auth.getUser();
+    if (userError || !user) {
+      throw new ValidationError('User authentication required');
+    }
+
+    // Build insert data with user_id (required by RLS policy)
     const insertData: any = {
       project_id: projectId,
+      user_id: user.id,
       work_item_id: data.work_item_id || null,
       type: data.type,
       title: data.title.trim(),
@@ -143,15 +150,11 @@ export async function createAgentTask(
       throw new NotFoundError('Failed to retrieve created task');
     }
 
-    // Get userId from auth context for event
-    const { data: { user } } = await client.auth.getUser();
-    const userId = user?.id;
-
-    // Emit AgentTaskCreated event
-    if (userId) {
+    // Emit AgentTaskCreated event (userId already retrieved above)
+    if (user.id) {
       await emitEvent({
         project_id: projectId,
-        user_id: userId,
+        user_id: user.id,
         event_type: 'AgentTaskCreated',
         payload: {
           task_id: task.id,
@@ -378,8 +381,8 @@ export async function updateTaskStatus(
     if (userId && status !== existingTask.status) {
       const eventType =
         status === 'doing' ? 'AgentTaskStarted' :
-        status === 'blocked' ? 'AgentTaskBlocked' :
-        status === 'done' ? 'AgentTaskCompleted' : null;
+          status === 'blocked' ? 'AgentTaskBlocked' :
+            status === 'done' ? 'AgentTaskCompleted' : null;
 
       if (eventType) {
         await emitEvent({
@@ -404,6 +407,87 @@ export async function updateTaskStatus(
     }
     throw mapSupabaseError(error);
   }
+}
+
+/**
+ * Records which files were touched during task execution
+ * Compares against expected_files and returns warnings
+ * 
+ * @param client Authenticated Supabase client
+ * @param taskId Task ID
+ * @param files Array of file paths that were modified
+ * @returns Comparison results with warnings
+ */
+export async function recordTouchedFiles(
+  client: SupabaseClient<Database>,
+  taskId: string,
+  files: string[]
+): Promise<{
+  task: AgentTask;
+  comparison: {
+    expected_and_touched: string[];
+    missing_expected: string[];
+    unexpected_touched: string[];
+    warnings: string[];
+  };
+}> {
+  // Get current task
+  const task = await getAgentTask(client, taskId);
+
+  // Update touched_files
+  const { data: updatedTask, error } = await client
+    .from('agent_tasks')
+    .update({ touched_files: files })
+    .eq('id', taskId)
+    .select()
+    .single();
+
+  if (error) throw mapSupabaseError(error);
+
+  // Compare with expected_files
+  const expected = new Set(task.expected_files || []);
+  const touched = new Set(files);
+
+  const expected_and_touched = files.filter(f => expected.has(f));
+  const missing_expected = (task.expected_files || []).filter(f => !touched.has(f));
+  const unexpected_touched = files.filter(f => !expected.has(f));
+
+  const warnings: string[] = [];
+  if (missing_expected.length > 0) {
+    warnings.push(`Expected files not touched: ${missing_expected.join(', ')}`);
+  }
+  if (unexpected_touched.length > 0) {
+    warnings.push(`Unexpected files touched: ${unexpected_touched.join(', ')}`);
+  }
+
+  // Get userId for event
+  const { data: { user } } = await client.auth.getUser();
+  const userId = user?.id;
+
+  // Emit event
+  if (userId) {
+    await emitEvent({
+      project_id: task.project_id,
+      user_id: userId,
+      event_type: 'AgentTaskFilesTouched',
+      payload: {
+        task_id: taskId,
+        files_count: files.length,
+        expected_count: expected.size,
+        warnings,
+      },
+    }, client);
+  }
+
+  return {
+    task: updatedTask as AgentTask,
+    comparison: {
+      expected_and_touched,
+      missing_expected,
+      unexpected_touched,
+      warnings,
+    },
+  };
 }
 
 /**
@@ -535,6 +619,83 @@ export async function addDependency(
     }
 
     return updatedTask as AgentTask;
+  } catch (error) {
+    if (error instanceof Error && error.name.includes('Error')) {
+      throw error;
+    }
+    throw mapSupabaseError(error);
+  }
+}
+
+/**
+ * Deletes an agent task
+ * 
+ * @param client Authenticated Supabase client (session or OAuth)
+ * @param taskId Task ID to delete
+ * @throws NotFoundError if task not found or user doesn't own it
+ * @throws ValidationError if task is locked (actively being worked on)
+ * 
+ * RLS ensures the user can only delete their own tasks.
+ */
+export async function deleteAgentTask(
+  client: SupabaseClient<Database>,
+  taskId: string
+): Promise<void> {
+  try {
+    // Get existing task to verify ownership and check if locked
+    const { data: existingTask, error: fetchError } = await client
+      .from('agent_tasks')
+      .select('*')
+      .eq('id', taskId)
+      .single();
+
+    if (fetchError) {
+      throw mapSupabaseError(fetchError);
+    }
+
+    if (!existingTask) {
+      throw new NotFoundError('Agent task not found');
+    }
+
+    // Check if task is locked (prevent deletion of active tasks)
+    if (existingTask.locked_at) {
+      const lockedAt = new Date(existingTask.locked_at);
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      if (lockedAt > oneHourAgo) {
+        throw new ValidationError(
+          'Cannot delete task: task is currently locked and may be in progress'
+        );
+      }
+    }
+
+    // Get userId for event
+    const { data: { user } } = await client.auth.getUser();
+    const userId = user?.id;
+
+    // Delete agent task
+    const { error } = await client
+      .from('agent_tasks')
+      .delete()
+      .eq('id', taskId);
+
+    if (error) {
+      throw mapSupabaseError(error);
+    }
+
+    // Emit AgentTaskDeleted event
+    if (userId) {
+      await emitEvent({
+        project_id: existingTask.project_id,
+        user_id: userId,
+        event_type: 'AgentTaskDeleted',
+        payload: {
+          task_id: taskId,
+          title: existingTask.title,
+          type: existingTask.type,
+          status: existingTask.status,
+        },
+      });
+    }
   } catch (error) {
     if (error instanceof Error && error.name.includes('Error')) {
       throw error;

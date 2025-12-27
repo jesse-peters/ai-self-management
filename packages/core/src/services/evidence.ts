@@ -326,3 +326,52 @@ export async function getEvidence(
   }
 }
 
+/**
+ * Deletes evidence
+ * 
+ * @param userId - User ID
+ * @param evidenceId - Evidence ID
+ */
+export async function deleteEvidence(
+  userId: string,
+  evidenceId: string
+): Promise<void> {
+  try {
+    validateUUID(userId, 'userId');
+    validateUUID(evidenceId, 'evidenceId');
+
+    const supabase = createServerClient();
+
+    // First verify the evidence exists and user owns it
+    const evidence = await getEvidence(userId, evidenceId);
+
+    const { error } = await (supabase as any)
+      .from('evidence')
+      .delete()
+      .eq('id', evidenceId)
+      .eq('user_id', userId);
+
+    if (error) {
+      throw mapSupabaseError(error);
+    }
+
+    // Emit EvidenceDeleted event
+    await emitEvent({
+      project_id: evidence.project_id,
+      user_id: userId,
+      event_type: 'EvidenceDeleted',
+      payload: {
+        evidence_id: evidenceId,
+        type: evidence.type,
+        task_id: evidence.task_id,
+        work_item_id: evidence.work_item_id,
+      },
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name.includes('Error')) {
+      throw error;
+    }
+    throw mapSupabaseError(error);
+  }
+}
+

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Fragment } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import type { WorkItemSummary, AgentTaskWithDetails, GateStatusSummary, Outcome } from '@projectflow/core';
@@ -14,6 +14,8 @@ import { EvidenceCard } from '@/components/EvidenceCard';
 import { EventTimeline } from '@/components/EventTimeline';
 import { GateStatusIndicator } from '@/components/GateStatusIndicator';
 import { TaskProgressBar } from '@/components/TaskProgressBar';
+import { DeleteButton } from '@/components/DeleteButton';
+import type { TaskType } from '@/lib/colors';
 
 export default function WorkItemDetailPage() {
   const router = useRouter();
@@ -50,10 +52,12 @@ export default function WorkItemDetailPage() {
       const response = await fetch(`/api/work-items/${workItemId}`);
       if (!response.ok) throw new Error('Failed to load work item');
       const data = await response.json();
-      setWorkItem(data.workItem);
+      setWorkItem(data.data.workItem);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load work item');
       console.error('Error loading work item:', err);
+    } finally {
+      setIsLoading(false);
     }
   }, [workItemId]);
 
@@ -68,7 +72,7 @@ export default function WorkItemDetailPage() {
       const response = await fetch(`/api/agent-tasks?${params.toString()}`);
       if (!response.ok) throw new Error('Failed to load tasks');
       const data = await response.json();
-      setTasks(data.tasks || []);
+      setTasks(data.data.tasks || []);
     } catch (err) {
       console.error('Error loading tasks:', err);
     }
@@ -86,7 +90,7 @@ export default function WorkItemDetailPage() {
       const response = await fetch(`/api/gates?${params.toString()}`);
       if (!response.ok) throw new Error('Failed to load gate status');
       const data = await response.json();
-      setGateStatus(data.gateStatus || []);
+      setGateStatus(data.data.gateStatus || []);
     } catch (err) {
       console.error('Error loading gate status:', err);
     }
@@ -94,7 +98,7 @@ export default function WorkItemDetailPage() {
 
   const loadEvidence = useCallback(async () => {
     if (!workItem) return;
-    setIsLoadingEvidence(true);
+    setEvidenceLoading(true);
     try {
       const params = new URLSearchParams({
         projectId: workItem.project_id,
@@ -103,31 +107,11 @@ export default function WorkItemDetailPage() {
       const response = await fetch(`/api/evidence?${params.toString()}`);
       if (!response.ok) throw new Error('Failed to load evidence');
       const data = await response.json();
-      setEvidence(data.evidence || []);
+      setEvidence(data.data.evidence || []);
     } catch (err) {
       console.error('Error loading evidence:', err);
     } finally {
-      setIsLoadingEvidence(false);
-    }
-  }, [workItem, workItemId]);
-
-  const loadTimeline = useCallback(async () => {
-    if (!workItem) return;
-    setIsLoadingTimeline(true);
-    try {
-      const params = new URLSearchParams({
-        projectId: workItem.project_id,
-        workItemId: workItemId,
-        limit: '50',
-      });
-      const response = await fetch(`/api/events?${params.toString()}`);
-      if (!response.ok) throw new Error('Failed to load timeline');
-      const data = await response.json();
-      setTimelineEvents(data.events || []);
-    } catch (err) {
-      console.error('Error loading timeline:', err);
-    } finally {
-      setIsLoadingTimeline(false);
+      setEvidenceLoading(false);
     }
   }, [workItem, workItemId]);
 
@@ -148,9 +132,8 @@ export default function WorkItemDetailPage() {
       loadTasks();
       loadGateStatus();
       if (activeTab === 'evidence') loadEvidence();
-      if (activeTab === 'timeline') loadTimeline();
     }
-  }, [workItem, loadTasks, loadGateStatus, activeTab, loadEvidence, loadTimeline]);
+  }, [workItem, loadTasks, loadGateStatus, activeTab, loadEvidence]);
 
   const handleStatusChange = async (newStatus: 'open' | 'in_progress' | 'done') => {
     if (!workItem) return;
@@ -231,6 +214,22 @@ export default function WorkItemDetailPage() {
     }
   };
 
+  const handleDeleteWorkItem = async () => {
+    if (!workItem) return;
+
+    const response = await fetch(`/api/work-items/${workItem.id}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to delete work item');
+    }
+
+    // Navigate back to work items list
+    router.push(`/work-items?projectId=${workItem.project_id}`);
+  };
+
   // Group tasks by type
   const tasksByType: Record<'research' | 'implement' | 'verify' | 'docs' | 'cleanup', AgentTaskWithDetails[]> = {
     research: tasks.filter((t) => t.type === 'research'),
@@ -239,9 +238,6 @@ export default function WorkItemDetailPage() {
     docs: tasks.filter((t) => t.type === 'docs'),
     cleanup: tasks.filter((t) => t.type === 'cleanup'),
   };
-
-  // Calculate progress
-  const readyTasks = Math.max(0, workItem.total_tasks - workItem.done_tasks - workItem.doing_tasks - workItem.blocked_tasks);
 
   // Filter and sort evidence
   const filteredEvidence = evidence
@@ -263,6 +259,9 @@ export default function WorkItemDetailPage() {
   if (!user || !workItem) {
     return null;
   }
+
+  // Calculate progress (after null check)
+  const readyTasks = Math.max(0, workItem.total_tasks - workItem.done_tasks - workItem.doing_tasks - workItem.blocked_tasks);
 
   const statusColors = {
     open: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
@@ -298,6 +297,16 @@ export default function WorkItemDetailPage() {
                 </a>
               )}
             </div>
+            <div className="ml-4">
+              <DeleteButton
+                onDelete={handleDeleteWorkItem}
+                entityName="work item"
+                entityId={workItem.id}
+                size="md"
+                variant="button"
+              />
+            </div>
+            </div>
             <div className="flex items-center gap-3">
               {/* Gate status indicators */}
               {workItem.gate_status && (
@@ -305,7 +314,7 @@ export default function WorkItemDetailPage() {
                   {gateStatus.map((gate) => (
                     <GateStatusIndicator
                       key={gate.gate_id}
-                      status={gate.latest_status === 'passing' ? 'passing' : gate.latest_status === 'failing' ? 'failing' : 'not_run'}
+                      status={gate.latest_run?.status === 'passing' ? 'passing' : gate.latest_run?.status === 'failing' ? 'failing' : 'not_run'}
                       gateName={gate.gate_name}
                       size="sm"
                       inline
@@ -406,7 +415,12 @@ export default function WorkItemDetailPage() {
               </div>
             )}
 
-            {/* Timeline Tab - This will be replaced by the full-width timeline tab below */}
+            {/* Timeline Tab */}
+            {activeTab === 'timeline' && (
+              <div className="space-y-6">
+                <EventTimeline projectId={workItem.project_id} />
+              </div>
+            )}
 
             {/* Evidence Tab - This will be replaced by the full-width evidence tab below */}
 
@@ -430,7 +444,7 @@ export default function WorkItemDetailPage() {
                   {gateStatus.map((gate) => (
                     <div key={gate.gate_id} className="flex items-center justify-between">
                       <GateStatusIndicator
-                        status={gate.latest_status === 'passing' ? 'passing' : gate.latest_status === 'failing' ? 'failing' : 'not_run'}
+                        status={gate.latest_run?.status === 'passing' ? 'passing' : gate.latest_run?.status === 'failing' ? 'failing' : 'not_run'}
                         gateName={gate.gate_name}
                         size="sm"
                         inline
@@ -474,8 +488,6 @@ export default function WorkItemDetailPage() {
             </div>
           </div>
         </div>
-        )}
-
 
         {activeTab === 'evidence' && (
           <div>
@@ -529,14 +541,14 @@ export default function WorkItemDetailPage() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredEvidence.map((item) => {
-                  // Find task key if evidence is attached to a task
+                  // Find task if evidence is attached to a task
                   const task = item.task_id ? tasks.find((t) => t.id === item.task_id) : null;
                   return (
                     <EvidenceCard
                       key={item.id}
                       evidence={item}
-                      taskKey={task?.task_key || undefined}
-                      onViewDetails={setSelectedEvidence}
+                      taskTitle={task?.task_key || undefined}
+                      onClick={() => setSelectedEvidence(item)}
                     />
                   );
                 })}
@@ -578,10 +590,8 @@ export default function WorkItemDetailPage() {
             </div>
           </div>
         )}
-      </div>
 
-      {/* Evidence Detail Modal */}
-      {selectedEvidence && (
+        {selectedEvidence && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
           onClick={() => setSelectedEvidence(null)}
@@ -657,8 +667,6 @@ export default function WorkItemDetailPage() {
           </div>
         </div>
       )}
-
-      {/* Task Drawer */}
       {selectedTask && (
         <TaskDrawer
           task={selectedTask}

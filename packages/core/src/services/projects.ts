@@ -33,41 +33,39 @@ type SupabaseClient<T = any> = any;
 export async function createProject(
   client: SupabaseClient<Database>,
   data: ProjectInsert,
-  userId?: string
+  userId: string
 ): Promise<Project> {
   try {
     validateProjectData(data);
 
-    // Get userId from parameter or auth context - required for RLS
-    // If userId is provided, use it directly (for OAuth-scoped clients)
-    // Otherwise, try to get from auth context (for session-based clients)
-    let finalUserId: string | undefined = userId;
+    // Log what we received for debugging
+    console.log('[createProject] Received parameters', {
+      userIdProvided: userId,
+      userIdType: typeof userId,
+      userIdLength: userId ? userId.length : 0,
+      userIdValue: userId ? `${userId.substring(0, 8)}...` : 'undefined',
+      projectName: data.name,
+      stackTrace: new Error().stack?.split('\n').slice(0, 5).join('\n'),
+    });
 
-    // Validate provided userId if present
-    if (finalUserId !== undefined && finalUserId !== null) {
-      if (typeof finalUserId !== 'string' || finalUserId.trim() === '') {
-        throw new ValidationError('Invalid userId provided: must be a non-empty string');
-      }
-      finalUserId = finalUserId.trim();
+    // userId is now required (not optional) - this should never be undefined
+    if (!userId || typeof userId !== 'string' || userId.trim() === '') {
+      console.error('[createProject] CRITICAL: userId parameter is missing or invalid', {
+        userId,
+        userIdType: typeof userId,
+        callStack: new Error().stack,
+      });
+      throw new ValidationError(`User authentication required: userId parameter is ${userId === undefined ? 'undefined' : userId === null ? 'null' : 'empty/invalid'} in createProject`);
     }
 
-    // Only try to get from auth context if userId wasn't provided
-    // Skip this for OAuth-scoped clients where getUser() may not work
-    if (!finalUserId) {
-      try {
-        const { data: { user }, error: userError } = await client.auth.getUser();
-        if (!userError && user?.id) {
-          finalUserId = user.id;
-        }
-      } catch (authError) {
-        // If getUser() fails (e.g., on OAuth-scoped clients), that's okay
-        // We'll throw the validation error below if userId is still missing
-      }
-    }
+    // Get userId from parameter - required for RLS
+    // userId is now required (not optional), so we always use it directly
+    const finalUserId: string = userId.trim();
 
-    if (!finalUserId) {
-      throw new ValidationError('User authentication required');
-    }
+    console.log('[createProject] Using provided userId', {
+      userId: finalUserId,
+      userIdLength: finalUserId.length,
+    });
 
     // Build insert data with rules if provided
     const insertData: any = {
@@ -81,6 +79,12 @@ export async function createProject(
       insertData.rules = (data as any).rules;
     }
 
+    console.log('[createProject] Attempting database insert', {
+      userId: finalUserId,
+      projectName: data.name,
+      insertDataKeys: Object.keys(insertData),
+    });
+
     const { data: project, error } = await (client
       .from('projects')
       .insert([insertData] as any)
@@ -88,6 +92,14 @@ export async function createProject(
       .single() as any);
 
     if (error) {
+      console.error('[createProject] Database insert failed', {
+        error: error.message || error.msg || String(error),
+        errorCode: error.code,
+        errorDetails: error.details,
+        errorHint: error.hint,
+        userId: finalUserId,
+        projectName: data.name,
+      });
       throw mapSupabaseError(error);
     }
 
@@ -193,6 +205,75 @@ export async function getProject(
     }
 
     return project as Project;
+  } catch (error) {
+    if (error instanceof Error && error.name.includes('Error')) {
+      throw error;
+    }
+    throw mapSupabaseError(error);
+  }
+}
+
+/**
+ * Deletes a project
+ * 
+ * @param client Authenticated Supabase client (session or OAuth)
+ * @param projectId Project ID to delete
+ * @param userId Optional user ID (if not provided, will try to get from auth context)
+ * @throws NotFoundError if project not found or user doesn't own it
+ * 
+ * RLS ensures the user can only delete their own projects.
+ * Cascading deletes will remove all related tasks, work items, and agent tasks.
+ */
+export async function deleteProject(
+  client: SupabaseClient<Database>,
+  projectId: string,
+  userId?: string
+): Promise<void> {
+  try {
+    // Verify project ownership via getProject
+    const project = await getProject(client, projectId, userId);
+
+    // Get userId for event emission
+    let finalUserId: string | undefined = userId;
+    if (!finalUserId) {
+      try {
+        const { data: { user }, error: userError } = await client.auth.getUser();
+        if (!userError && user?.id) {
+          finalUserId = user.id;
+        }
+      } catch (authError) {
+        // If getUser() fails, we'll use the project's user_id
+        finalUserId = (project as any).user_id;
+      }
+    }
+
+    if (!finalUserId) {
+      finalUserId = (project as any).user_id;
+    }
+
+    // Emit ProjectDeleted event BEFORE deletion (to satisfy FK constraint)
+    if (finalUserId) {
+      await emitEvent({
+        project_id: projectId,
+        user_id: finalUserId,
+        event_type: 'ProjectDeleted',
+        payload: {
+          project_id: projectId,
+          name: project.name,
+        },
+      });
+    }
+
+    // Delete project (cascades to related entities via FK constraints)
+    // Note: The event will be cascade-deleted, which is acceptable for deletion events
+    const { error } = await client
+      .from('projects')
+      .delete()
+      .eq('id', projectId);
+
+    if (error) {
+      throw mapSupabaseError(error);
+    }
   } catch (error) {
     if (error instanceof Error && error.name.includes('Error')) {
       throw error;

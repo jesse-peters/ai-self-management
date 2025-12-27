@@ -6,7 +6,7 @@
  */
 
 import type { Artifact, Database } from '@projectflow/db';
-import { mapSupabaseError, ValidationError } from '../errors';
+import { mapSupabaseError, NotFoundError, ValidationError } from '../errors';
 import { getTask } from './tasks';
 import { emitEvent } from '../events';
 import type { ArtifactType } from '../types';
@@ -138,6 +138,76 @@ export async function listArtifacts(
     }
 
     return (artifacts || []) as Artifact[];
+  } catch (error) {
+    if (error instanceof Error && error.name.includes('Error')) {
+      throw error;
+    }
+    throw mapSupabaseError(error);
+  }
+}
+
+/**
+ * Deletes an artifact
+ * 
+ * @param client Authenticated Supabase client (session or OAuth)
+ * @param artifactId Artifact ID to delete
+ * @throws NotFoundError if artifact not found or user doesn't own it
+ * 
+ * RLS ensures the user can only delete their own artifacts.
+ */
+export async function deleteArtifact(
+  client: SupabaseClient<Database>,
+  artifactId: string
+): Promise<void> {
+  try {
+    // Get existing artifact to verify ownership and get task/project info
+    const { data: existingArtifact, error: fetchError } = await (client as any)
+      .from('artifacts')
+      .select('*, tasks!inner(project_id)')
+      .eq('id', artifactId)
+      .single();
+
+    if (fetchError) {
+      throw mapSupabaseError(fetchError);
+    }
+
+    if (!existingArtifact) {
+      throw new NotFoundError('Artifact not found');
+    }
+
+    const projectId = existingArtifact.tasks?.project_id;
+    if (!projectId) {
+      throw new NotFoundError('Project not found for artifact');
+    }
+
+    // Get userId for event
+    const { data: { user } } = await client.auth.getUser();
+    const userId = user?.id;
+
+    // Delete artifact
+    const { error } = await (client as any)
+      .from('artifacts')
+      .delete()
+      .eq('id', artifactId);
+
+    if (error) {
+      throw mapSupabaseError(error);
+    }
+
+    // Emit ArtifactDeleted event
+    if (userId) {
+      await emitEvent({
+        project_id: projectId,
+        task_id: existingArtifact.task_id,
+        user_id: userId,
+        event_type: 'ArtifactDeleted',
+        payload: {
+          artifact_id: artifactId,
+          task_id: existingArtifact.task_id,
+          type: existingArtifact.type,
+        },
+      });
+    }
   } catch (error) {
     if (error instanceof Error && error.name.includes('Error')) {
       throw error;
