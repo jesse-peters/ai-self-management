@@ -58,17 +58,18 @@ export {
   finishWizard,
   cancelWizard,
   getWizardSession,
-  getProjectSpec,
   type WizardSession,
 } from './wizard';
 export {
   createWorkItem,
+  createWorkItemWithTasks,
   listWorkItems,
   getWorkItem,
   updateWorkItemStatus,
   updateWorkItem,
   deleteWorkItem,
   type WorkItemSummary,
+  type WorkItemWithTasksResult,
 } from './workItems';
 export {
   createAgentTask,
@@ -148,3 +149,22 @@ export {
   type PlanExportResult,
   type PlanValidationResult,
 } from './plan';
+export {
+  parseProjectPlan,
+  validateProjectPlan,
+  importProjectPlan,
+  exportProjectPlan,
+  generateProjectPlanTemplate,
+  addPlanMetadata,
+  type ProjectPlanTaskDefinition,
+  type ProjectPlan,
+  type ProjectPlanImportResult,
+  type ProjectPlanExportResult,
+  type ProjectPlanValidationResult,
+  type PlanMetadata,
+} from './projectPlan';
+export {
+  getProjectSpec,
+  updateProjectSpecPlanPath,
+  updateProjectSpecPlanMetadata,
+} from './projectSpecs';

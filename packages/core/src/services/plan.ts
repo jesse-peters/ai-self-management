@@ -13,6 +13,8 @@ import { NotFoundError, ValidationError, mapSupabaseError } from '../errors';
 import { createAgentTask, updateAgentTask } from './agentTasks';
 import { getWorkItem, updateWorkItem } from './workItems';
 import { getProject } from './projects';
+import { listGates } from './gates';
+import { listGateRuns } from './gates';
 
 // SupabaseClient type from @supabase/supabase-js
 type SupabaseClient<T = any> = any;
@@ -20,7 +22,17 @@ type SupabaseClient<T = any> = any;
 /**
  * Plan file format version
  */
-const PLAN_FORMAT_VERSION = '1.0';
+const PLAN_FORMAT_VERSION = '1.1';
+
+/**
+ * Gate information for a task
+ */
+export interface TaskGateInfo {
+    name: string;
+    isRequired: boolean;
+    status: 'passing' | 'failing' | 'not_run';
+    command?: string;
+}
 
 /**
  * Task definition from a plan file
@@ -39,6 +51,8 @@ export interface PlanTaskDefinition {
         dependencies?: string[];
     }>;
     gates?: string[];
+    gateInfo?: TaskGateInfo[]; // Enhanced gate information with status
+    dashboardUrl?: string; // Link to task in dashboard
     dependencies?: string[]; // References to other task keys
     timebox?: number; // Minutes
     risk?: 'low' | 'medium' | 'high';
@@ -53,6 +67,7 @@ export interface WorkItemPlan {
     title: string;
     description?: string;
     definitionOfDone?: string;
+    dashboardUrl?: string; // Link to work item in dashboard
     tasks: PlanTaskDefinition[];
 }
 
@@ -497,20 +512,48 @@ export async function importPlan(
 }
 
 /**
+ * Helper function to generate dashboard URLs
+ */
+function getDashboardUrl(path: string, appUrl?: string): string {
+    const baseUrl = appUrl || (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_APP_URL) || '';
+    if (baseUrl) {
+        // Ensure baseUrl doesn't end with / and path starts with /
+        const cleanBase = baseUrl.replace(/\/$/, '');
+        const cleanPath = path.startsWith('/') ? path : `/${path}`;
+        return `${cleanBase}${cleanPath}`;
+    }
+    return path; // Relative URL fallback
+}
+
+/**
  * Exports a work item's tasks as a plan file
  * 
  * @param client Authenticated Supabase client
  * @param workItemId Work item to export
+ * @param options Optional configuration including appUrl and userId
  * @returns Export result with plan object and markdown content
  * @throws NotFoundError if work item not found
  */
 export async function exportPlan(
     client: SupabaseClient<Database>,
-    workItemId: string
+    workItemId: string,
+    options?: { appUrl?: string; userId?: string }
 ): Promise<PlanExportResult> {
     try {
         // Get work item
         const workItem = await getWorkItem(client, workItemId);
+        const projectId = workItem.project_id;
+
+        // Get userId - try from options, then from client auth
+        let userId: string | undefined = options?.userId;
+        if (!userId) {
+            try {
+                const { data: { user } } = await client.auth.getUser();
+                userId = user?.id;
+            } catch {
+                // If we can't get userId, we'll skip gate info but continue
+            }
+        }
 
         // Get all tasks for this work item
         const { data: tasks, error: tasksError } = await client
@@ -523,20 +566,108 @@ export async function exportPlan(
             throw mapSupabaseError(tasksError);
         }
 
+        // Get all gates for the project (if userId is available)
+        let gates: any[] = [];
+        const gatesById = new Map<string, any>();
+        if (userId) {
+            try {
+                gates = await listGates(userId, projectId, client);
+                for (const gate of gates) {
+                    gatesById.set(gate.id, gate);
+                }
+            } catch (error) {
+                // If we can't get gates, continue without gate info
+                console.warn('Failed to fetch gates for plan export:', error);
+            }
+        }
+
+        // Get gate runs for all tasks (if userId is available)
+        const taskGateRuns = new Map<string, Map<string, any>>(); // taskId -> gateId -> latest run
+        if (userId && tasks && tasks.length > 0) {
+            try {
+                for (const task of tasks) {
+                    const taskRuns = await listGateRuns(userId, {
+                        task_id: task.id,
+                        limit: 100, // Get all runs, we'll filter to latest per gate
+                    });
+
+                    // Group by gate_id and keep only the latest run per gate
+                    const latestRunsByGate = new Map<string, any>();
+                    for (const run of taskRuns) {
+                        const existing = latestRunsByGate.get(run.gate_id);
+                        if (!existing || new Date(run.created_at) > new Date(existing.created_at)) {
+                            latestRunsByGate.set(run.gate_id, run);
+                        }
+                    }
+                    taskGateRuns.set(task.id, latestRunsByGate);
+                }
+            } catch (error) {
+                // If we can't get gate runs, continue without gate info
+                console.warn('Failed to fetch gate runs for plan export:', error);
+            }
+        }
+
+        // Build task key to task ID mapping for dependency resolution
+        const taskKeyToId = new Map<string, string>();
+        const taskIdToKey = new Map<string, string>();
+        for (const task of tasks || []) {
+            const key = task.task_key || `task-${task.id.substring(0, 8)}`;
+            taskKeyToId.set(key, task.id);
+            taskIdToKey.set(task.id, key);
+        }
+
+        // Generate dashboard URLs
+        const appUrl = options?.appUrl;
+        const workItemDashboardUrl = getDashboardUrl(`/work-items/${workItemId}`, appUrl);
+
         // Convert tasks to plan task definitions
-        const planTasks: PlanTaskDefinition[] = (tasks || []).map((task: any) => ({
-            key: task.task_key || `task-${task.id.substring(0, 8)}`,
-            title: task.title,
-            goal: task.goal,
-            type: task.type,
-            context: task.context || undefined,
-            expectedFiles: task.expected_files || [],
-            subtasks: task.subtasks || [],
-            gates: task.gates || [],
-            dependencies: task.depends_on_ids ? [] : undefined, // We'd need to resolve IDs to keys
-            timebox: task.timebox_minutes || undefined,
-            risk: task.risk,
-        }));
+        const planTasks: PlanTaskDefinition[] = (tasks || []).map((task: any) => {
+            const taskKey = task.task_key || `task-${task.id.substring(0, 8)}`;
+            const taskDashboardUrl = getDashboardUrl(`/work-items/${workItemId}`, appUrl);
+
+            // Build gate info for this task
+            const gateInfo: TaskGateInfo[] = [];
+            if (userId && gates.length > 0) {
+                const taskRuns = taskGateRuns.get(task.id) || new Map();
+
+                for (const gate of gates) {
+                    const latestRun = taskRuns.get(gate.id);
+                    const status: 'passing' | 'failing' | 'not_run' = latestRun
+                        ? (latestRun.status === 'passing' ? 'passing' : 'failing')
+                        : 'not_run';
+
+                    gateInfo.push({
+                        name: gate.name,
+                        isRequired: gate.is_required || false,
+                        status,
+                        command: gate.runner_mode === 'command' ? gate.command || undefined : undefined,
+                    });
+                }
+            }
+
+            // Resolve dependencies from IDs to keys
+            const dependencies: string[] | undefined = task.depends_on_ids && task.depends_on_ids.length > 0
+                ? task.depends_on_ids
+                    .map((id: string) => taskIdToKey.get(id))
+                    .filter((key: string | undefined): key is string => !!key)
+                : undefined;
+
+            return {
+                key: taskKey,
+                title: task.title,
+                goal: task.goal,
+                type: task.type,
+                context: task.context || undefined,
+                expectedFiles: task.expected_files || [],
+                subtasks: task.subtasks || [],
+                gates: task.gates || [],
+                gateInfo: gateInfo.length > 0 ? gateInfo : undefined,
+                dashboardUrl: taskDashboardUrl,
+                dependencies,
+                timebox: task.timebox_minutes || undefined,
+                risk: task.risk,
+            };
+        });
 
         // Build plan object
         const plan: WorkItemPlan = {
@@ -545,11 +676,12 @@ export async function exportPlan(
             title: workItem.title,
             description: workItem.description || undefined,
             definitionOfDone: workItem.definition_of_done || undefined,
+            dashboardUrl: workItemDashboardUrl,
             tasks: planTasks,
         };
 
         // Convert to markdown
-        const content = planToMarkdown(plan);
+        const content = planToMarkdown(plan, appUrl);
 
         return {
             plan,
@@ -567,14 +699,21 @@ export async function exportPlan(
  * Converts a plan object to markdown format
  * 
  * @param plan Plan object to convert
+ * @param appUrl Optional app URL for generating absolute links
  * @returns Markdown representation
  */
-export function planToMarkdown(plan: WorkItemPlan): string {
+export function planToMarkdown(plan: WorkItemPlan, appUrl?: string): string {
     const lines: string[] = [];
 
     // Title
     lines.push(`# ${plan.title}`);
     lines.push('');
+
+    // Dashboard link for work item
+    if (plan.dashboardUrl) {
+        lines.push(`[View in Dashboard](${plan.dashboardUrl})`);
+        lines.push('');
+    }
 
     // Description
     if (plan.description) {
@@ -597,6 +736,13 @@ export function planToMarkdown(plan: WorkItemPlan): string {
     for (const task of plan.tasks) {
         lines.push(`### ${task.key}: ${task.title}`);
         lines.push('');
+
+        // Task dashboard link
+        if (task.dashboardUrl) {
+            lines.push(`[View Task in Dashboard](${task.dashboardUrl})`);
+            lines.push('');
+        }
+
         lines.push(`Goal: ${task.goal}`);
         lines.push(`Type: ${task.type}`);
 
@@ -630,7 +776,47 @@ export function planToMarkdown(plan: WorkItemPlan): string {
             }
         }
 
-        if (task.gates && task.gates.length > 0) {
+        // Enhanced gate information
+        if (task.gateInfo && task.gateInfo.length > 0) {
+            lines.push('');
+            lines.push('#### Gates');
+
+            const requiredGates = task.gateInfo.filter(g => g.isRequired);
+            const optionalGates = task.gateInfo.filter(g => !g.isRequired);
+            const failingRequired = requiredGates.filter(g => g.status === 'failing');
+
+            // Show required gates first
+            if (requiredGates.length > 0) {
+                for (const gate of requiredGates) {
+                    const statusIcon = gate.status === 'passing' ? '✅' : gate.status === 'failing' ? '❌' : '⏸️';
+                    lines.push(`- ${statusIcon} **${gate.name}** (required) - ${gate.status === 'passing' ? 'Passing' : gate.status === 'failing' ? 'Failing' : 'Not run'}`);
+                    if (gate.command) {
+                        lines.push(`  - Command: \`${gate.command}\``);
+                    }
+                    if (gate.status === 'failing') {
+                        lines.push(`  - ⚠️ **Gate enforcement:** This task cannot be marked done until this required gate passes.`);
+                    }
+                }
+            }
+
+            // Show optional gates
+            if (optionalGates.length > 0) {
+                for (const gate of optionalGates) {
+                    const statusIcon = gate.status === 'passing' ? '✅' : gate.status === 'failing' ? '❌' : '⏸️';
+                    lines.push(`- ${statusIcon} **${gate.name}** (optional) - ${gate.status === 'passing' ? 'Passing' : gate.status === 'failing' ? 'Failing' : 'Not run'}`);
+                    if (gate.command) {
+                        lines.push(`  - Command: \`${gate.command}\``);
+                    }
+                }
+            }
+
+            // Gate enforcement warning if there are failing required gates
+            if (failingRequired.length > 0) {
+                lines.push('');
+                lines.push(`⚠️ **Gate Enforcement Rule:** This task cannot be marked as done until all required gates pass. Run gates using \`pm.gate_run\` before completing tasks.`);
+            }
+        } else if (task.gates && task.gates.length > 0) {
+            // Fallback to simple gate list if gateInfo is not available
             lines.push('');
             lines.push('#### Gates');
             for (const gate of task.gates) {
@@ -638,6 +824,15 @@ export function planToMarkdown(plan: WorkItemPlan): string {
             }
         }
 
+        lines.push('');
+    }
+
+    // Add global gate enforcement note if any task has required gates
+    const hasRequiredGates = plan.tasks.some(t => t.gateInfo?.some(g => g.isRequired));
+    if (hasRequiredGates) {
+        lines.push('---');
+        lines.push('');
+        lines.push('⚠️ **Gate Enforcement Rule:** Tasks cannot be marked as done if any required gates are failing. Run gates using `pm.gate_run` before completing tasks.');
         lines.push('');
     }
 

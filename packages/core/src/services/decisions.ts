@@ -11,6 +11,7 @@ import { validateUUID } from '../validation';
 import { getProject } from './projects';
 import { emitEvent } from '../events';
 import { evaluateConstraints } from './constraints';
+import { recall } from './memory';
 
 /**
  * Result of recording a decision, including any constraint warnings
@@ -45,6 +46,9 @@ export async function recordDecision(
     options: any[];
     choice: string;
     rationale: string;
+    memoryRecallIds?: string[];
+    requireMemoryRecall?: boolean;
+    files?: string[];
   }
 ): Promise<DecisionRecordResult> {
   try {
@@ -85,6 +89,63 @@ export async function recordDecision(
     // Verify user owns the project
     await getProject(supabase, projectId, userId);
 
+    // Memory recall enforcement
+    let memoryRecallIds: string[] = data.memoryRecallIds || [];
+    const requireMemoryRecall = data.requireMemoryRecall !== false; // Default to true
+
+    // Auto-trigger recall if required and not provided
+    if (requireMemoryRecall && memoryRecallIds.length === 0) {
+      // Detect decision points (keywords, file paths, etc.)
+      const decisionKeywords = [
+        data.title,
+        data.choice,
+        ...data.options.map(o => typeof o === 'string' ? o : JSON.stringify(o)),
+        data.rationale,
+      ];
+
+      // Check for critical areas that should trigger recall
+      const criticalKeywords = [
+        'auth', 'authentication', 'authorization', 'security',
+        'migration', 'database', 'schema',
+        'infrastructure', 'deployment', 'ci/cd', 'pipeline',
+        'api', 'interface', 'contract',
+        'dependency', 'library', 'package',
+      ];
+
+      const hasCriticalKeywords = criticalKeywords.some(keyword =>
+        decisionKeywords.some(text => text.toLowerCase().includes(keyword.toLowerCase()))
+      );
+
+      const hasFilePaths = data.files && data.files.length > 0;
+
+      // Auto-trigger recall for decision points
+      if (hasCriticalKeywords || hasFilePaths || decisionKeywords.some(k => k.length > 100)) {
+        try {
+          const recallResult = await recall(userId, projectId, {
+            query: data.title,
+            keywords: decisionKeywords,
+            files: data.files,
+          });
+
+          // Extract IDs from relevant decisions and outcomes
+          memoryRecallIds = [
+            ...recallResult.relevantDecisions.map(d => d.decision.id),
+            ...recallResult.relevantOutcomes.map(o => o.outcome.id),
+          ].slice(0, 10); // Limit to top 10
+        } catch (error) {
+          // Log warning but don't fail - recall is advisory
+          console.warn('Memory recall failed during decision recording:', error);
+        }
+      }
+    }
+
+    // Validate memory recall IDs if provided
+    if (memoryRecallIds.length > 0) {
+      for (const id of memoryRecallIds) {
+        validateUUID(id, 'memoryRecallIds item');
+      }
+    }
+
     // Evaluate constraints before recording the decision
     // This checks if the decision deviates from prior lessons
     const constraintEvaluation = await evaluateConstraints(userId, projectId, {
@@ -93,6 +154,7 @@ export async function recordDecision(
         data.choice,
         ...data.options.map(o => typeof o === 'string' ? o : JSON.stringify(o)),
       ],
+      files: data.files,
     });
 
     const { data: decision, error } = await (supabase as any)
@@ -105,6 +167,7 @@ export async function recordDecision(
           options: data.options,
           choice: data.choice.trim(),
           rationale: data.rationale.trim(),
+          memory_recall_ids: memoryRecallIds.length > 0 ? memoryRecallIds : [],
         },
       ] as any)
       .select()
@@ -129,6 +192,7 @@ export async function recordDecision(
         options: data.options,
         choice: data.choice.trim(),
         rationale: data.rationale.trim(),
+        memory_recall_ids: memoryRecallIds,
         constraint_warnings: constraintEvaluation.warnings.length > 0 ? constraintEvaluation.warnings : undefined,
       },
     });

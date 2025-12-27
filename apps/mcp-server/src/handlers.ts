@@ -34,6 +34,11 @@ import {
   implementConventionsSyncToPrimer,
   implementPlanImport,
   implementPlanExport,
+  implementProjectPlanImport,
+  implementProjectPlanExport,
+  implementWizardStart,
+  implementWizardStep,
+  implementWizardFinish,
 } from './toolImplementations';
 
 export interface ToolCallResult {
@@ -887,6 +892,161 @@ export async function handlePlanExport(
 }
 
 /**
+ * Handles project_plan_import tool calls
+ */
+export async function handleProjectPlanImport(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementProjectPlanImport(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles project_plan_export tool calls
+ */
+export async function handleProjectPlanExport(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementProjectPlanExport(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles wizard_start tool calls
+ */
+export async function handleWizardStart(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementWizardStart(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles wizard_step tool calls
+ */
+export async function handleWizardStep(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementWizardStep(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles wizard_finish tool calls
+ */
+export async function handleWizardFinish(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementWizardFinish(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
  * Helper to extract userId from token for Sentry context
  */
 async function getUserIdFromToken(accessToken: string): Promise<string | undefined> {
@@ -999,6 +1159,21 @@ export async function routeToolCall(
         break;
       case 'pm.plan_export':
         result = await handlePlanExport(params, accessToken);
+        break;
+      case 'pm.project_plan_import':
+        result = await handleProjectPlanImport(params, accessToken);
+        break;
+      case 'pm.project_plan_export':
+        result = await handleProjectPlanExport(params, accessToken);
+        break;
+      case 'pm.wizard_start':
+        result = await handleWizardStart(params, accessToken);
+        break;
+      case 'pm.wizard_step':
+        result = await handleWizardStep(params, accessToken);
+        break;
+      case 'pm.wizard_finish':
+        result = await handleWizardFinish(params, accessToken);
         break;
       default:
         result = {

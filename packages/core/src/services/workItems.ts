@@ -7,10 +7,11 @@
  * All functions accept an authenticated SupabaseClient.
  */
 
-import type { WorkItem, WorkItemInsert, WorkItemUpdate, Database } from '@projectflow/db';
+import type { WorkItem, WorkItemInsert, WorkItemUpdate, Database, AgentTask } from '@projectflow/db';
 import { NotFoundError, ValidationError, mapSupabaseError } from '../errors';
 import { emitEvent } from '../events';
 import { getProject } from './projects';
+import { createAgentTask } from './agentTasks';
 
 // SupabaseClient type from @supabase/supabase-js
 type SupabaseClient<T = any> = any;
@@ -89,18 +90,18 @@ export async function createWorkItem(
     // Emit WorkItemCreated event (userId already retrieved above)
     // Pass authenticated client for RLS to work
     if (user.id) {
-        await emitEvent({
-          project_id: projectId,
-          user_id: user.id,
-          event_type: 'WorkItemCreated',
-          payload: {
-            work_item_id: workItem.id,
-            title: workItem.title,
-            description: workItem.description,
-            external_url: workItem.external_url,
-            status: workItem.status,
-          },
-        }, client);
+      await emitEvent({
+        project_id: projectId,
+        user_id: user.id,
+        event_type: 'WorkItemCreated',
+        payload: {
+          work_item_id: workItem.id,
+          title: workItem.title,
+          description: workItem.description,
+          external_url: workItem.external_url,
+          status: workItem.status,
+        },
+      }, client);
     }
 
     return workItem as WorkItem;
@@ -385,8 +386,26 @@ async function getWorkItemGateStatus(
 
     const requiredFailing: string[] = [];
 
+    // Get waived gates for this work item
+    let waiverQuery = client
+      .from('gate_waivers')
+      .select('gate_id')
+      .eq('project_id', projectId);
+
+    if (workItemId) {
+      waiverQuery = waiverQuery.eq('work_item_id', workItemId);
+    }
+
+    const { data: waivers } = await waiverQuery;
+    const waivedGateIds = new Set((waivers || []).map((w: any) => w.gate_id));
+
     // Check latest run for each required gate
     for (const gate of gates) {
+      // Skip if gate is waived
+      if (waivedGateIds.has(gate.id)) {
+        continue;
+      }
+
       let query = client
         .from('gate_runs')
         .select('status')
@@ -475,6 +494,189 @@ export async function deleteWorkItem(
         },
       });
     }
+  } catch (error) {
+    if (error instanceof Error && error.name.includes('Error')) {
+      throw error;
+    }
+    throw mapSupabaseError(error);
+  }
+}
+
+/**
+ * Result type for creating work item with tasks
+ */
+export interface WorkItemWithTasksResult {
+  workItem: WorkItem;
+  tasks: AgentTask[];
+  taskMappings: Array<{ key: string; taskId: string }>;
+}
+
+/**
+ * Creates a new work item and sets up initial tasks with dependencies
+ * 
+ * @param client Authenticated Supabase client (session or OAuth)
+ * @param projectId Project ID to create work item in
+ * @param workItemData Work item data to create
+ * @param tasks Array of task definitions with dependencies
+ * @returns Created work item, tasks, and key-to-ID mappings
+ * @throws ValidationError if data is invalid or dependencies are invalid
+ * 
+ * Tasks are created in topological order (no dependencies first).
+ * Dependencies are specified by task keys and resolved to task IDs.
+ */
+export async function createWorkItemWithTasks(
+  client: SupabaseClient<Database>,
+  projectId: string,
+  workItemData: Omit<WorkItemInsert, 'project_id' | 'user_id'>,
+  tasks: Array<{
+    key: string;
+    type: 'research' | 'implement' | 'verify' | 'docs' | 'cleanup';
+    title: string;
+    goal: string;
+    context?: string;
+    verification?: string;
+    timeboxMinutes?: number;
+    risk?: 'low' | 'medium' | 'high';
+    dependsOn?: string[];
+  }>
+): Promise<WorkItemWithTasksResult> {
+  try {
+    // Validate tasks array is not empty
+    if (!tasks || tasks.length === 0) {
+      throw new ValidationError('At least one task is required');
+    }
+
+    // Validate all task keys are unique
+    const taskKeys = tasks.map(t => t.key);
+    const uniqueKeys = new Set(taskKeys);
+    if (taskKeys.length !== uniqueKeys.size) {
+      throw new ValidationError('Task keys must be unique');
+    }
+
+    // Validate all dependency keys reference existing tasks
+    const taskKeySet = new Set(taskKeys);
+    for (const task of tasks) {
+      if (task.dependsOn) {
+        for (const depKey of task.dependsOn) {
+          if (!taskKeySet.has(depKey)) {
+            throw new ValidationError(`Task "${task.key}" depends on "${depKey}" which does not exist in the task list`);
+          }
+        }
+      }
+    }
+
+    // Detect circular dependencies using topological sort
+    const visited = new Set<string>();
+    const visiting = new Set<string>();
+    const taskMap = new Map(tasks.map(t => [t.key, t]));
+
+    function hasCycle(key: string): boolean {
+      if (visiting.has(key)) {
+        return true; // Circular dependency detected
+      }
+      if (visited.has(key)) {
+        return false; // Already processed
+      }
+
+      visiting.add(key);
+      const task = taskMap.get(key);
+      if (task?.dependsOn) {
+        for (const depKey of task.dependsOn) {
+          if (hasCycle(depKey)) {
+            return true;
+          }
+        }
+      }
+      visiting.delete(key);
+      visited.add(key);
+      return false;
+    }
+
+    for (const task of tasks) {
+      if (hasCycle(task.key)) {
+        throw new ValidationError(`Circular dependency detected involving task "${task.key}"`);
+      }
+    }
+
+    // Create work item first
+    const workItem = await createWorkItem(client, projectId, workItemData);
+
+    // Build dependency graph and topological sort
+    const taskKeyToId: Record<string, string> = {};
+    const createdTasks: AgentTask[] = [];
+    const remainingTasks = [...tasks];
+    const processedKeys = new Set<string>();
+
+    // Process tasks in topological order
+    while (remainingTasks.length > 0) {
+      let progressMade = false;
+
+      for (let i = remainingTasks.length - 1; i >= 0; i--) {
+        const task = remainingTasks[i];
+        const canProcess = !task.dependsOn || task.dependsOn.every(depKey => processedKeys.has(depKey));
+
+        if (canProcess) {
+          // Resolve dependencies to task IDs
+          const dependsOnIds: string[] = [];
+          if (task.dependsOn) {
+            for (const depKey of task.dependsOn) {
+              const depTaskId = taskKeyToId[depKey];
+              if (depTaskId) {
+                dependsOnIds.push(depTaskId);
+              }
+            }
+          }
+
+          // Create the task
+          const createdTask = await createAgentTask(client, projectId, {
+            work_item_id: workItem.id,
+            type: task.type,
+            title: task.title,
+            goal: task.goal,
+            context: task.context || null,
+            inputs: null,
+            output_expectation: null,
+            verification: task.verification || null,
+            status: 'ready',
+            depends_on_ids: dependsOnIds,
+            risk: task.risk || 'low',
+            timebox_minutes: task.timeboxMinutes || 15,
+            task_key: null,
+            expected_files: [],
+            touched_files: [],
+            subtasks: null,
+            gates: null,
+          });
+
+          // Update task_key field
+          await client
+            .from('agent_tasks')
+            .update({ task_key: task.key })
+            .eq('id', createdTask.id);
+
+          // Store mapping and mark as processed
+          taskKeyToId[task.key] = createdTask.id;
+          createdTasks.push(createdTask);
+          processedKeys.add(task.key);
+          remainingTasks.splice(i, 1);
+          progressMade = true;
+        }
+      }
+
+      if (!progressMade) {
+        // This should not happen if validation passed, but handle it gracefully
+        throw new ValidationError('Unable to resolve task dependencies - possible circular dependency');
+      }
+    }
+
+    return {
+      workItem,
+      tasks: createdTasks,
+      taskMappings: Object.entries(taskKeyToId).map(([key, taskId]) => ({
+        key,
+        taskId,
+      })),
+    };
   } catch (error) {
     if (error instanceof Error && error.name.includes('Error')) {
       throw error;

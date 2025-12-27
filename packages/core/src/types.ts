@@ -93,7 +93,8 @@ export type EventType =
   | 'EvidenceAdded'
   | 'EvidenceDeleted'
   | 'GateConfigured'
-  | 'GateExecuted';
+  | 'GateExecuted'
+  | 'GateWaived';
 
 /**
  * Artifact type enum

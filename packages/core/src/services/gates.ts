@@ -12,6 +12,7 @@ import { validateUUID } from '../validation';
 import { getProject } from './projects';
 import { emitEvent } from '../events';
 import { analyzeCommand } from './dangerousCommands';
+import { evaluateConstraints, type ConstraintEvaluationResult } from './constraints';
 // Import types from separate file (safe for client-side)
 import type {
   GateRunnerMode,
@@ -677,6 +678,290 @@ export async function listGateRuns(
     }
 
     return (runs || []) as GateRun[];
+  } catch (error) {
+    if (error instanceof Error && error.name.includes('Error')) {
+      throw error;
+    }
+    throw mapSupabaseError(error);
+  }
+}
+
+/**
+ * Gate waiver type
+ */
+export interface GateWaiver {
+  id: string;
+  project_id: string;
+  gate_id: string;
+  work_item_id: string | null;
+  task_id: string | null;
+  decision_id: string;
+  rationale: string;
+  constraint_evaluation: any;
+  created_at: string;
+  created_by: 'agent' | 'human';
+  user_id: string;
+}
+
+/**
+ * Waives a gate with required decision link and constraint evaluation
+ * 
+ * @param userId - User ID
+ * @param projectId - Project ID
+ * @param gateId - Gate ID to waive
+ * @param decisionId - Decision ID that justifies the waiver (required)
+ * @param rationale - Rationale for the waiver (required)
+ * @param context - Context for constraint evaluation (optional)
+ * @param workItemId - Optional work item ID
+ * @param taskId - Optional task ID
+ * @param createdBy - Who created the waiver ('agent' or 'human')
+ * @param client - Optional authenticated Supabase client
+ * @returns The created gate waiver
+ */
+export async function waiveGate(
+  userId: string,
+  projectId: string,
+  gateId: string,
+  decisionId: string,
+  rationale: string,
+  context?: {
+    keywords?: string[];
+    files?: string[];
+    tags?: string[];
+  },
+  workItemId?: string,
+  taskId?: string,
+  createdBy: 'agent' | 'human' = 'agent',
+  client?: any
+): Promise<GateWaiver> {
+  try {
+    validateUUID(userId, 'userId');
+    validateUUID(projectId, 'projectId');
+    validateUUID(gateId, 'gateId');
+    validateUUID(decisionId, 'decisionId');
+
+    if (!rationale || rationale.trim().length === 0) {
+      throw new ValidationError('Rationale is required for gate waiver', 'rationale');
+    }
+
+    if (rationale.length > 2000) {
+      throw new ValidationError('Rationale must be less than 2000 characters', 'rationale');
+    }
+
+    if (workItemId) {
+      validateUUID(workItemId, 'workItemId');
+    }
+
+    if (taskId) {
+      validateUUID(taskId, 'taskId');
+    }
+
+    const supabase = client || createServerClient();
+
+    // Verify user owns the project
+    await getProject(supabase, projectId, userId);
+
+    // Verify gate exists
+    const gate = await getGate(userId, gateId, supabase);
+    if (gate.project_id !== projectId) {
+      throw new ValidationError('Gate does not belong to this project');
+    }
+
+    // Verify decision exists (basic check - decision service will verify ownership)
+    const { data: decision, error: decisionError } = await (supabase as any)
+      .from('decisions')
+      .select('id, project_id')
+      .eq('id', decisionId)
+      .single();
+
+    if (decisionError || !decision) {
+      throw new NotFoundError('Decision not found');
+    }
+
+    if (decision.project_id !== projectId) {
+      throw new ValidationError('Decision does not belong to this project');
+    }
+
+    // Run constraint evaluation
+    const constraintEvaluation = await evaluateConstraints(userId, projectId, {
+      keywords: context?.keywords || [],
+      files: context?.files || [],
+      tags: context?.tags || [],
+    });
+
+    // Check for repeated waivers (same gate + similar context)
+    const { data: recentWaivers } = await (supabase as any)
+      .from('gate_waivers')
+      .select('id, rationale, created_at')
+      .eq('project_id', projectId)
+      .eq('gate_id', gateId)
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    const hasRepeatedWaivers = recentWaivers && recentWaivers.length > 0;
+    if (hasRepeatedWaivers && constraintEvaluation.violations.length > 0) {
+      // Require stronger rationale for repeated waivers with violations
+      if (rationale.length < 100) {
+        throw new ValidationError(
+          'Repeated gate waivers with constraint violations require a more detailed rationale (minimum 100 characters)',
+          'rationale'
+        );
+      }
+    }
+
+    // Create gate waiver
+    const { data: waiver, error: waiverError } = await (supabase as any)
+      .from('gate_waivers')
+      .insert([
+        {
+          project_id: projectId,
+          gate_id: gateId,
+          work_item_id: workItemId || null,
+          task_id: taskId || null,
+          decision_id: decisionId,
+          rationale: rationale.trim(),
+          constraint_evaluation: constraintEvaluation,
+          created_by: createdBy,
+          user_id: userId,
+        },
+      ] as any)
+      .select()
+      .single();
+
+    if (waiverError) {
+      throw mapSupabaseError(waiverError);
+    }
+
+    if (!waiver) {
+      throw new NotFoundError('Failed to retrieve created gate waiver');
+    }
+
+    // Emit GateWaived event
+    await emitEvent({
+      project_id: projectId,
+      user_id: userId,
+      event_type: 'GateWaived',
+      payload: {
+        waiver_id: waiver.id,
+        gate_id: gateId,
+        gate_name: gate.name,
+        decision_id: decisionId,
+        work_item_id: workItemId || null,
+        task_id: taskId || null,
+        has_violations: constraintEvaluation.violations.length > 0,
+        has_warnings: constraintEvaluation.warnings.length > 0,
+      },
+    }, supabase);
+
+    return waiver as GateWaiver;
+  } catch (error) {
+    if (error instanceof Error && error.name.includes('Error')) {
+      throw error;
+    }
+    throw mapSupabaseError(error);
+  }
+}
+
+/**
+ * Gets gate waivers for a project or gate
+ * 
+ * @param userId - User ID
+ * @param projectId - Project ID
+ * @param gateId - Optional gate ID to filter by
+ * @param client - Optional authenticated Supabase client
+ * @returns Array of gate waivers
+ */
+export async function getGateWaivers(
+  userId: string,
+  projectId: string,
+  gateId?: string,
+  client?: any
+): Promise<GateWaiver[]> {
+  try {
+    validateUUID(userId, 'userId');
+    validateUUID(projectId, 'projectId');
+
+    if (gateId) {
+      validateUUID(gateId, 'gateId');
+    }
+
+    const supabase = client || createServerClient();
+
+    // Verify user owns the project
+    await getProject(supabase, projectId, userId);
+
+    let query = (supabase as any)
+      .from('gate_waivers')
+      .select('*')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false });
+
+    if (gateId) {
+      query = query.eq('gate_id', gateId);
+    }
+
+    const { data: waivers, error } = await query;
+
+    if (error) {
+      throw mapSupabaseError(error);
+    }
+
+    return (waivers || []) as GateWaiver[];
+  } catch (error) {
+    if (error instanceof Error && error.name.includes('Error')) {
+      throw error;
+    }
+    throw mapSupabaseError(error);
+  }
+}
+
+/**
+ * Checks if a gate can be waived
+ * 
+ * @param userId - User ID
+ * @param projectId - Project ID
+ * @param gateId - Gate ID
+ * @param client - Optional authenticated Supabase client
+ * @returns Whether the gate can be waived and reason if not
+ */
+export async function canWaiveGate(
+  userId: string,
+  projectId: string,
+  gateId: string,
+  client?: any
+): Promise<{ allowed: boolean; reason?: string }> {
+  try {
+    validateUUID(userId, 'userId');
+    validateUUID(projectId, 'projectId');
+    validateUUID(gateId, 'gateId');
+
+    const supabase = client || createServerClient();
+
+    // Verify user owns the project
+    await getProject(supabase, projectId, userId);
+
+    // Verify gate exists
+    const gate = await getGate(userId, gateId, supabase);
+    if (gate.project_id !== projectId) {
+      return { allowed: false, reason: 'Gate does not belong to this project' };
+    }
+
+    // Check for blocking constraints
+    const constraintEvaluation = await evaluateConstraints(userId, projectId, {
+      keywords: [gate.name],
+    });
+
+    if (constraintEvaluation.violations.length > 0) {
+      const violationReasons = constraintEvaluation.violations
+        .map(v => v.constraint.rule_text)
+        .join('; ');
+      return {
+        allowed: false,
+        reason: `Blocking constraints prevent waiver: ${violationReasons}`,
+      };
+    }
+
+    return { allowed: true };
   } catch (error) {
     if (error instanceof Error && error.name.includes('Error')) {
       throw error;

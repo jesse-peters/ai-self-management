@@ -1,6 +1,6 @@
 /**
  * MCP Tool definitions for ProjectFlow
- * Simplified to 10 core tools grouped by function
+ * 30 tools grouped by function: Core, Work Items, Tasks, Memory, Gates, Constraints, Manifest, Interview, Wizard, Plan Mode
  */
 
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
@@ -330,6 +330,72 @@ export const tools: Tool[] = [
     },
   },
 
+  // ========== CONSTRAINTS (2 tools) ==========
+  {
+    name: 'pm.create_constraint',
+    description: 'Creates a constraint (enforceable rule) for a project that warns or blocks risky actions.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        projectId: { type: 'string', description: 'Project ID' },
+        scope: {
+          type: 'string',
+          enum: ['project', 'repo', 'directory', 'task_type'],
+          description: 'Constraint scope',
+        },
+        scopeValue: { type: 'string', description: 'Optional: specific directory path or task type' },
+        trigger: {
+          type: 'string',
+          enum: ['files_match', 'task_tag', 'gate', 'keyword', 'always'],
+          description: 'Trigger condition',
+        },
+        triggerValue: { type: 'string', description: 'Optional: specific pattern, tag, gate, or keyword' },
+        ruleText: { type: 'string', description: 'Human-readable rule description' },
+        enforcementLevel: {
+          type: 'string',
+          enum: ['warn', 'block'],
+          description: 'Enforcement level (warn or block)',
+        },
+      },
+      required: ['projectId', 'scope', 'trigger', 'ruleText', 'enforcementLevel'],
+    },
+  },
+  {
+    name: 'pm.evaluate_constraints',
+    description: 'Evaluates constraints against a given context (files, tags, keywords, etc.) and returns violations and warnings.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        projectId: { type: 'string', description: 'Project ID' },
+        context: {
+          type: 'object',
+          description: 'Context for evaluation',
+          properties: {
+            files: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'File paths being changed',
+            },
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Task tags',
+            },
+            gate: { type: 'string', description: 'Gate being evaluated' },
+            keywords: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Keywords in description/content',
+            },
+            taskType: { type: 'string', description: 'Type of task' },
+            directory: { type: 'string', description: 'Directory being modified' },
+          },
+        },
+      },
+      required: ['projectId', 'context'],
+    },
+  },
+
   // ========== MANIFEST & DISCOVERY (3 tools) ==========
   {
     name: 'pm.evidence_add',
@@ -424,7 +490,45 @@ export const tools: Tool[] = [
     },
   },
 
-  // ========== PLAN MODE (2 tools) ==========
+  // ========== WIZARD (3 tools) ==========
+  {
+    name: 'pm.wizard_start',
+    description: 'Starts a new project setup wizard session',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'pm.wizard_step',
+    description: 'Submits data for a wizard step and advances to next step',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        sessionId: { type: 'string', description: 'Wizard session ID from pm.wizard_start' },
+        stepId: { type: 'number', description: 'Step number (1-5)' },
+        payload: {
+          type: 'object',
+          description: 'Step data payload. Structure depends on step: Step 1: {name, description?, repo_url?, main_branch?, language?, framework?}. Step 2: {goals, definition_of_done, deliverables?: [{name, description, acceptance_criteria?}]}. Step 3: {risk_areas?: [], do_not_touch?: [], preferences?: {}}. Step 4: {gate_pack_id?, custom_gates?: [{type, config?}]}. Step 5: {} (review)',
+        },
+      },
+      required: ['sessionId', 'stepId', 'payload'],
+    },
+  },
+  {
+    name: 'pm.wizard_finish',
+    description: 'Finishes wizard and creates project with spec, tasks, gates, checkpoint, and initial plan file',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        sessionId: { type: 'string', description: 'Wizard session ID from pm.wizard_start' },
+      },
+      required: ['sessionId'],
+    },
+  },
+
+  // ========== PLAN MODE (4 tools) ==========
   {
     name: 'pm.plan_import',
     description: 'Imports a plan file (markdown format) for a work item, creating or updating tasks from the plan structure.',
@@ -446,6 +550,30 @@ export const tools: Tool[] = [
         workItemId: { type: 'string', description: 'Work item ID to export' },
       },
       required: ['workItemId'],
+    },
+  },
+  {
+    name: 'pm.project_plan_import',
+    description: 'Imports a project plan file (markdown format) for a project, creating/updating tasks and gates.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        projectId: { type: 'string', description: 'Project ID to import plan into' },
+        planText: { type: 'string', description: 'Markdown plan file content' },
+        planPath: { type: 'string', description: 'Optional: path to plan file (default: ./.pm/plan.md)' },
+      },
+      required: ['projectId', 'planText'],
+    },
+  },
+  {
+    name: 'pm.project_plan_export',
+    description: 'Exports a project\'s tasks as a plan file with metadata annotations for use in Cursor Plan Mode.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        projectId: { type: 'string', description: 'Project ID to export' },
+      },
+      required: ['projectId'],
     },
   },
 ];

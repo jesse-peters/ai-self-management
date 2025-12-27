@@ -226,7 +226,7 @@ async function handleMCPRequest(
 
             case 'prompts/get': {
                 try {
-                    if (!userId) {
+                    if (!userId || !token) {
                         return createJsonRpcError(id, -32001, 'Unauthorized', {
                             oauth_required: true,
                             error_type: 'authentication_required',
@@ -242,6 +242,7 @@ async function handleMCPRequest(
 
                     const result = await getPrompt(
                         userId,
+                        token,
                         promptParams.name as string,
                         (promptParams.arguments as Record<string, unknown>) || {}
                     );

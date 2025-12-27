@@ -236,12 +236,17 @@ export function createMCPServer(authProvider?: AuthContextProvider): Server {
             const promptName = request.params.name;
             const args = (request.params.arguments as Record<string, unknown>) || {};
             const userId = extractUserIdFromContext(authProvider, extra);
+            const accessToken = extractAccessToken(extra);
 
             if (!userId) {
                 throw new Error('User authentication required for prompts');
             }
 
-            return await getPrompt(userId, promptName, args);
+            if (!accessToken) {
+                throw new Error('Access token required for prompts');
+            }
+
+            return await getPrompt(userId, accessToken, promptName, args);
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             return {

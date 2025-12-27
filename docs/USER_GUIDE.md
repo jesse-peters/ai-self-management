@@ -348,6 +348,8 @@ Work items group related tasks together. They're useful for:
 - Linking to external tickets (GitHub issues, Jira tickets)
 - Organizing multiple related tasks
 
+#### Simple Work Item Creation
+
 **Ask Claude:**
 
 ```
@@ -381,6 +383,88 @@ Claude calls:
   }
 }
 ```
+
+#### Creating Work Items with Tasks (Interactive Prompt)
+
+For a more structured approach, use the `pm.work_item` prompt to interactively create a work item and set up all its tasks with dependencies. This establishes a timeline where tasks are ordered by their dependencies.
+
+**Ask Claude:**
+
+```
+Use pm.work_item to create a new work item for user authentication in project [project-id]
+```
+
+Or in Cursor, you can use the prompt directly:
+
+```
+/pm:work-item projectId=[project-id]
+```
+
+**What happens:**
+
+The prompt guides you through an interactive process:
+
+1. **Work Item Information**: Claude will ask for:
+
+   - Work item title
+   - Description (optional)
+   - External URL (optional, e.g., GitHub issue link)
+
+2. **Task Breakdown**: Claude will help you identify tasks:
+
+   - Task keys (unique identifiers like "task-1", "auth-research")
+   - Task types (research, implement, verify, docs, cleanup)
+   - Task titles and goals
+   - Dependencies between tasks
+
+3. **Timeline Establishment**: Tasks are created with dependencies:
+
+   - Tasks with no dependencies can start immediately
+   - Tasks with dependencies must wait for their dependencies to complete
+   - Multiple dependencies are supported
+
+4. **Creation**: Once all information is gathered, Claude will:
+   - Create the work item using `pm.work_item_create`
+   - Create each task using `pm.task_create` in dependency order
+   - Set up task dependencies using task IDs
+
+**Example Flow:**
+
+```
+You: Use pm.work_item to create a new work item for user authentication
+
+Claude: I'll help you create a work item for user authentication.
+        What should the work item be titled?
+
+You: User Authentication
+
+Claude: Great! What tasks are needed for this work item?
+        Let me help you break this down...
+
+You: We need to:
+        1. Research authentication libraries
+        2. Implement login form (after research)
+        3. Implement signup form (after research)
+        4. Add OAuth integration (after login and signup)
+        5. Write tests (after everything)
+
+Claude: Perfect! I'll create the work item and tasks with the proper dependencies...
+        [Creates work item and tasks]
+```
+
+**Key Benefits:**
+
+- **Interactive Guidance**: Claude guides you through the process step-by-step
+- **Timeline Establishment**: Tasks are created in dependency order, establishing a clear timeline
+- **Automatic Ordering**: Tasks with no dependencies can start immediately, while dependent tasks wait
+- **Validation**: The system validates that all dependencies exist and there are no circular dependencies
+
+**How Dependencies Work:**
+
+- Tasks with no dependencies can be started immediately
+- Tasks with dependencies must wait until their dependencies are completed
+- Multiple dependencies are supported (e.g., task-4 depends on both task-2 and task-3)
+- Dependencies are specified using task IDs returned when creating tasks
 
 ### Creating Tasks
 

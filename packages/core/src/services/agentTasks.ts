@@ -309,13 +309,83 @@ export async function updateTaskStatus(
       throw new NotFoundError('Agent task not found');
     }
 
-    // INVARIANT 1: Evidence Rule
+    // INVARIANT 1: Evidence Rule + Gate Check + Constraint Check
     if (status === 'done') {
       const evidenceCount = await getEvidenceCount(client, taskId);
       if (evidenceCount === 0) {
         throw new ValidationError(
           'Cannot mark task done: requires at least 1 evidence item'
         );
+      }
+
+      // Get user ID for gate and constraint checks
+      const { data: { user } } = await client.auth.getUser();
+      const userId = user?.id;
+
+      if (userId) {
+        // Gate check: Get required gates and check if they're passing or waived
+        const { data: gates } = await client
+          .from('gates')
+          .select('id, name, is_required')
+          .eq('project_id', existingTask.project_id)
+          .eq('is_required', true) as any;
+
+        if (gates && gates.length > 0) {
+          // Get waived gates for this task
+          const { data: waivers } = await client
+            .from('gate_waivers')
+            .select('gate_id')
+            .eq('project_id', existingTask.project_id)
+            .eq('task_id', taskId) as any;
+
+          const waivedGateIds = new Set((waivers || []).map((w: any) => w.gate_id));
+
+          const failingGates: string[] = [];
+          for (const gate of gates) {
+            if (waivedGateIds.has(gate.id)) {
+              continue; // Gate is waived, skip
+            }
+
+            // Check latest gate run
+            const { data: runs } = await client
+              .from('gate_runs')
+              .select('status')
+              .eq('gate_id', gate.id)
+              .eq('task_id', taskId)
+              .order('created_at', { ascending: false })
+              .limit(1) as any;
+
+            if (!runs || runs.length === 0 || runs[0].status === 'failing') {
+              failingGates.push(gate.name);
+            }
+          }
+
+          if (failingGates.length > 0) {
+            throw new ValidationError(
+              `Cannot mark task done: required gate(s) failing: ${failingGates.join(', ')}. Consider waiving gates if appropriate.`
+            );
+          }
+        }
+
+        // Constraint check: Evaluate constraints for this task
+        const { evaluateConstraints } = await import('./constraints');
+        const constraintEvaluation = await evaluateConstraints(
+          userId,
+          existingTask.project_id,
+          {
+            keywords: [existingTask.title, existingTask.goal || ''],
+            files: existingTask.expected_files || [],
+          }
+        );
+
+        if (constraintEvaluation.violations.length > 0) {
+          const violationReasons = constraintEvaluation.violations
+            .map(v => v.constraint.rule_text)
+            .join('; ');
+          throw new ValidationError(
+            `Cannot mark task done: blocking constraints violated: ${violationReasons}`
+          );
+        }
       }
     }
 

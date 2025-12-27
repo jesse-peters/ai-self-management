@@ -17,6 +17,8 @@ import { createProject } from './projects';
 import { createTask } from './tasks';
 import { createCheckpoint } from './checkpoints';
 import { emitEvent } from '../events';
+import { generateProjectPlanTemplate } from './projectPlan';
+import { updateProjectSpecPlanMetadata } from './projectSpecs';
 
 // SupabaseClient type from @supabase/supabase-js
 type SupabaseClient<T = any> = any;
@@ -294,7 +296,26 @@ export async function finishWizard(
       repoRef: data.repo_url || null,
     });
     
-    // Step 5: Emit wizard completion event
+    // Step 5: Generate initial plan file
+    let planContent: string | null = null;
+    try {
+      planContent = await generateProjectPlanTemplate(client, project.id);
+      
+      // Update project spec with plan path
+      await updateProjectSpecPlanMetadata(
+        client,
+        project.id,
+        './.pm/plan.md',
+        undefined,
+        undefined,
+        undefined
+      );
+    } catch (error) {
+      // Log but don't fail - plan generation is optional
+      console.warn('Failed to generate plan file during wizard:', error);
+    }
+
+    // Step 6: Emit wizard completion event
     await emitEvent({
       project_id: project.id,
       user_id: userId,
@@ -307,6 +328,7 @@ export async function finishWizard(
         wizard_session_id: sessionId,
         initial_tasks: tasks.length,
         deliverables: data.deliverables?.length || 0,
+        plan_file_generated: planContent !== null,
       },
     });
     
@@ -318,6 +340,7 @@ export async function finishWizard(
       projectSpec,
       tasks,
       checkpoint,
+      planContent,
     };
   } catch (error) {
     if (error instanceof Error && error.name.includes('Error')) {

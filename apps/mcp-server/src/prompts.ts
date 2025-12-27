@@ -9,12 +9,13 @@ import type { Prompt } from '@modelcontextprotocol/sdk/types.js';
 import { resolveUserId } from './auth';
 import { getTask, listTasks } from '@projectflow/core';
 import { getCheckpoint, listCheckpoints } from '@projectflow/core';
-import { getProject } from '@projectflow/core';
+import { getProject, listWorkItems } from '@projectflow/core';
 import { listArtifacts } from '@projectflow/core';
 import { evaluateGates } from '@projectflow/core';
 import { getTaskEvents } from '@projectflow/core';
 import { getProjectEvents } from '@projectflow/core';
 import type { Task, Artifact, LegacyGateResult, Event, Checkpoint } from '@projectflow/core';
+import { authenticateTool } from './toolImplementations';
 
 /**
  * List of all available prompts
@@ -74,6 +75,17 @@ export const prompts: Prompt[] = [
       },
     ],
   },
+  {
+    name: 'pm.work_item',
+    description: 'Create a new work item with tasks - guides through interactive setup of work item and task structure with dependencies to establish timeline',
+    arguments: [
+      {
+        name: 'projectId',
+        description: 'The project ID',
+        required: true,
+      },
+    ],
+  },
 ];
 
 /**
@@ -81,18 +93,21 @@ export const prompts: Prompt[] = [
  */
 export async function getPrompt(
   userId: string,
+  accessToken: string,
   promptName: string,
   args: Record<string, unknown>
 ): Promise<{ messages: Array<{ role: string; content: { type: string; text: string } }> }> {
   switch (promptName) {
     case 'pm.task_focus_mode':
-      return getTaskFocusModePrompt(userId, args);
+      return getTaskFocusModePrompt(userId, accessToken, args);
     case 'pm.resume_from_checkpoint':
-      return getResumeFromCheckpointPrompt(userId, args);
+      return getResumeFromCheckpointPrompt(userId, accessToken, args);
     case 'pm.propose_tasks_from_goal':
-      return getProposeTasksFromGoalPrompt(userId, args);
+      return getProposeTasksFromGoalPrompt(userId, accessToken, args);
     case 'pm.write_status_update':
-      return getWriteStatusUpdatePrompt(userId, args);
+      return getWriteStatusUpdatePrompt(userId, accessToken, args);
+    case 'pm.work_item':
+      return getWorkItemPrompt(userId, accessToken, args);
     default:
       throw new Error(`Unknown prompt: ${promptName}`);
   }
@@ -103,6 +118,7 @@ export async function getPrompt(
  */
 async function getTaskFocusModePrompt(
   userId: string,
+  accessToken: string,
   args: Record<string, unknown>
 ): Promise<{ messages: Array<{ role: string; content: { type: string; text: string } }> }> {
   const taskId = args.taskId as string;
@@ -110,10 +126,13 @@ async function getTaskFocusModePrompt(
     throw new Error('taskId is required for pm.task_focus_mode');
   }
 
+  // Authenticate and get Supabase client
+  const { client } = await authenticateTool(accessToken, 'oauth');
+
   // Fetch task details
-  const task = await getTask(userId, taskId);
-  const artifacts = await listArtifacts(userId, taskId);
-  const gateResults = await evaluateGates(userId, taskId);
+  const task = await getTask(client, taskId);
+  const artifacts = await listArtifacts(client, taskId);
+  const gateResults = await evaluateGates(client, taskId);
   const taskEvents = await getTaskEvents(taskId);
 
   // Build acceptance criteria list
@@ -135,8 +154,8 @@ async function getTaskFocusModePrompt(
   }, {} as Record<string, number>);
   const artifactsSummary = Object.keys(artifactsByType).length > 0
     ? Object.entries(artifactsByType)
-        .map(([type, count]) => `  - ${type}: ${count}`)
-        .join('\n')
+      .map(([type, count]) => `  - ${type}: ${count}`)
+      .join('\n')
     : '  (No artifacts yet)';
 
   // Build gate status
@@ -176,7 +195,24 @@ You are now in **focus mode** for this task. Follow this workflow:
    - Make code changes, write tests, update documentation as needed
    - Stay focused on this task only - do not work on other tasks
 
-3. **Record artifacts:**
+3. **Record file changes (CRITICAL):**
+   - After making any file modifications, immediately call:
+     \`pm.task_record_touched_files({projectId, taskId, autoDetect: true})\`
+   - This tracks which files were modified and provides an audit trail
+   - The \`autoDetect: true\` option automatically detects changes using git diff
+
+4. **Add evidence as you work (CRITICAL):**
+   - **Evidence is REQUIRED** - tasks cannot be marked done without at least 1 evidence item
+   - Add evidence immediately after completing work, not at the end
+   - Use \`pm.evidence_add\` with appropriate type:
+     - \`type: "note"\` - For documentation, findings, summaries (e.g., "Created analysis document")
+     - \`type: "link"\` - For URLs, references (e.g., documentation links)
+     - \`type: "log"\` - For command output, test results
+     - \`type: "diff"\` - For code changes, file diffs
+   - Example: After creating a file, immediately add evidence:
+     \`pm.evidence_add({projectId, taskId, type: "note", content: "Created TOOL_USAGE_ANALYSIS.md with complete inventory"})\`
+
+5. **Record artifacts:**
    - After making changes, call pm.append_artifact(taskId, {type, ref, summary}) for each output:
      - diff: Code changes (file paths, commit refs)
      - pr: Pull request URLs
@@ -184,23 +220,41 @@ You are now in **focus mode** for this task. Follow this workflow:
      - document: Documentation updates
      - other: Any other relevant outputs
 
-4. **Evaluate gates:**
+6. **Evaluate gates:**
    - Call pm.evaluate_gates(taskId) to check if quality gates pass
    - Address any failed gates before completing the task
 
-5. **Complete the task:**
-   - Once all gates pass and artifacts are recorded, call pm.complete_task(taskId)
-   - This will verify gates, check artifacts, and mark the task as done
+7. **Complete the task:**
+   - **IMPORTANT**: You cannot mark a task as "done" without evidence
+   - Verify you have at least 1 evidence item (check with pm.task_get)
+   - Once all gates pass, evidence is added, and artifacts are recorded, call pm.complete_task(taskId)
+   - This will verify gates, check artifacts, verify evidence exists, and mark the task as done
 
-6. **Create checkpoint (optional but recommended):**
+8. **Create checkpoint (optional but recommended):**
    - After completing the task, consider calling pm.create_checkpoint(projectId, ...) to save progress
    - This enables resumable sessions and provides a clear state snapshot
 
 ## Important Rules
 - **Stay on task**: Only work on this specific task. Do not start other tasks.
 - **Enforce scope**: Always call pm.assert_in_scope before applying edits.
+- **Track files**: Always call pm.task_record_touched_files after modifying files.
+- **Add evidence**: Add evidence immediately after work, not at the end. Tasks require evidence to be marked done.
 - **Quality gates**: Tasks cannot be completed unless gates pass.
 - **Artifacts required**: Tasks need artifacts to be considered complete.
+- **Evidence required**: Tasks cannot be marked done without at least 1 evidence item.
+
+## Evidence-First Workflow Pattern
+
+**✅ CORRECT Pattern:**
+1. Do work (create/modify files)
+2. Track files → \`pm.task_record_touched_files({autoDetect: true})\`
+3. Add evidence → \`pm.evidence_add({type: "note", content: "..."})\`
+4. Mark done → \`pm.task_set_status({status: "done"})\` (succeeds because evidence exists)
+
+**❌ INCORRECT Pattern:**
+1. Do work
+2. Try to mark done → \`pm.task_set_status({status: "done"})\` (FAILS - no evidence)
+3. Add evidence (too late, already tried to complete)
 
 ## Task Context
 **Project ID:** ${task.project_id}
@@ -228,6 +282,7 @@ Begin working on this task now. Remember to assert scope before making changes!`
  */
 async function getResumeFromCheckpointPrompt(
   userId: string,
+  accessToken: string,
   args: Record<string, unknown>
 ): Promise<{ messages: Array<{ role: string; content: { type: string; text: string } }> }> {
   const checkpointId = args.checkpointId as string;
@@ -235,10 +290,13 @@ async function getResumeFromCheckpointPrompt(
     throw new Error('checkpointId is required for pm.resume_from_checkpoint');
   }
 
+  // Authenticate and get Supabase client
+  const { client } = await authenticateTool(accessToken, 'oauth');
+
   // Fetch checkpoint details
   const checkpoint = await getCheckpoint(userId, checkpointId);
-  const project = await getProject(userId, checkpoint.project_id);
-  const tasks = await listTasks(userId, checkpoint.project_id, {});
+  const project = await getProject(client, checkpoint.project_id);
+  const tasks = await listTasks(client, checkpoint.project_id, {});
   const snapshot = (checkpoint as any).snapshot || {};
 
   // Get next available tasks
@@ -275,8 +333,8 @@ ${project.description ? `**Description:** ${project.description}` : ''}
 1. **Review the checkpoint snapshot** to understand the state at this point
 2. **Check for active tasks:**
    ${inProgressTasks.length > 0
-     ? inProgressTasks.map((t: Task) => `   - ${t.title} (ID: ${t.id})`).join('\n')
-     : '   - No tasks currently in progress'}
+      ? inProgressTasks.map((t: Task) => `   - ${t.title} (ID: ${t.id})`).join('\n')
+      : '   - No tasks currently in progress'}
 3. **Pick the next task:**
    - Use pm.pick_next_task(projectId) to get the next available task
    - Or use pm.list_tasks(projectId, {status: 'todo'}) to see all available tasks
@@ -288,12 +346,12 @@ ${project.description ? `**Description:** ${project.description}` : ''}
 
 ## Available Tasks
 ${todoTasks.length > 0
-  ? todoTasks.slice(0, 10).map((t: Task) => `- **${t.title}** (ID: ${t.id})\n  ${t.description || 'No description'}`).join('\n\n')
-  : 'No tasks available. Consider creating new tasks with pm.create_task.'}
+      ? todoTasks.slice(0, 10).map((t: Task) => `- **${t.title}** (ID: ${t.id})\n  ${t.description || 'No description'}`).join('\n\n')
+      : 'No tasks available. Consider creating new tasks with pm.create_task.'}
 
 ${blockedTasks.length > 0
-  ? `\n## Blocked Tasks (may need attention)\n${blockedTasks.map((t: Task) => `- ${t.title} (ID: ${t.id})`).join('\n')}`
-  : ''}
+      ? `\n## Blocked Tasks (may need attention)\n${blockedTasks.map((t: Task) => `- ${t.title} (ID: ${t.id})`).join('\n')}`
+      : ''}
 
 ## Project Rules
 ${(project as any).rules ? `\n${'```'}json\n${JSON.stringify((project as any).rules, null, 2)}\n${'```'}` : 'No project rules defined.'}
@@ -318,6 +376,7 @@ Ready to resume work. Pick a task and enter focus mode to continue!`;
  */
 async function getProposeTasksFromGoalPrompt(
   userId: string,
+  accessToken: string,
   args: Record<string, unknown>
 ): Promise<{ messages: Array<{ role: string; content: { type: string; text: string } }> }> {
   const projectId = args.projectId as string;
@@ -331,9 +390,12 @@ async function getProposeTasksFromGoalPrompt(
     throw new Error('goal is required for pm.propose_tasks_from_goal');
   }
 
+  // Authenticate and get Supabase client
+  const { client } = await authenticateTool(accessToken, 'oauth');
+
   // Fetch project details
-  const project = await getProject(userId, projectId);
-  const existingTasks = await listTasks(userId, projectId, {});
+  const project = await getProject(client, projectId);
+  const existingTasks = await listTasks(client, projectId, {});
   const projectRules = (project as any).rules || {};
 
   // Parse constraints if provided
@@ -358,17 +420,17 @@ ${project.description ? `**Description:** ${project.description}` : ''}
 
 ## Project Rules & Constraints
 ${Object.keys(projectRules).length > 0
-  ? `\n${'```'}json\n${JSON.stringify(projectRules, null, 2)}\n${'```'}`
-  : 'No project rules defined.'}
+      ? `\n${'```'}json\n${JSON.stringify(projectRules, null, 2)}\n${'```'}`
+      : 'No project rules defined.'}
 
 ${Object.keys(constraints).length > 0
-  ? `\n## Additional Constraints\n${'```'}json\n${JSON.stringify(constraints, null, 2)}\n${'```'}`
-  : ''}
+      ? `\n## Additional Constraints\n${'```'}json\n${JSON.stringify(constraints, null, 2)}\n${'```'}`
+      : ''}
 
 ## Existing Tasks
 ${existingTasks.length > 0
-  ? `This project already has ${existingTasks.length} task(s). Consider dependencies and avoid duplication.\n\nExisting tasks:\n${existingTasks.slice(0, 10).map((t: Task) => `- ${t.title} (${t.status})`).join('\n')}`
-  : 'This is a new project with no existing tasks.'}
+      ? `This project already has ${existingTasks.length} task(s). Consider dependencies and avoid duplication.\n\nExisting tasks:\n${existingTasks.slice(0, 10).map((t: Task) => `- ${t.title} (${t.status})`).join('\n')}`
+      : 'This is a new project with no existing tasks.'}
 
 ## Task Breakdown Instructions
 
@@ -437,6 +499,7 @@ Generate the task breakdown now:`;
  */
 async function getWriteStatusUpdatePrompt(
   userId: string,
+  accessToken: string,
   args: Record<string, unknown>
 ): Promise<{ messages: Array<{ role: string; content: { type: string; text: string } }> }> {
   const projectId = args.projectId as string;
@@ -444,9 +507,12 @@ async function getWriteStatusUpdatePrompt(
     throw new Error('projectId is required for pm.write_status_update');
   }
 
+  // Authenticate and get Supabase client
+  const { client } = await authenticateTool(accessToken, 'oauth');
+
   // Fetch project data
-  const project = await getProject(userId, projectId);
-  const tasks = await listTasks(userId, projectId, {});
+  const project = await getProject(client, projectId);
+  const tasks = await listTasks(client, projectId, {});
   const events = await getProjectEvents(projectId);
   const checkpoints = await listCheckpoints(userId, projectId);
 
@@ -495,42 +561,42 @@ ${project.description ? `**Description:** ${project.description}` : ''}
 
 ### Active Tasks (In Progress)
 ${activeTasks.length > 0
-  ? activeTasks.map((t: Task) => {
-      const lockedInfo = (t as any).locked_at ? ` (Locked since ${new Date((t as any).locked_at).toLocaleString()})` : '';
-      return `- **${t.title}** (ID: ${t.id})${lockedInfo}\n  ${t.description || 'No description'}`;
-    }).join('\n\n')
-  : 'No tasks currently in progress.'}
+      ? activeTasks.map((t: Task) => {
+        const lockedInfo = (t as any).locked_at ? ` (Locked since ${new Date((t as any).locked_at).toLocaleString()})` : '';
+        return `- **${t.title}** (ID: ${t.id})${lockedInfo}\n  ${t.description || 'No description'}`;
+      }).join('\n\n')
+      : 'No tasks currently in progress.'}
 
 ### Blocked Tasks
 ${blockedTasks.length > 0
-  ? blockedTasks.map((t: Task) => `- **${t.title}** (ID: ${t.id})\n  ${t.description || 'No description'}`).join('\n\n')
-  : 'No blocked tasks.'}
+      ? blockedTasks.map((t: Task) => `- **${t.title}** (ID: ${t.id})\n  ${t.description || 'No description'}`).join('\n\n')
+      : 'No blocked tasks.'}
 
 ### Recently Completed Tasks
 ${completedTasks.slice(0, 5).length > 0
-  ? completedTasks
-      .slice(0, 5)
-      .sort((a: Task, b: Task) => new Date((b as any).updated_at || b.created_at).getTime() - new Date((a as any).updated_at || a.created_at).getTime())
-      .map((t: Task) => `- **${t.title}** (ID: ${t.id})`).join('\n')
-  : 'No completed tasks yet.'}
+      ? completedTasks
+        .slice(0, 5)
+        .sort((a: Task, b: Task) => new Date((b as any).updated_at || b.created_at).getTime() - new Date((a as any).updated_at || a.created_at).getTime())
+        .map((t: Task) => `- **${t.title}** (ID: ${t.id})`).join('\n')
+      : 'No completed tasks yet.'}
 
 ### Next Available Tasks
 ${todoTasks.length > 0
-  ? todoTasks.slice(0, 5).map((t: Task) => `- **${t.title}** (ID: ${t.id})`).join('\n')
-  : 'No tasks available.'}
+      ? todoTasks.slice(0, 5).map((t: Task) => `- **${t.title}** (ID: ${t.id})`).join('\n')
+      : 'No tasks available.'}
 
 ### Recent Events
 ${recentEvents.length > 0
-  ? recentEvents
-      .slice(0, 10)
-      .map((e: Event) => `- **${e.event_type}** at ${new Date(e.created_at).toLocaleString()}${e.task_id ? ` (Task: ${e.task_id})` : ''}`)
-      .join('\n')
-  : 'No recent events.'}
+      ? recentEvents
+        .slice(0, 10)
+        .map((e: Event) => `- **${e.event_type}** at ${new Date(e.created_at).toLocaleString()}${e.task_id ? ` (Task: ${e.task_id})` : ''}`)
+        .join('\n')
+      : 'No recent events.'}
 
 ### Checkpoints
 ${checkpoints.length > 0
-  ? checkpoints.slice(0, 3).map((c: Checkpoint) => `- **${c.label}** - ${new Date(c.created_at).toLocaleString()}`).join('\n')
-  : 'No checkpoints created yet.'}
+      ? checkpoints.slice(0, 3).map((c: Checkpoint) => `- **${c.label}** - ${new Date(c.created_at).toLocaleString()}`).join('\n')
+      : 'No checkpoints created yet.'}
 
 ## Instructions
 
@@ -546,6 +612,139 @@ Generate a human-readable status update report for this project. The report shou
 Write the status update in a clear, professional format that a human project manager would understand. Use markdown formatting for readability.
 
 Generate the status update now:`;
+
+  return {
+    messages: [
+      {
+        role: 'user',
+        content: {
+          type: 'text',
+          text: promptText,
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * Work item creation prompt - guides through interactive work item and task setup
+ */
+async function getWorkItemPrompt(
+  userId: string,
+  accessToken: string,
+  args: Record<string, unknown>
+): Promise<{ messages: Array<{ role: string; content: { type: string; text: string } }> }> {
+  const projectId = args.projectId as string;
+  if (!projectId) {
+    throw new Error('projectId is required for pm.work_item');
+  }
+
+  // Authenticate and get Supabase client
+  const { client } = await authenticateTool(accessToken, 'oauth');
+
+  // Fetch project details
+  const project = await getProject(client, projectId);
+  const existingWorkItems = await listWorkItems(client, projectId);
+
+  const promptText = `# Create New Work Item with Tasks
+
+## Project Context
+**Project:** ${project.name}
+**Project ID:** ${projectId}
+${project.description ? `**Description:** ${project.description}` : ''}
+
+## Existing Work Items
+${existingWorkItems.length > 0
+      ? `This project has ${existingWorkItems.length} existing work item(s):\n${existingWorkItems.slice(0, 5).map(wi => `- ${wi.title} (${wi.status})`).join('\n')}`
+      : 'This project has no existing work items yet.'}
+
+## Work Item Creation Workflow
+
+You are about to create a new work item with associated tasks. This will establish a structured timeline through task dependencies.
+
+### Step 1: Gather Work Item Information
+
+First, ask the user for:
+1. **Work Item Title**: A clear, concise title (e.g., "User Authentication", "Payment Integration")
+2. **Description** (optional): Detailed description of what this work item covers
+3. **External URL** (optional): Link to external ticket (GitHub issue, Jira ticket, etc.)
+
+### Step 2: Identify Tasks
+
+Once you have the work item details, help the user break down the work into tasks. For each task, you'll need:
+
+1. **Task Key**: Unique identifier (e.g., "task-1", "PM-001", "auth-1")
+2. **Type**: One of: research, implement, verify, docs, cleanup
+3. **Title**: Clear task title
+4. **Goal**: One-sentence description of what to accomplish
+5. **Context** (optional): Additional context or background
+6. **Verification** (optional): How to verify the task is complete
+7. **Timebox** (optional): Estimated time in minutes (default: 15)
+8. **Risk** (optional): low, medium, or high (default: low)
+9. **Dependencies** (optional): Array of task keys this task depends on
+
+### Step 3: Establish Timeline
+
+Task dependencies create the timeline:
+- Tasks with no dependencies can start immediately
+- Tasks with dependencies must wait for their dependencies to complete
+- Multiple dependencies are supported (e.g., task-4 depends on both task-2 and task-3)
+
+### Step 4: Create Work Item and Tasks
+
+Once you have all the information, use:
+1. Create the work item using \`pm.work_item_create\`
+2. Create each task using \`pm.task_create\` in dependency order
+3. Set task dependencies using task IDs (you'll get these when creating tasks)
+
+## Example Interaction
+
+**User:** "Create a work item for user authentication"
+
+**You should:**
+1. Ask: "What should the work item be titled? (e.g., 'User Authentication')"
+2. Ask: "What tasks are needed? Let me help you break this down..."
+3. Guide through task creation with dependencies
+4. Create everything once you have all details
+
+## Task Creation Guidelines
+
+- **Break down into small, focused tasks**: Each task should be completable independently (after dependencies)
+- **Use clear task keys**: Make them meaningful (e.g., "auth-research", "auth-login-form")
+- **Establish dependencies**: Think about what must happen first
+- **Set appropriate types**: Use research for exploration, implement for building, verify for testing
+- **Define clear goals**: Each task should have a one-sentence goal
+- **Consider timeboxes**: Estimate realistic time for each task
+
+## Available Tools
+
+- \`pm.work_item_create\`: Create a work item
+- \`pm.task_create\`: Create individual tasks
+- \`pm.work_item_list\`: List existing work items
+- \`pm.work_item_get\`: Get work item details
+- \`pm.evidence_add\`: Add evidence to tasks (REQUIRED for task completion)
+- \`pm.task_record_touched_files\`: Track file changes during task execution
+
+## Task Execution Reminders
+
+When executing tasks created through this work item, remember:
+- **Evidence is required**: Tasks cannot be marked done without evidence
+- **Track files**: Use \`pm.task_record_touched_files\` after modifying files
+- **Add evidence immediately**: Don't wait until the end - add evidence as you work
+- **Use appropriate evidence types**: note, link, log, or diff depending on the work done
+
+## Important Notes
+
+- Task keys must be unique within the work item
+- Dependencies are specified by task IDs (you'll get these when creating tasks)
+- Tasks should be created in topological order (no dependencies first)
+- The system validates that all dependency IDs exist
+
+## Getting Started
+
+Begin by asking the user for the work item title and description. Then help them identify the tasks needed to complete the work item.
+
+Start the conversation now:`;
 
   return {
     messages: [

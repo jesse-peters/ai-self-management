@@ -115,9 +115,9 @@ export {
   finishWizard,
   cancelWizard,
   getWizardSession,
-  getProjectSpec,
   // Work Items
   createWorkItem,
+  createWorkItemWithTasks,
   listWorkItems,
   getWorkItem,
   updateWorkItemStatus,
@@ -144,6 +144,21 @@ export {
   generateConventionsMarkdown,
   generateReconProfile,
   saveProjectConventions,
+  // Project Plans
+  importProjectPlan,
+  exportProjectPlan,
+  generateProjectPlanTemplate,
+  addPlanMetadata,
+  type ProjectPlanTaskDefinition,
+  type ProjectPlan,
+  type ProjectPlanImportResult,
+  type ProjectPlanExportResult,
+  type ProjectPlanValidationResult,
+  type PlanMetadata,
+  // Project Specs
+  getProjectSpec,
+  updateProjectSpecPlanPath,
+  updateProjectSpecPlanMetadata,
   // Manifest, Recon, Primer, and server-only functions are in './server'
   // For functions that execute commands or do file I/O, import from '@projectflow/core/server'
 } from './services';
@@ -183,6 +198,7 @@ export type {
 // Export work item types
 export type {
   WorkItemSummary,
+  WorkItemWithTasksResult,
 } from './services';
 
 // Export agent task types

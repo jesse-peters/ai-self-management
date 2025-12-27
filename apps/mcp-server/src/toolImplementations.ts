@@ -23,6 +23,12 @@ import {
   getAgentTask,
   importPlan,
   exportPlan,
+  importProjectPlan,
+  exportProjectPlan,
+  generateProjectPlanTemplate,
+  startWizard,
+  submitWizardStep,
+  finishWizard,
   recordTouchedFiles,
   ValidationError,
   type AgentTaskFilters,
@@ -31,6 +37,8 @@ import {
   type ManifestData,
   type PlanImportResult,
   type PlanExportResult,
+  type ProjectPlanImportResult,
+  type ProjectPlanExportResult,
 } from '@projectflow/core';
 // Import server-only functions from server module
 import {
@@ -918,12 +926,197 @@ export async function implementPlanExport(
     throw new Error('workItemId is required');
   }
 
-  // Export the plan
-  const result: PlanExportResult = await exportPlan(client, workItemId);
+  // Get app URL from environment or use fallback
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined);
+
+  // Export the plan with options
+  const result: PlanExportResult = await exportPlan(client, workItemId, {
+    userId,
+    appUrl,
+  });
 
   return {
     workItemId,
     plan: result.plan,
     content: result.content,
+  };
+}
+
+/**
+ * Implements pm.project_plan_import tool
+ * Imports a project plan file, creating/updating tasks
+ */
+export async function implementProjectPlanImport(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<any> {
+  const { userId, client } = await authenticateTool(accessToken, 'oauth');
+
+  const projectId = params.projectId as string;
+  const planText = params.planText as string;
+  const planPath = (params.planPath as string) || './.pm/plan.md';
+
+  if (!projectId) {
+    throw new Error('projectId is required');
+  }
+
+  if (!planText) {
+    throw new Error('planText is required');
+  }
+
+  // Import the plan
+  const result: ProjectPlanImportResult = await importProjectPlan(
+    client,
+    projectId,
+    planText,
+    planPath
+  );
+
+  return {
+    projectId: result.projectId,
+    tasksCreated: result.tasksCreated,
+    tasksUpdated: result.tasksUpdated,
+    taskMappings: result.taskMappings,
+    warnings: result.warnings,
+    message: `Plan imported: ${result.tasksCreated} tasks created, ${result.tasksUpdated} tasks updated`,
+  };
+}
+
+/**
+ * Implements pm.project_plan_export tool
+ * Exports a project's tasks as a plan file with metadata annotations
+ */
+export async function implementProjectPlanExport(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<any> {
+  const { userId, client } = await authenticateTool(accessToken, 'oauth');
+
+  const projectId = params.projectId as string;
+
+  if (!projectId) {
+    throw new Error('projectId is required');
+  }
+
+  // Export the plan
+  const result: ProjectPlanExportResult = await exportProjectPlan(client, projectId);
+
+  return {
+    projectId,
+    plan: result.plan,
+    content: result.content,
+  };
+}
+
+/**
+ * Implements pm.wizard_start tool
+ * Starts a new project setup wizard session
+ */
+export async function implementWizardStart(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<any> {
+  const { userId, client } = await authenticateTool(accessToken, 'oauth');
+
+  // Start wizard session
+  const sessionId = await startWizard(client);
+
+  // Get session to return current step
+  const { getWizardSession } = await import('@projectflow/core');
+  const session = getWizardSession(sessionId);
+
+  return {
+    sessionId,
+    currentStep: session.step,
+    message: 'Wizard session started. Use pm.wizard_step to submit data for each step.',
+  };
+}
+
+/**
+ * Implements pm.wizard_step tool
+ * Submits data for a wizard step and advances to next step
+ */
+export async function implementWizardStep(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<any> {
+  const { userId, client } = await authenticateTool(accessToken, 'oauth');
+
+  const sessionId = params.sessionId as string;
+  const stepId = params.stepId as number;
+  const payload = params.payload as Record<string, unknown>;
+
+  if (!sessionId) {
+    throw new Error('sessionId is required');
+  }
+
+  if (!stepId || stepId < 1 || stepId > 5) {
+    throw new Error('stepId must be between 1 and 5');
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    throw new Error('payload is required and must be an object');
+  }
+
+  // Submit wizard step (no client parameter needed - uses in-memory sessions)
+  const result = await submitWizardStep(sessionId, stepId, payload);
+
+  return {
+    sessionId,
+    nextStep: result.nextStep,
+    session: result.session,
+    message: result.nextStep === 'complete'
+      ? 'Wizard complete. Use pm.wizard_finish to create the project.'
+      : `Step ${stepId} submitted. Next step: ${result.nextStep}`,
+  };
+}
+
+/**
+ * Implements pm.wizard_finish tool
+ * Finishes wizard and creates project with spec, tasks, gates, checkpoint, and plan file
+ */
+export async function implementWizardFinish(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<any> {
+  const { userId, client } = await authenticateTool(accessToken, 'oauth');
+
+  const sessionId = params.sessionId as string;
+
+  if (!sessionId) {
+    throw new Error('sessionId is required');
+  }
+
+  // Finish wizard and create project
+  const result = await finishWizard(client, sessionId);
+
+  // Generate initial plan file
+  let planContent: string | null = null;
+  try {
+    planContent = await generateProjectPlanTemplate(client, result.project.id);
+
+    // Update project spec with plan path
+    const { updateProjectSpecPlanMetadata } = await import('@projectflow/core');
+    await updateProjectSpecPlanMetadata(
+      client,
+      result.project.id,
+      './.pm/plan.md',
+      undefined,
+      undefined,
+      undefined
+    );
+  } catch (error) {
+    // Log but don't fail - plan generation is optional
+    console.warn('Failed to generate plan file:', error);
+  }
+
+  return {
+    project: result.project,
+    projectSpec: result.projectSpec,
+    tasks: result.tasks,
+    checkpoint: result.checkpoint,
+    planContent,
+    message: `Project created successfully with ${result.tasks.length} initial tasks. Plan file template generated.`,
   };
 }

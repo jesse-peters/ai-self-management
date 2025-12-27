@@ -19,6 +19,10 @@ export {
   getGateStatus,
   getLatestGateRun,
   listGateRuns,
+  waiveGate,
+  getGateWaivers,
+  canWaiveGate,
+  type GateWaiver,
 } from './services/gates';
 
 // Export server-only manifest functions (file I/O)
