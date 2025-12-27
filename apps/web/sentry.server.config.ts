@@ -10,6 +10,73 @@
 
 import * as Sentry from '@sentry/nextjs';
 
+/**
+ * Sanitizes sensitive data from objects
+ */
+function sanitizeData(data: unknown, maxDepth = 5, currentDepth = 0): unknown {
+    if (currentDepth >= maxDepth) {
+        return '[Max Depth Reached]';
+    }
+
+    if (data === null || data === undefined) {
+        return data;
+    }
+
+    if (typeof data === 'string') {
+        // Sanitize common sensitive patterns
+        const sensitivePatterns = [
+            /password/i,
+            /token/i,
+            /secret/i,
+            /key/i,
+            /authorization/i,
+            /bearer/i,
+            /api[_-]?key/i,
+            /access[_-]?token/i,
+        ];
+
+        for (const pattern of sensitivePatterns) {
+            if (pattern.test(data)) {
+                return '[Redacted]';
+            }
+        }
+
+        // Sanitize JWT tokens (format: xxx.yyy.zzz)
+        if (/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(data)) {
+            return data.substring(0, 20) + '...[Redacted]';
+        }
+
+        return data;
+    }
+
+    if (Array.isArray(data)) {
+        return data.map(item => sanitizeData(item, maxDepth, currentDepth + 1));
+    }
+
+    if (typeof data === 'object') {
+        const sanitized: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(data)) {
+            const lowerKey = key.toLowerCase();
+            // Skip sensitive keys
+            if (
+                lowerKey.includes('password') ||
+                lowerKey.includes('token') ||
+                lowerKey.includes('secret') ||
+                lowerKey.includes('key') ||
+                lowerKey.includes('authorization') ||
+                lowerKey === 'cookie'
+            ) {
+                sanitized[key] = '[Redacted]';
+            } else {
+                sanitized[key] = sanitizeData(value, maxDepth, currentDepth + 1);
+            }
+        }
+        return sanitized;
+    }
+
+    return data;
+}
+
 // Try to initialize if DSN is available at module load time
 // If not available, lazy initialization will happen in captureError
 if (process.env.SENTRY_DSN) {
@@ -25,7 +92,10 @@ if (process.env.SENTRY_DSN) {
 
         environment: process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || 'development',
 
-        // Filter out expected errors or reduce their severity
+        // Maximum number of breadcrumbs to capture
+        maxBreadcrumbs: 50,
+
+        // Filter out expected errors or reduce their severity, enrich context
         beforeSend(event, hint) {
             // Filter out expected errors
             if (event.exception) {
@@ -38,11 +108,86 @@ if (process.env.SENTRY_DSN) {
                     }
                 }
             }
+
+            // Enrich event with additional context
+            if (event.contexts) {
+                // Add custom fingerprinting for better error grouping
+                if (event.exception) {
+                    const error = hint.originalException;
+                    if (error instanceof Error) {
+                        // Group by error message and component if available
+                        const component = event.tags?.component as string | undefined;
+                        if (component) {
+                            event.fingerprint = [
+                                '{{ default }}',
+                                error.message,
+                                component,
+                            ];
+                        }
+                    }
+                }
+            }
+
+            // Sanitize request data
+            if (event.request) {
+                if (event.request.headers) {
+                    event.request.headers = sanitizeData(event.request.headers) as Record<string, string>;
+                }
+                if (event.request.data) {
+                    event.request.data = sanitizeData(event.request.data);
+                }
+                if (event.request.query_string) {
+                    event.request.query_string = sanitizeData(event.request.query_string) as string;
+                }
+            }
+
+            // Sanitize extra data
+            if (event.extra) {
+                event.extra = sanitizeData(event.extra) as Record<string, unknown>;
+            }
+
             return event;
+        },
+
+        // Filter noisy breadcrumbs
+        beforeBreadcrumb(breadcrumb, hint) {
+            // Filter out noisy console logs in production
+            if (
+                process.env.NODE_ENV === 'production' &&
+                breadcrumb.category === 'console' &&
+                breadcrumb.level === 'debug'
+            ) {
+                return null;
+            }
+
+            // Filter out health check requests
+            if (
+                breadcrumb.category === 'fetch' &&
+                breadcrumb.data?.url &&
+                (breadcrumb.data.url.includes('/health') ||
+                    breadcrumb.data.url.includes('/ping') ||
+                    breadcrumb.data.url.includes('/status'))
+            ) {
+                return null;
+            }
+
+            // Sanitize breadcrumb data
+            if (breadcrumb.data) {
+                breadcrumb.data = sanitizeData(breadcrumb.data) as Record<string, unknown>;
+            }
+
+            return breadcrumb;
         },
 
         // Configure which integrations to use
         integrations: [
+            // HTTP integration for automatic request/response capture
+            Sentry.httpIntegration(),
+            // Console integration for console.error/warn breadcrumbs
+            Sentry.consoleIntegration({
+                // Only capture console.error and console.warn
+                levels: ['error', 'warn'],
+            }),
             // Node profiling is handled automatically by @sentry/nextjs
         ],
 
@@ -56,6 +201,9 @@ if (process.env.SENTRY_DSN) {
             'ETIMEDOUT',
             // Validation errors (handled by application)
             'ValidationError',
+            // Network errors that are expected
+            'NetworkError',
+            'Network request failed',
         ],
     });
 

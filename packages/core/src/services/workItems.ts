@@ -125,11 +125,13 @@ export async function createWorkItem(
 export async function listWorkItems(
   client: SupabaseClient<Database>,
   projectId: string,
-  status?: 'open' | 'in_progress' | 'done'
+  status?: 'open' | 'in_progress' | 'done',
+  userId?: string
 ): Promise<WorkItemSummary[]> {
   try {
     // Verify user owns the project
-    await getProject(client, projectId);
+    // Pass userId to skip getUser() check for OAuth clients
+    await getProject(client, projectId, userId);
 
     // Use the work_item_progress view for enriched data
     let query = client

@@ -129,3 +129,15 @@ export type {
   PrimerGenerationResult,
   PrimerContent,
 } from './primer';
+export {
+  parsePlan,
+  validatePlan,
+  importPlan,
+  exportPlan,
+  planToMarkdown,
+  type PlanTaskDefinition,
+  type WorkItemPlan,
+  type PlanImportResult,
+  type PlanExportResult,
+  type PlanValidationResult,
+} from './plan';

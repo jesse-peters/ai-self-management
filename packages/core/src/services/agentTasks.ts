@@ -180,6 +180,7 @@ export async function createAgentTask(
  * @param client Authenticated Supabase client (session or OAuth)
  * @param projectId Project ID to list tasks for
  * @param filters Optional filters (workItemId, status, type)
+ * @param userId Optional user ID (if not provided, will try to get from auth context)
  * @returns Array of tasks with details
  * 
  * RLS automatically filters to authenticated user's tasks.
@@ -187,11 +188,13 @@ export async function createAgentTask(
 export async function listAgentTasks(
   client: SupabaseClient<Database>,
   projectId: string,
-  filters?: AgentTaskFilters
+  filters?: AgentTaskFilters,
+  userId?: string
 ): Promise<AgentTaskWithDetails[]> {
   try {
     // Verify user owns the project
-    await getProject(client, projectId);
+    // Pass userId to skip getUser() check for OAuth clients
+    await getProject(client, projectId, userId);
 
     // Use the agent_task_details view for enriched data
     let query = client

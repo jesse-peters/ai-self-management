@@ -214,6 +214,20 @@ export type {
   ReconFilePattern,
 } from './services';
 
+// Export plan types and functions
+export {
+  parsePlan,
+  validatePlan,
+  importPlan,
+  exportPlan,
+  planToMarkdown,
+  type PlanTaskDefinition,
+  type WorkItemPlan,
+  type PlanImportResult,
+  type PlanExportResult,
+  type PlanValidationResult,
+} from './services';
+
 // Note: Gate execution functions (configureGates, runGate, etc.) are server-only
 // Import from '@projectflow/core/server' if you need them on the server-side
 

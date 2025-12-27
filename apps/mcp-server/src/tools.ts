@@ -6,7 +6,7 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 
 export const tools: Tool[] = [
-  // ========== CORE (2 tools) ==========
+  // ========== CORE (3 tools) ==========
   {
     name: 'pm.init',
     description: 'Initializes a new project with sensible defaults (basic gates: tests, lint, review). Quick start for new projects. If repoRoot is provided, creates .pm/project.json and .pm/local.json manifest files.',
@@ -32,8 +32,78 @@ export const tools: Tool[] = [
       required: ['projectId'],
     },
   },
+  {
+    name: 'pm.project_get',
+    description: 'Gets a single project by ID with its details.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        projectId: { type: 'string', description: 'Project ID' },
+      },
+      required: ['projectId'],
+    },
+  },
 
-  // ========== TASKS (2 tools) ==========
+  // ========== WORK ITEMS (4 tools) ==========
+  {
+    name: 'pm.work_item_create',
+    description: 'Creates a new work item (external ticket reference) that groups related agent tasks.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        projectId: { type: 'string', description: 'Project ID' },
+        title: { type: 'string', description: 'Work item title' },
+        description: { type: 'string', description: 'Optional work item description' },
+        externalUrl: { type: 'string', description: 'Optional external URL (e.g., GitHub issue, Jira ticket)' },
+      },
+      required: ['projectId', 'title'],
+    },
+  },
+  {
+    name: 'pm.work_item_get',
+    description: 'Gets a single work item by ID with task counts and gate status.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        workItemId: { type: 'string', description: 'Work item ID' },
+      },
+      required: ['workItemId'],
+    },
+  },
+  {
+    name: 'pm.work_item_list',
+    description: 'Lists work items for a project with optional status filter.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        projectId: { type: 'string', description: 'Project ID' },
+        status: {
+          type: 'string',
+          enum: ['open', 'in_progress', 'done'],
+          description: 'Optional status filter',
+        },
+      },
+      required: ['projectId'],
+    },
+  },
+  {
+    name: 'pm.work_item_set_status',
+    description: 'Updates work item status (enforces gate requirement for done status).',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        workItemId: { type: 'string', description: 'Work item ID' },
+        status: {
+          type: 'string',
+          enum: ['open', 'in_progress', 'done'],
+          description: 'New status',
+        },
+      },
+      required: ['workItemId', 'status'],
+    },
+  },
+
+  // ========== TASKS (3 tools) ==========
   {
     name: 'pm.task_create',
     description: 'Creates a new agent task (micro work packet) with goal, verification, and dependencies.',
@@ -59,6 +129,17 @@ export const tools: Tool[] = [
         timeboxMinutes: { type: 'number', description: 'Timebox in minutes (default: 15)' },
       },
       required: ['projectId', 'type', 'title', 'goal'],
+    },
+  },
+  {
+    name: 'pm.task_get',
+    description: 'Gets a single agent task by ID with enriched data (evidence count, work item title).',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        taskId: { type: 'string', description: 'Task ID' },
+      },
+      required: ['taskId'],
     },
   },
   {
@@ -165,7 +246,37 @@ export const tools: Tool[] = [
     },
   },
 
-  // ========== GATES (2 tools) ==========
+  // ========== GATES (3 tools) ==========
+  {
+    name: 'pm.gate_configure',
+    description: 'Configures gates for a project (creates or updates gates).',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        projectId: { type: 'string', description: 'Project ID' },
+        gates: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', description: 'Gate name' },
+              description: { type: 'string', description: 'Optional gate description' },
+              runnerMode: {
+                type: 'string',
+                enum: ['manual', 'command'],
+                description: 'How the gate is executed',
+              },
+              command: { type: 'string', description: 'Command to run (required if runnerMode is "command")' },
+              isRequired: { type: 'boolean', description: 'Whether this gate is required to pass' },
+            },
+            required: ['name', 'runnerMode'],
+          },
+          description: 'Array of gate configurations',
+        },
+      },
+      required: ['projectId', 'gates'],
+    },
+  },
   {
     name: 'pm.gate_run',
     description: 'Runs a gate and stores the result.',
@@ -194,73 +305,7 @@ export const tools: Tool[] = [
     },
   },
 
-  // ========== ADVANCED (2 tools) ==========
-  {
-    name: 'pm.create_constraint',
-    description: 'Creates a constraint (enforceable rule) for a project that warns or blocks risky actions.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        projectId: { type: 'string', description: 'Project ID' },
-        scope: {
-          type: 'string',
-          enum: ['project', 'repo', 'directory', 'task_type'],
-          description: 'Constraint scope',
-        },
-        scopeValue: { type: 'string', description: 'Optional: specific directory path or task type' },
-        trigger: {
-          type: 'string',
-          enum: ['files_match', 'task_tag', 'gate', 'keyword', 'always'],
-          description: 'Trigger condition',
-        },
-        triggerValue: { type: 'string', description: 'Optional: specific pattern, tag, gate, or keyword' },
-        ruleText: { type: 'string', description: 'Human-readable rule description' },
-        enforcementLevel: {
-          type: 'string',
-          enum: ['warn', 'block'],
-          description: 'Enforcement level (warn or block)',
-        },
-      },
-      required: ['projectId', 'scope', 'trigger', 'ruleText', 'enforcementLevel'],
-    },
-  },
-  {
-    name: 'pm.evaluate_constraints',
-    description: 'Evaluates constraints against a given context (files, tags, keywords, etc.) and returns violations and warnings.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        projectId: { type: 'string', description: 'Project ID' },
-        context: {
-          type: 'object',
-          description: 'Context for evaluation',
-          properties: {
-            files: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'File paths being changed',
-            },
-            tags: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Task tags',
-            },
-            gate: { type: 'string', description: 'Gate being evaluated' },
-            keywords: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Keywords in description/content',
-            },
-            taskType: { type: 'string', description: 'Type of task' },
-            directory: { type: 'string', description: 'Directory being modified' },
-          },
-        },
-      },
-      required: ['projectId', 'context'],
-    },
-  },
-
-  // ========== UTILITY (1 tool) ==========
+  // ========== MANIFEST & DISCOVERY (3 tools) ==========
   {
     name: 'pm.evidence_add',
     description: 'Adds evidence (proof) to a task or work item.',
@@ -285,16 +330,6 @@ export const tools: Tool[] = [
   {
     name: 'pm.manifest_discover',
     description: 'Discovers the .pm directory by walking up from the current directory. Returns the project ID and user ID if manifests exist.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        startDir: { type: 'string', description: 'Optional starting directory (defaults to current directory)' },
-      },
-    },
-  },
-  {
-    name: 'pm.manifest_validate',
-    description: 'Validates that .pm/project.json and .pm/local.json exist and are properly formatted. Returns validation errors and warnings.',
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -361,6 +396,31 @@ export const tools: Tool[] = [
         repoRoot: { type: 'string', description: 'Optional path to repository root (defaults to current directory)' },
       },
       required: ['projectId'],
+    },
+  },
+
+  // ========== PLAN MODE (2 tools) ==========
+  {
+    name: 'pm.plan_import',
+    description: 'Imports a plan file (markdown format) for a work item, creating or updating tasks from the plan structure.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        workItemId: { type: 'string', description: 'Work item ID to import plan into' },
+        planText: { type: 'string', description: 'Markdown plan file content' },
+      },
+      required: ['workItemId', 'planText'],
+    },
+  },
+  {
+    name: 'pm.plan_export',
+    description: 'Exports a work item\'s tasks as a plan file (markdown format) for use in Cursor Plan Mode.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        workItemId: { type: 'string', description: 'Work item ID to export' },
+      },
+      required: ['workItemId'],
     },
   },
 ];

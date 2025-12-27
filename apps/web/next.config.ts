@@ -22,6 +22,10 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_SUPABASE_URL: process.env.SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
   },
+  // Enable source maps for better error tracking in Sentry
+  // In development, source maps are always enabled
+  // In production, we enable them for Sentry to show readable stack traces
+  productionBrowserSourceMaps: true,
   transpilePackages: ['@projectflow/core', '@projectflow/db', '@projectflow/mcp-server'],
   // Exclude Node.js-only packages from server components (updated API name)
   serverExternalPackages: [
@@ -44,7 +48,7 @@ const nextConfig: NextConfig = {
         'worker_threads': false,
         'import-in-the-middle': false,
       };
-      
+
       // Use webpack.IgnorePlugin to completely ignore these modules
       config.plugins = config.plugins || [];
       config.plugins.push(

@@ -1,6 +1,13 @@
 'use client';
 
 import type { AgentTaskWithDetails } from '@projectflow/core';
+import type { TaskType, TaskStatus } from '@/lib/colors';
+import { 
+  TASK_TYPE_COLORS, 
+  TASK_TYPE_LABELS, 
+  getTaskTypeClass 
+} from '@/lib/colors';
+import { TaskTypeIcon } from './TaskTypeIcon';
 
 interface AgentTaskCardProps {
   task: AgentTaskWithDetails;
@@ -8,61 +15,169 @@ interface AgentTaskCardProps {
 }
 
 export function AgentTaskCard({ task, onClick }: AgentTaskCardProps) {
-  const typeColors = {
-    research: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
-    implement: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-    verify: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-    docs: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-    cleanup: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
+  const status = task.status as TaskStatus;
+  const taskType = task.type as TaskType;
+  const typeColor = TASK_TYPE_COLORS[taskType];
+  const isLocked = !!task.locked_by;
+
+  // Status-based styling
+  const getStatusStyles = () => {
+    switch (status) {
+      case 'ready':
+        // White background, thin border with type color
+        return {
+          containerClass: 'bg-white dark:bg-gray-800 border-2',
+          containerStyle: {
+            borderColor: typeColor.border,
+          },
+          textColor: 'text-gray-900 dark:text-white',
+          opacity: 'opacity-100',
+        };
+      case 'doing':
+        // Solid type color background, white text, pulse animation
+        return {
+          containerClass: 'border-2 animate-pulse',
+          containerStyle: {
+            backgroundColor: typeColor.light,
+            borderColor: typeColor.light,
+          },
+          textColor: 'text-white',
+          opacity: 'opacity-100',
+        };
+      case 'blocked':
+        // Red left border, warning badge
+        return {
+          containerClass: 'bg-white dark:bg-gray-800 border-l-4 border-red-500 dark:border-red-400 border-r border-t border-b border-gray-200 dark:border-gray-700',
+          containerStyle: {},
+          textColor: 'text-gray-900 dark:text-white',
+          opacity: 'opacity-100',
+        };
+      case 'review':
+        // Orange left border, review badge
+        return {
+          containerClass: 'bg-white dark:bg-gray-800 border-l-4 border-amber-500 dark:border-amber-400 border-r border-t border-b border-gray-200 dark:border-gray-700',
+          containerStyle: {},
+          textColor: 'text-gray-900 dark:text-white',
+          opacity: 'opacity-100',
+        };
+      case 'done':
+        // Light gray background, checkmark, lower opacity
+        return {
+          containerClass: 'bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600',
+          containerStyle: {},
+          textColor: 'text-gray-700 dark:text-gray-300',
+          opacity: 'opacity-75',
+        };
+      default:
+        return {
+          containerClass: 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700',
+          containerStyle: {},
+          textColor: 'text-gray-900 dark:text-white',
+          opacity: 'opacity-100',
+        };
+    }
   };
 
-  const typeLabels = {
-    research: '🔍 Research',
-    implement: '⚙️ Implement',
-    verify: '✓ Verify',
-    docs: '📄 Docs',
-    cleanup: '🧹 Cleanup',
-  };
+  const statusStyles = getStatusStyles();
 
-  const riskColors = {
-    low: 'text-green-600 dark:text-green-400',
-    medium: 'text-yellow-600 dark:text-yellow-400',
-    high: 'text-red-600 dark:text-red-400',
+  // Status badge
+  const getStatusBadge = () => {
+    if (status === 'blocked') {
+      return (
+        <span className="text-xs font-semibold px-2 py-1 rounded bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300">
+          🚫 Blocked
+        </span>
+      );
+    }
+    if (status === 'review') {
+      return (
+        <span className="text-xs font-semibold px-2 py-1 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+          👀 Review
+        </span>
+      );
+    }
+    if (status === 'done') {
+      return (
+        <span className="text-xs font-semibold px-2 py-1 rounded bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
+          ✅ Done
+        </span>
+      );
+    }
+    return null;
   };
 
   return (
     <div
       onClick={onClick}
-      className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors cursor-pointer"
+      className={`
+        ${statusStyles.containerClass}
+        p-3 rounded-lg
+        hover:shadow-md
+        transition-all cursor-pointer
+        ${statusStyles.opacity}
+      `}
+      style={statusStyles.containerStyle}
     >
+      {/* Header with task type and status indicators */}
       <div className="flex items-start justify-between mb-2">
-        <span className={`text-xs font-semibold px-2 py-1 rounded ${typeColors[task.type]}`}>
-          {typeLabels[task.type]}
-        </span>
         <div className="flex items-center gap-2">
-          {task.evidence_count > 0 && (
-            <span className="text-xs text-gray-600 dark:text-gray-400">
-              📎 {task.evidence_count}
+          <TaskTypeIcon type={taskType} size="sm" />
+          <span className={`text-xs font-semibold px-2 py-1 rounded ${getTaskTypeClass(taskType)}`}>
+            {TASK_TYPE_LABELS[taskType]}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Evidence indicator */}
+          {task.evidence_count > 0 ? (
+            <span className="text-xs text-green-600 dark:text-green-400" title={`${task.evidence_count} evidence attached`}>
+              ✅ {task.evidence_count}
+            </span>
+          ) : (
+            <span className="text-xs text-gray-400 dark:text-gray-500" title="No evidence">
+              🚫
             </span>
           )}
-          {task.verification && (
-            <span className="text-xs text-gray-600 dark:text-gray-400" title="Has verification steps">
-              ✓
+          {/* Lock indicator */}
+          {isLocked && (
+            <span className="text-xs text-amber-600 dark:text-amber-400" title={`Locked by ${task.locked_by}`}>
+              🔒
             </span>
           )}
         </div>
       </div>
 
-      <h4 className="font-medium text-sm text-gray-900 dark:text-white mb-1">
+      {/* Status badge for blocked/review/done */}
+      {getStatusBadge() && (
+        <div className="mb-2">
+          {getStatusBadge()}
+        </div>
+      )}
+
+      {/* Task title */}
+      <h4 className={`font-medium text-sm mb-1 ${statusStyles.textColor}`}>
+        {status === 'done' && (
+          <span className="inline-block mr-1.5">✓</span>
+        )}
+        {task.task_key && (
+          <span className="text-xs font-mono text-gray-500 dark:text-gray-400 mr-1.5">
+            {task.task_key}:
+          </span>
+        )}
         {task.title}
       </h4>
 
-      <p className="text-xs text-gray-600 dark:text-gray-400 mb-2 line-clamp-2">
+      {/* Goal/description */}
+      <p className={`text-xs mb-2 line-clamp-2 ${statusStyles.textColor} ${status === 'done' ? 'opacity-70' : ''}`}>
         {task.goal}
       </p>
 
-      <div className="flex items-center justify-between text-xs">
-        <span className={`font-medium ${riskColors[task.risk]}`}>
+      {/* Footer with risk and timebox */}
+      <div className={`flex items-center justify-between text-xs ${statusStyles.textColor} ${status === 'done' ? 'opacity-70' : ''}`}>
+        <span className={`font-medium ${
+          task.risk === 'low' ? 'text-green-600 dark:text-green-400' :
+          task.risk === 'medium' ? 'text-amber-600 dark:text-amber-400' :
+          'text-red-600 dark:text-red-400'
+        }`}>
           {task.risk.toUpperCase()} RISK
         </span>
         <span className="text-gray-500 dark:text-gray-400">
@@ -70,6 +185,7 @@ export function AgentTaskCard({ task, onClick }: AgentTaskCardProps) {
         </span>
       </div>
 
+      {/* Blocked reason */}
       {task.blocked_reason && (
         <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/20 rounded text-xs text-red-700 dark:text-red-400">
           🚫 {task.blocked_reason}

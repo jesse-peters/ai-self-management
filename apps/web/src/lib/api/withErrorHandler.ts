@@ -14,6 +14,8 @@ import { getCorrelationId } from '@/lib/correlationId';
 import { createRequestLogger } from '@/lib/logger';
 import { handleError, ErrorContext } from '@/lib/errors';
 import { createSuccessResponse } from '@/lib/errors/responses';
+import { extractUserFromRequest } from '@/lib/auth/userExtraction';
+import { addBreadcrumb, addRequestBreadcrumbs, withSentryTransaction, setRequestContext } from '@/lib/errors/sentry';
 
 type RouteHandler = (
     request: NextRequest,
@@ -46,26 +48,116 @@ export function withErrorHandler(
         const method = request.method;
         const url = request.url;
 
-        // Set up error context
+        // Extract user from request (non-blocking)
+        let user: Awaited<ReturnType<typeof extractUserFromRequest>> = null;
+        try {
+            user = await extractUserFromRequest(request);
+        } catch (error) {
+            // Silently fail - user extraction is optional
+            if (process.env.NODE_ENV === 'development') {
+                logger.debug({ error }, 'Failed to extract user from request');
+            }
+        }
+
+        // Add request breadcrumbs
+        addRequestBreadcrumbs(request);
+
+        // Extract query parameters
+        const urlObj = new URL(request.url);
+        const queryParams: Record<string, string> = {};
+        urlObj.searchParams.forEach((value, key) => {
+            queryParams[key] = value;
+        });
+
+        // Try to extract request body (for POST/PUT/PATCH requests)
+        let requestBody: unknown = undefined;
+        if (['POST', 'PUT', 'PATCH'].includes(method)) {
+            try {
+                // Clone request to read body without consuming it
+                const clonedRequest = request.clone();
+                const bodyText = await clonedRequest.text();
+                if (bodyText) {
+                    try {
+                        requestBody = JSON.parse(bodyText);
+                    } catch {
+                        // Not JSON, store as text (truncated)
+                        requestBody = bodyText.substring(0, 1000);
+                    }
+                }
+            } catch (error) {
+                // Silently fail - body extraction is optional
+                if (process.env.NODE_ENV === 'development') {
+                    logger.debug({ error }, 'Failed to extract request body');
+                }
+            }
+        }
+
+        // Set up error context with enriched information
         const errorContext: ErrorContext = {
             component,
             correlationId,
             method,
             url,
+            user: user || undefined,
+            userId: user?.id,
+            requestBody: requestBody !== undefined ? requestBody : undefined,
+            queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
         };
+
+        // Set Sentry request context
+        setRequestContext({
+            component,
+            correlationId,
+            method,
+            url,
+            userId: user?.id,
+            user: user || undefined,
+        });
+
+        // Add breadcrumb for handler execution start
+        addBreadcrumb(
+            `Handler execution started: ${component}`,
+            'custom',
+            'info',
+            {
+                component,
+                method,
+                pathname: urlObj.pathname,
+            }
+        );
 
         try {
             // Log request start
             logger.debug({
                 method,
                 url,
+                hasUser: !!user,
             }, 'Request started');
 
-            // Execute the handler
-            const response = await handler(request, context as any);
+            // Execute the handler wrapped in a Sentry transaction
+            const response = await withSentryTransaction(
+                `${method} ${urlObj.pathname}`,
+                'http.server',
+                async () => {
+                    return await handler(request, context as any);
+                }
+            );
 
             // Calculate duration
             const duration = Date.now() - startTime;
+
+            // Add breadcrumb for successful response
+            addBreadcrumb(
+                `Handler execution completed: ${component}`,
+                'custom',
+                'info',
+                {
+                    component,
+                    method,
+                    status: response.status,
+                    duration,
+                }
+            );
 
             // Log successful response
             logger.info({
@@ -80,6 +172,19 @@ export function withErrorHandler(
             return response;
         } catch (error) {
             const duration = Date.now() - startTime;
+
+            // Add breadcrumb for error
+            addBreadcrumb(
+                `Handler execution failed: ${component}`,
+                'error',
+                'error',
+                {
+                    component,
+                    method,
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                    duration,
+                }
+            );
 
             // Log error
             logger.error({

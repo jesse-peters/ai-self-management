@@ -5,23 +5,21 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { createBrowserClient } from '@/lib/supabaseClient';
 import { ProjectList } from '@/components/ProjectList';
-import { TaskList } from '@/components/TaskList';
-import { EventTimeline } from '@/components/EventTimeline';
-import { GatePanel } from '@/components/GatePanel';
-import { listProjects, listTasks, type Project, type Task } from '@projectflow/core';
-
-type DashboardTab = 'tasks' | 'gates' | 'events';
+import { WorkItemCard } from '@/components/WorkItemCard';
+import { ProjectManifestModal } from '@/components/ProjectManifestModal';
+import { listProjects, listWorkItems, type Project, type WorkItemSummary } from '@projectflow/core';
+import Link from 'next/link';
 
 export default function DashboardPage() {
   const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [workItems, setWorkItems] = useState<WorkItemSummary[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>();
-  const [activeTab, setActiveTab] = useState<DashboardTab>('tasks');
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
-  const [isLoadingTasks, setIsLoadingTasks] = useState(false);
+  const [isLoadingWorkItems, setIsLoadingWorkItems] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [manifestProject, setManifestProject] = useState<Project | null>(null);
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -50,21 +48,21 @@ export default function DashboardPage() {
     }
   }, [user, selectedProjectId]);
 
-  const loadTasks = useCallback(
+  const loadWorkItems = useCallback(
     async (projectId: string) => {
       if (!user) return;
 
-      setIsLoadingTasks(true);
+      setIsLoadingWorkItems(true);
       setError(null);
       try {
         const supabase = createBrowserClient();
-        const data = await listTasks(supabase, projectId);
-        setTasks(data);
+        const data = await listWorkItems(supabase, projectId);
+        setWorkItems(data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load tasks');
-        console.error('Error loading tasks:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load work items');
+        console.error('Error loading work items:', err);
       } finally {
-        setIsLoadingTasks(false);
+        setIsLoadingWorkItems(false);
       }
     },
     [user]
@@ -77,20 +75,33 @@ export default function DashboardPage() {
     }
   }, [user, loadProjects]);
 
-  // Load tasks when project is selected
+  // Load work items when project is selected
   useEffect(() => {
     if (selectedProjectId && user) {
-      loadTasks(selectedProjectId);
+      loadWorkItems(selectedProjectId);
     }
-  }, [selectedProjectId, user, loadTasks]);
+  }, [selectedProjectId, user, loadWorkItems]);
 
-  // Get active/locked task
-  const activeTask = tasks.find((task) => {
-    const taskWithLock = task as Task & { locked_at?: string; locked_by?: string };
-    return (
-      taskWithLock.locked_at && (task.status === 'todo' || task.status === 'in_progress')
-    );
-  });
+  // Calculate project metrics from work items
+  const projectMetrics = selectedProjectId
+    ? {
+        totalTasks: workItems.reduce((sum, wi) => sum + wi.total_tasks, 0),
+        doneTasks: workItems.reduce((sum, wi) => sum + wi.done_tasks, 0),
+        doingTasks: workItems.reduce((sum, wi) => sum + wi.doing_tasks, 0),
+        blockedTasks: workItems.reduce((sum, wi) => sum + wi.blocked_tasks, 0),
+        totalWorkItems: workItems.length,
+        gatesPassing: workItems.filter(
+          (wi) => wi.gate_status?.all_passing
+        ).length,
+        gatesFailing: workItems.filter(
+          (wi) => wi.gate_status && !wi.gate_status.all_passing && wi.gate_status.required_failing.length > 0
+        ).length,
+        missingEvidence: workItems.filter(
+          (wi) => wi.total_tasks > 0 && wi.evidence_count === 0
+        ).length,
+        lockedTasks: workItems.reduce((sum, wi) => sum + (wi.doing_tasks > 0 ? 1 : 0), 0),
+      }
+    : null;
 
   if (authLoading) {
     return (
@@ -104,12 +115,27 @@ export default function DashboardPage() {
     return null;
   }
 
+  const selectedProject = projects.find((p) => p.id === selectedProjectId);
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">Welcome back! Here are your projects and tasks.</p>
+        {/* Header */}
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">ProjectFlow</h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-2">Project overview and work items</p>
+          </div>
+          <div className="flex items-center gap-4">
+            {selectedProject && (
+              <Link
+                href="/work-items"
+                className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                View All Work Items
+              </Link>
+            )}
+          </div>
         </div>
 
         {error && (
@@ -118,82 +144,161 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Active Task Banner */}
-        {selectedProjectId && activeTask && (
-          <div className="mb-6 rounded-lg border-2 border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-1">Active Task</h3>
-                <p className="text-sm text-blue-800 dark:text-blue-200">{activeTask.title}</p>
-                {(activeTask as Task & { locked_by?: string }).locked_by && (
-                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                    Locked by: {(activeTask as Task & { locked_by?: string }).locked_by}
-                  </p>
+        {/* Project Selector and Status Banner */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Project:
+              </label>
+              <select
+                value={selectedProjectId || ''}
+                onChange={(e) => setSelectedProjectId(e.target.value || undefined)}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+              >
+                <option value="">Select a project...</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+              {selectedProject && (
+                <button
+                  onClick={() => setManifestProject(selectedProject)}
+                  className="px-3 py-2 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 border border-blue-300 dark:border-blue-600 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                  title="Generate .pm/project.json manifest"
+                >
+                  📄 Manifest
+                </button>
+              )}
+            </div>
+            {projectMetrics && (
+              <Link
+                href="/dashboard/quality"
+                className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                Quality Dashboard →
+              </Link>
+            )}
+          </div>
+
+          {/* Status Banner */}
+          {selectedProjectId && projectMetrics && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+              <div className="flex flex-wrap items-center gap-6 text-sm">
+                {/* Gates Status */}
+                {projectMetrics.gatesPassing + projectMetrics.gatesFailing > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">
+                      {projectMetrics.gatesPassing > 0 ? '⚡' : '❌'}
+                    </span>
+                    <div>
+                      <span className="font-semibold text-gray-900 dark:text-white">
+                        {projectMetrics.gatesPassing}/{projectMetrics.gatesPassing + projectMetrics.gatesFailing} gates
+                      </span>
+                      <span className="text-gray-500 dark:text-gray-400 ml-1">passing</span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Tasks Done */}
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">✅</span>
+                  <div>
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      {projectMetrics.doneTasks} tasks
+                    </span>
+                    <span className="text-gray-500 dark:text-gray-400 ml-1">done</span>
+                  </div>
+                </div>
+                
+                {/* Missing Evidence */}
+                {projectMetrics.missingEvidence > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🚫</span>
+                    <div>
+                      <span className="font-semibold text-red-600 dark:text-red-400">
+                        {projectMetrics.missingEvidence} tasks
+                      </span>
+                      <span className="text-gray-500 dark:text-gray-400 ml-1">missing evidence</span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Locked Tasks */}
+                {projectMetrics.lockedTasks > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🔒</span>
+                    <div>
+                      <span className="font-semibold text-blue-600 dark:text-blue-400">
+                        {projectMetrics.lockedTasks} task{projectMetrics.lockedTasks !== 1 ? 's' : ''}
+                      </span>
+                      <span className="text-gray-500 dark:text-gray-400 ml-1">locked</span>
+                    </div>
+                  </div>
                 )}
               </div>
-              <span className="text-xs font-semibold px-2 py-1 rounded bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200">
-                {activeTask.status === 'in_progress' ? 'In Progress' : 'Locked'}
-              </span>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Projects Column */}
+        {/* Work Items Grid */}
+        {selectedProjectId ? (
           <div>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Projects</h2>
-            <ProjectList
-              projects={projects}
-              selectedProjectId={selectedProjectId}
-              onSelectProject={setSelectedProjectId}
-              isLoading={isLoadingProjects}
-            />
-          </div>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                Work Items
+              </h2>
+              <Link
+                href={`/work-items?projectId=${selectedProjectId}`}
+                className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                + New Work Item
+              </Link>
+            </div>
 
-          {/* Main Content Column */}
-          <div className="lg:col-span-2">
-            {selectedProjectId ? (
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-                  {projects.find((p) => p.id === selectedProjectId)?.name || 'Project'}
-                </h2>
-
-                {/* Tabs */}
-                <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
-                  <nav className="-mb-px flex space-x-8">
-                    {(['tasks', 'gates', 'events'] as DashboardTab[]).map((tab) => (
-                      <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                          activeTab === tab
-                            ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
-                            : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-                        }`}
-                      >
-                        {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                      </button>
-                    ))}
-                  </nav>
-                </div>
-
-                {/* Tab Content */}
-                <div className="mt-6">
-                  {activeTab === 'tasks' && (
-                    <TaskList tasks={tasks} isLoading={isLoadingTasks} projectId={selectedProjectId} />
-                  )}
-                  {activeTab === 'gates' && <GatePanel projectId={selectedProjectId} />}
-                  {activeTab === 'events' && <EventTimeline projectId={selectedProjectId} />}
-                </div>
+            {isLoadingWorkItems ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="animate-pulse bg-gray-200 dark:bg-gray-700 h-48 rounded-lg" />
+                ))}
+              </div>
+            ) : workItems.length === 0 ? (
+              <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                <p className="text-gray-500 dark:text-gray-400 mb-2">No work items found</p>
+                <p className="text-sm text-gray-400 dark:text-gray-500 mb-4">
+                  Create a work item to get started
+                </p>
+                <Link
+                  href={`/work-items?projectId=${selectedProjectId}`}
+                  className="inline-block px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors"
+                >
+                  + New Work Item
+                </Link>
               </div>
             ) : (
-              <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                <p className="text-gray-500 dark:text-gray-400">Select a project to view its details</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {workItems.map((workItem) => (
+                  <WorkItemCard key={workItem.id} workItem={workItem} />
+                ))}
               </div>
             )}
           </div>
-        </div>
+        ) : (
+          <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+            <p className="text-gray-500 dark:text-gray-400">Select a project to view its work items</p>
+          </div>
+        )}
       </div>
+
+      {manifestProject && (
+        <ProjectManifestModal
+          project={manifestProject}
+          isOpen={true}
+          onClose={() => setManifestProject(null)}
+        />
+      )}
     </div>
   );
 }

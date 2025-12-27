@@ -71,6 +71,7 @@ export const POST = withErrorHandler(async (request: NextRequest): Promise<NextR
     description: description || null,
     external_url: external_url || null,
     status: status || 'open',
+    definition_of_done: null,
   });
 
   return createSuccessResponse({ workItem }, 201);

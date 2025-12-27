@@ -57,20 +57,23 @@ export async function getProjectStatus(
   projectId: string
 ): Promise<ProjectStatus> {
   // Fetch project details
-  const project = await getProject(client, projectId);
+  // Pass userId to skip getUser() check for OAuth clients
+  const project = await getProject(client, projectId, userId);
 
   // Fetch recent decisions (last 5)
   const allDecisions = await listDecisions(userId, projectId);
   const recentDecisions = allDecisions.slice(0, 5);
 
   // Fetch all tasks
-  const allTasks = await listAgentTasks(userId, projectId, {});
+  // Pass userId to skip getUser() check for OAuth clients
+  const allTasks = await listAgentTasks(client, projectId, {}, userId);
   
   // Find active task (status = 'doing')
   const activeTask = allTasks.find(t => t.status === 'doing') || null;
 
   // Fetch all work items
-  const allWorkItems = await listWorkItems(userId, projectId);
+  // Pass userId to skip getUser() check for OAuth clients
+  const allWorkItems = await listWorkItems(client, projectId, undefined, userId);
   
   // Find active work item (status = 'in_progress')
   const activeWorkItem = allWorkItems.find(w => w.status === 'in_progress') || null;

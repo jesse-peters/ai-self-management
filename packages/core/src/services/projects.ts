@@ -152,6 +152,7 @@ export async function listProjects(client: SupabaseClient<Database>): Promise<Pr
  * 
  * @param client Authenticated Supabase client (session or OAuth)
  * @param projectId Project ID to fetch
+ * @param userId Optional user ID (if not provided, will try to get from auth context)
  * @returns The project
  * @throws NotFoundError if project not found or user doesn't own it
  * 
@@ -159,13 +160,18 @@ export async function listProjects(client: SupabaseClient<Database>): Promise<Pr
  */
 export async function getProject(
   client: SupabaseClient<Database>,
-  projectId: string
+  projectId: string,
+  userId?: string
 ): Promise<Project> {
   try {
-    // First verify the user is authenticated
-    const { data: { user }, error: authError } = await client.auth.getUser();
-    if (authError || !user) {
-      throw new ValidationError('User authentication required');
+    // Only verify user authentication if userId not provided
+    // For OAuth-scoped clients, userId is already validated in authenticateTool
+    // For session-based clients, we can get it from auth context
+    if (!userId) {
+      const { data: { user }, error: authError } = await client.auth.getUser();
+      if (authError || !user) {
+        throw new ValidationError('User authentication required');
+      }
     }
 
     const { data: project, error } = await client

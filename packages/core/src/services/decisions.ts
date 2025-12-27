@@ -83,7 +83,7 @@ export async function recordDecision(
     const supabase = createServerClient();
 
     // Verify user owns the project
-    await getProject(supabase, projectId);
+    await getProject(supabase, projectId, userId);
 
     // Evaluate constraints before recording the decision
     // This checks if the decision deviates from prior lessons
@@ -165,7 +165,7 @@ export async function listDecisions(
     const supabase = createServerClient();
 
     // Verify user owns the project
-    await getProject(supabase, projectId);
+    await getProject(supabase, projectId, userId);
 
     let query = (supabase as any)
       .from('decisions')

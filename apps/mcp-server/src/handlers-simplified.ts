@@ -8,16 +8,23 @@ import { mapErrorToMCP, MCPErrorResponse } from './errors';
 import {
   implementInit,
   implementStatus,
+  implementProjectGet,
   implementAgentTaskCreate,
+  implementAgentTaskGet,
   implementAgentTaskSetStatus,
+  implementWorkItemCreate,
+  implementWorkItemGet,
+  implementWorkItemList,
+  implementWorkItemSetStatus,
   implementMemoryRecall,
   implementRecordDecision,
   implementRecordOutcome,
+  implementGateConfigure,
   implementGateRun,
   implementGateStatus,
-  implementCreateConstraint,
-  implementEvaluateConstraints,
   implementEvidenceAdd,
+  implementPlanImport,
+  implementPlanExport,
 } from './toolImplementations';
 
 export interface ToolCallResult {
@@ -69,6 +76,37 @@ export async function handleStatus(
 ): Promise<ToolCallResult> {
   try {
     const result = await implementStatus(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles project_get tool calls
+ */
+export async function handleProjectGet(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementProjectGet(accessToken, params);
     return {
       content: [
         {
@@ -154,6 +192,37 @@ export async function handleTaskSetStatus(
 }
 
 /**
+ * Handles task_get tool calls
+ */
+export async function handleTaskGet(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementAgentTaskGet(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
  * Handles memory_recall tool calls
  */
 export async function handleMemoryRecall(
@@ -162,6 +231,130 @@ export async function handleMemoryRecall(
 ): Promise<ToolCallResult> {
   try {
     const result = await implementMemoryRecall(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles work_item_create tool calls
+ */
+export async function handleWorkItemCreate(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementWorkItemCreate(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles work_item_get tool calls
+ */
+export async function handleWorkItemGet(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementWorkItemGet(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles work_item_list tool calls
+ */
+export async function handleWorkItemList(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementWorkItemList(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles work_item_set_status tool calls
+ */
+export async function handleWorkItemSetStatus(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementWorkItemSetStatus(accessToken, params);
     return {
       content: [
         {
@@ -247,6 +440,37 @@ export async function handleRecordOutcome(
 }
 
 /**
+ * Handles gate_configure tool calls
+ */
+export async function handleGateConfigure(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementGateConfigure(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
  * Handles gate_run tool calls
  */
 export async function handleGateRun(
@@ -309,68 +533,6 @@ export async function handleGateStatus(
 }
 
 /**
- * Handles create_constraint tool calls
- */
-export async function handleCreateConstraint(
-  params: Record<string, unknown>,
-  accessToken: string
-): Promise<ToolCallResult> {
-  try {
-    const result = await implementCreateConstraint(accessToken, params);
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    const mcpError = mapErrorToMCP(error);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(mcpError),
-        },
-      ],
-      isError: true,
-    };
-  }
-}
-
-/**
- * Handles evaluate_constraints tool calls
- */
-export async function handleEvaluateConstraints(
-  params: Record<string, unknown>,
-  accessToken: string
-): Promise<ToolCallResult> {
-  try {
-    const result = await implementEvaluateConstraints(accessToken, params);
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    const mcpError = mapErrorToMCP(error);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(mcpError),
-        },
-      ],
-      isError: true,
-    };
-  }
-}
-
-/**
  * Handles evidence_add tool calls
  */
 export async function handleEvidenceAdd(
@@ -379,6 +541,68 @@ export async function handleEvidenceAdd(
 ): Promise<ToolCallResult> {
   try {
     const result = await implementEvidenceAdd(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles plan_import tool calls
+ */
+export async function handlePlanImport(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementPlanImport(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles plan_export tool calls
+ */
+export async function handlePlanExport(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementPlanExport(accessToken, params);
     return {
       content: [
         {
@@ -420,13 +644,27 @@ export async function routeToolCall(
       return handleInit(params, accessToken);
     case 'pm.status':
       return handleStatus(params, accessToken);
-    
+    case 'pm.project_get':
+      return handleProjectGet(params, accessToken);
+
+    // Work Items
+    case 'pm.work_item_create':
+      return handleWorkItemCreate(params, accessToken);
+    case 'pm.work_item_get':
+      return handleWorkItemGet(params, accessToken);
+    case 'pm.work_item_list':
+      return handleWorkItemList(params, accessToken);
+    case 'pm.work_item_set_status':
+      return handleWorkItemSetStatus(params, accessToken);
+
     // Tasks
     case 'pm.task_create':
       return handleTaskCreate(params, accessToken);
+    case 'pm.task_get':
+      return handleTaskGet(params, accessToken);
     case 'pm.task_set_status':
       return handleTaskSetStatus(params, accessToken);
-    
+
     // Memory
     case 'pm.memory_recall':
       return handleMemoryRecall(params, accessToken);
@@ -434,23 +672,25 @@ export async function routeToolCall(
       return handleRecordDecision(params, accessToken);
     case 'pm.record_outcome':
       return handleRecordOutcome(params, accessToken);
-    
+
     // Gates
+    case 'pm.gate_configure':
+      return handleGateConfigure(params, accessToken);
     case 'pm.gate_run':
       return handleGateRun(params, accessToken);
     case 'pm.gate_status':
       return handleGateStatus(params, accessToken);
-    
-    // Advanced
-    case 'pm.create_constraint':
-      return handleCreateConstraint(params, accessToken);
-    case 'pm.evaluate_constraints':
-      return handleEvaluateConstraints(params, accessToken);
-    
+
     // Utility
     case 'pm.evidence_add':
       return handleEvidenceAdd(params, accessToken);
-    
+
+    // Plan Mode
+    case 'pm.plan_import':
+      return handlePlanImport(params, accessToken);
+    case 'pm.plan_export':
+      return handlePlanExport(params, accessToken);
+
     default:
       return {
         content: [
@@ -458,7 +698,7 @@ export async function routeToolCall(
             type: 'text',
             text: JSON.stringify({
               error: 'Unknown tool',
-              message: `Tool "${toolName}" is not recognized. Available tools: pm.init, pm.status, pm.task_create, pm.task_set_status, pm.memory_recall, pm.record_decision, pm.record_outcome, pm.gate_run, pm.gate_status, pm.create_constraint, pm.evaluate_constraints, pm.evidence_add`,
+              message: `Tool "${toolName}" is not recognized.`,
             }),
           },
         ],

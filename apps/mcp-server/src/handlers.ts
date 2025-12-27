@@ -27,6 +27,8 @@ import {
   implementInitWithInterview,
   implementProjectConventionsGet,
   implementConventionsSyncToPrimer,
+  implementPlanImport,
+  implementPlanExport,
 } from './toolImplementations';
 
 export interface ToolCallResult {
@@ -641,6 +643,68 @@ export async function handleConventionsSyncToPrimer(
 }
 
 /**
+ * Handles plan_import tool calls
+ */
+export async function handlePlanImport(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementPlanImport(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handles plan_export tool calls
+ */
+export async function handlePlanExport(
+  params: Record<string, unknown>,
+  accessToken: string
+): Promise<ToolCallResult> {
+  try {
+    const result = await implementPlanExport(accessToken, params);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const mcpError = mapErrorToMCP(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(mcpError),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
  * Helper to extract userId from token for Sentry context
  */
 async function getUserIdFromToken(accessToken: string): Promise<string | undefined> {
@@ -732,6 +796,12 @@ export async function routeToolCall(
         break;
       case 'pm.conventions_sync_to_primer':
         result = await handleConventionsSyncToPrimer(params, accessToken);
+        break;
+      case 'pm.plan_import':
+        result = await handlePlanImport(params, accessToken);
+        break;
+      case 'pm.plan_export':
+        result = await handlePlanExport(params, accessToken);
         break;
       default:
         result = {

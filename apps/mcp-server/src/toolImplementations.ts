@@ -15,10 +15,20 @@ import {
   updateTaskStatus,
   addEvidence,
   getInterviewQuestions,
+  getProject,
+  createWorkItem,
+  listWorkItems,
+  getWorkItem,
+  updateWorkItemStatus,
+  getAgentTask,
+  importPlan,
+  exportPlan,
   type AgentTaskFilters,
   type InitResult,
   type ProjectStatus,
   type ManifestData,
+  type PlanImportResult,
+  type PlanExportResult,
 } from '@projectflow/core';
 // Import server-only functions from server module
 import {
@@ -29,6 +39,7 @@ import {
   initProjectWithManifests,
   runGate,
   getGateStatus,
+  configureGates,
   type InitProjectWithManifestsResult,
 } from '@projectflow/core/server';
 import type {
@@ -43,6 +54,9 @@ import type {
   MemoryRecallContext,
   MemoryRecallResult,
   Outcome,
+  Project,
+  WorkItem,
+  WorkItemSummary,
 } from '@projectflow/core';
 import { createServiceRoleClient, createOAuthScopedClient } from '@projectflow/db';
 import { verifyAccessToken } from '@projectflow/core';
@@ -178,6 +192,18 @@ export async function implementStatus(
 }
 
 /**
+ * Implements pm.project_get tool
+ */
+export async function implementProjectGet(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<Project> {
+  const { userId, client } = await authenticateTool(accessToken, 'oauth');
+
+  return getProject(client, params.projectId as string);
+}
+
+/**
  * Implements pm.record_decision tool
  */
 export async function implementRecordDecision(
@@ -262,6 +288,69 @@ export async function implementMemoryRecall(
   return recall(userId, params.projectId as string, context);
 }
 
+// Work Items
+
+/**
+ * Implements pm.work_item_create tool
+ */
+export async function implementWorkItemCreate(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<WorkItem> {
+  const { userId, client } = await authenticateTool(accessToken, 'oauth');
+
+  return createWorkItem(client, params.projectId as string, {
+    title: params.title as string,
+    description: (params.description as string) || null,
+    external_url: (params.externalUrl as string) || null,
+    status: 'open',
+  });
+}
+
+/**
+ * Implements pm.work_item_get tool
+ */
+export async function implementWorkItemGet(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<WorkItemSummary> {
+  const { userId, client } = await authenticateTool(accessToken, 'oauth');
+
+  return getWorkItem(client, params.workItemId as string);
+}
+
+/**
+ * Implements pm.work_item_list tool
+ */
+export async function implementWorkItemList(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<WorkItemSummary[]> {
+  const { userId, client } = await authenticateTool(accessToken, 'oauth');
+
+  return listWorkItems(
+    client,
+    params.projectId as string,
+    params.status as 'open' | 'in_progress' | 'done' | undefined
+  );
+}
+
+/**
+ * Implements pm.work_item_set_status tool
+ */
+export async function implementWorkItemSetStatus(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<WorkItem> {
+  const { userId, client } = await authenticateTool(accessToken, 'oauth');
+
+  return updateWorkItemStatus(
+    client,
+    params.workItemId as string,
+    params.status as 'open' | 'in_progress' | 'done'
+  );
+}
+
 // Agent Tasks
 
 /**
@@ -306,6 +395,18 @@ export async function implementAgentTaskSetStatus(
   );
 }
 
+/**
+ * Implements pm.task_get tool
+ */
+export async function implementAgentTaskGet(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<any> {
+  const { userId, client } = await authenticateTool(accessToken, 'oauth');
+
+  return getAgentTask(client, params.taskId as string);
+}
+
 // Evidence
 
 /**
@@ -327,6 +428,26 @@ export async function implementEvidenceAdd(
 }
 
 // Gates
+
+/**
+ * Implements pm.gate_configure tool
+ */
+export async function implementGateConfigure(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<any> {
+  const { userId, client } = await authenticateTool(accessToken, 'oauth');
+
+  const gates = (params.gates as any[]).map((gate) => ({
+    name: gate.name,
+    description: gate.description || undefined,
+    runner_mode: gate.runnerMode as 'manual' | 'command',
+    command: gate.command || undefined,
+    is_required: gate.isRequired || false,
+  }));
+
+  return configureGates(userId, params.projectId as string, gates, client);
+}
 
 /**
  * Implements pm.gate.run tool
@@ -615,3 +736,62 @@ export async function implementConventionsSyncToPrimer(
   };
 }
 
+/**
+ * Implements pm.plan_import tool
+ * Imports a plan file for a work item, creating/updating tasks
+ */
+export async function implementPlanImport(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<any> {
+  const { userId, client } = await authenticateTool(accessToken, 'oauth');
+
+  const workItemId = params.workItemId as string;
+  const planText = params.planText as string;
+
+  if (!workItemId) {
+    throw new Error('workItemId is required');
+  }
+
+  if (!planText) {
+    throw new Error('planText is required');
+  }
+
+  // Import the plan
+  const result: PlanImportResult = await importPlan(client, workItemId, planText);
+
+  return {
+    workItemId: result.workItemId,
+    workItemTitle: result.workItem.title,
+    tasksCreated: result.tasksCreated,
+    tasksUpdated: result.tasksUpdated,
+    taskMappings: result.taskMappings,
+    message: `Plan imported: ${result.tasksCreated} tasks created, ${result.tasksUpdated} tasks updated`,
+  };
+}
+
+/**
+ * Implements pm.plan_export tool
+ * Exports a work item's tasks as a plan file
+ */
+export async function implementPlanExport(
+  accessToken: string,
+  params: Record<string, unknown>
+): Promise<any> {
+  const { userId, client } = await authenticateTool(accessToken, 'oauth');
+
+  const workItemId = params.workItemId as string;
+
+  if (!workItemId) {
+    throw new Error('workItemId is required');
+  }
+
+  // Export the plan
+  const result: PlanExportResult = await exportPlan(client, workItemId);
+
+  return {
+    workItemId,
+    plan: result.plan,
+    content: result.content,
+  };
+}

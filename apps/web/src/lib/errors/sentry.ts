@@ -4,6 +4,8 @@
  */
 
 import * as Sentry from '@sentry/nextjs';
+import type { NextRequest } from 'next/server';
+import type { ExtractedUser } from '@/lib/auth/userExtraction';
 
 let isSentryInitialized = false;
 
@@ -101,6 +103,10 @@ export interface ErrorContext {
     correlationId?: string;
     userId?: string;
     method?: string;
+    url?: string;
+    requestBody?: unknown;
+    queryParams?: Record<string, string>;
+    user?: ExtractedUser;
     [key: string]: unknown;
 }
 
@@ -156,23 +162,57 @@ export function captureError(
             return;
         }
 
-        // Set user context if provided
-        if (context?.userId) {
+        // Set user context if provided (prefer full user object, fallback to userId)
+        if (context?.user) {
+            Sentry.setUser({
+                id: context.user.id,
+                email: context.user.email,
+                username: context.user.username,
+            });
+        } else if (context?.userId) {
             Sentry.setUser({ id: context.userId });
         }
 
-        // Set request context
+        // Add breadcrumb for the error
+        addBreadcrumb(
+            error instanceof Error ? error.message : String(error),
+            'error',
+            'error',
+            {
+                errorType: error instanceof Error ? error.constructor.name : typeof error,
+                component: context?.component,
+                correlationId: context?.correlationId,
+            }
+        );
+
+        // Set request context with sanitized data
         if (context) {
-            Sentry.setContext('error_context', {
+            const sanitizedContext: Record<string, unknown> = {
                 component: context.component,
                 correlationId: context.correlationId,
                 method: context.method,
-                ...Object.fromEntries(
-                    Object.entries(context).filter(([key]) =>
-                        !['userId', 'component', 'correlationId', 'method'].includes(key)
-                    )
-                ),
-            });
+                url: context.url,
+            };
+
+            // Add sanitized request body if present
+            if (context.requestBody !== undefined) {
+                sanitizedContext.requestBody = sanitizeData(context.requestBody);
+            }
+
+            // Add sanitized query params if present
+            if (context.queryParams) {
+                sanitizedContext.queryParams = sanitizeData(context.queryParams);
+            }
+
+            // Add other context fields (excluding sensitive ones)
+            const excludedKeys = ['userId', 'user', 'component', 'correlationId', 'method', 'url', 'requestBody', 'queryParams'];
+            for (const [key, value] of Object.entries(context)) {
+                if (!excludedKeys.includes(key)) {
+                    sanitizedContext[key] = sanitizeData(value);
+                }
+            }
+
+            Sentry.setContext('error_context', sanitizedContext);
         }
 
         // Capture the exception
@@ -273,6 +313,189 @@ export function clearSentryScope(): void {
         if (process.env.NODE_ENV === 'development') {
             console.warn('Failed to clear Sentry scope:', error);
         }
+    }
+}
+
+/**
+ * Sanitizes sensitive data from objects
+ */
+function sanitizeData(data: unknown, maxDepth = 5, currentDepth = 0): unknown {
+    if (currentDepth >= maxDepth) {
+        return '[Max Depth Reached]';
+    }
+
+    if (data === null || data === undefined) {
+        return data;
+    }
+
+    if (typeof data === 'string') {
+        // Sanitize common sensitive patterns
+        const sensitivePatterns = [
+            /password/i,
+            /token/i,
+            /secret/i,
+            /key/i,
+            /authorization/i,
+            /bearer/i,
+            /api[_-]?key/i,
+            /access[_-]?token/i,
+        ];
+
+        for (const pattern of sensitivePatterns) {
+            if (pattern.test(data)) {
+                return '[Redacted]';
+            }
+        }
+
+        // Sanitize JWT tokens (format: xxx.yyy.zzz)
+        if (/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(data)) {
+            return data.substring(0, 20) + '...[Redacted]';
+        }
+
+        return data;
+    }
+
+    if (Array.isArray(data)) {
+        return data.map(item => sanitizeData(item, maxDepth, currentDepth + 1));
+    }
+
+    if (typeof data === 'object') {
+        const sanitized: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(data)) {
+            const lowerKey = key.toLowerCase();
+            // Skip sensitive keys
+            if (
+                lowerKey.includes('password') ||
+                lowerKey.includes('token') ||
+                lowerKey.includes('secret') ||
+                lowerKey.includes('key') ||
+                lowerKey.includes('authorization') ||
+                lowerKey === 'cookie'
+            ) {
+                sanitized[key] = '[Redacted]';
+            } else {
+                sanitized[key] = sanitizeData(value, maxDepth, currentDepth + 1);
+            }
+        }
+        return sanitized;
+    }
+
+    return data;
+}
+
+/**
+ * Adds a breadcrumb to Sentry
+ * Useful for tracking the sequence of events leading to an error
+ * 
+ * @param message - Breadcrumb message
+ * @param category - Breadcrumb category (e.g., 'http', 'console', 'navigation')
+ * @param level - Breadcrumb level (default: 'info')
+ * @param data - Additional breadcrumb data (will be sanitized)
+ */
+export function addBreadcrumb(
+    message: string,
+    category: string = 'custom',
+    level: 'debug' | 'info' | 'warning' | 'error' = 'info',
+    data?: Record<string, unknown>
+): void {
+    try {
+        if (!ensureSentryInitialized()) {
+            return;
+        }
+
+        Sentry.addBreadcrumb({
+            message,
+            category,
+            level,
+            data: data ? sanitizeData(data) as Record<string, unknown> : undefined,
+            timestamp: Date.now() / 1000,
+        });
+    } catch (error) {
+        // Graceful degradation
+        if (process.env.NODE_ENV === 'development') {
+            console.warn('Failed to add Sentry breadcrumb:', error);
+        }
+    }
+}
+
+/**
+ * Adds request metadata as breadcrumbs
+ * Extracts and sanitizes request information for debugging
+ * 
+ * @param request - Next.js request object
+ */
+export function addRequestBreadcrumbs(request: NextRequest): void {
+    try {
+        const url = new URL(request.url);
+
+        // Add request start breadcrumb
+        addBreadcrumb(
+            `${request.method} ${url.pathname}`,
+            'http',
+            'info',
+            {
+                method: request.method,
+                url: url.toString(),
+                pathname: url.pathname,
+                search: url.search,
+            }
+        );
+
+        // Add query params if present
+        if (url.searchParams.toString()) {
+            const queryParams: Record<string, string> = {};
+            url.searchParams.forEach((value, key) => {
+                queryParams[key] = value;
+            });
+            addBreadcrumb(
+                'Request query parameters',
+                'http',
+                'info',
+                { queryParams: sanitizeData(queryParams) as Record<string, string> }
+            );
+        }
+    } catch (error) {
+        // Graceful degradation
+        if (process.env.NODE_ENV === 'development') {
+            console.warn('Failed to add request breadcrumbs:', error);
+        }
+    }
+}
+
+/**
+ * Wraps an async function in a Sentry transaction for performance monitoring
+ * Useful for tracking API route performance
+ * 
+ * @param name - Transaction name
+ * @param op - Operation type (e.g., 'http.server', 'function')
+ * @param fn - Function to wrap
+ * @returns Result of the function
+ */
+export async function withSentryTransaction<T>(
+    name: string,
+    op: string,
+    fn: () => Promise<T>
+): Promise<T> {
+    try {
+        if (!ensureSentryInitialized()) {
+            return await fn();
+        }
+
+        return await Sentry.startSpan(
+            {
+                name,
+                op,
+            },
+            async () => {
+                return await fn();
+            }
+        );
+    } catch (error) {
+        // If transaction fails, still execute the function
+        if (process.env.NODE_ENV === 'development') {
+            console.warn('Failed to start Sentry transaction:', error);
+        }
+        return await fn();
     }
 }
 

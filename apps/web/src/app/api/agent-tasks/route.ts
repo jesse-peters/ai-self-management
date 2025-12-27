@@ -116,6 +116,11 @@ export const POST = withErrorHandler(async (request: NextRequest): Promise<NextR
     depends_on_ids: depends_on_ids || [],
     risk: risk || 'low',
     timebox_minutes: timebox_minutes || 15,
+    task_key: null,
+    expected_files: [],
+    touched_files: [],
+    subtasks: null,
+    gates: null,
   });
 
   return createSuccessResponse({ task }, 201);

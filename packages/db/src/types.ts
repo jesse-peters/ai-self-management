@@ -114,6 +114,7 @@ export type WorkItem = {
   description: string | null;
   external_url: string | null;
   status: 'open' | 'in_progress' | 'done';
+  definition_of_done: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -141,6 +142,11 @@ export type AgentTask = {
   blocked_reason: string | null;
   locked_at: string | null;
   locked_by: string | null;
+  task_key: string | null;
+  expected_files: string[];
+  touched_files: string[];
+  subtasks: any; // JSONB
+  gates: any; // JSONB
   created_at: string;
   updated_at: string;
 };

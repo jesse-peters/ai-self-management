@@ -102,7 +102,7 @@ export async function createConstraint(
     const supabase = createServerClient();
 
     // Verify user owns the project
-    await getProject(supabase, projectId);
+    await getProject(supabase, projectId, userId);
 
     const { data: constraint, error } = await (supabase as any)
       .from('constraints')
@@ -177,7 +177,7 @@ export async function listConstraints(
     const supabase = createServerClient();
 
     // Verify user owns the project
-    await getProject(supabase, projectId);
+    await getProject(supabase, projectId, userId);
 
     let query = (supabase as any)
       .from('constraints')
