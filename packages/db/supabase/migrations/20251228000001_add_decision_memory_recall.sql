@@ -10,3 +10,4 @@ CREATE INDEX IF NOT EXISTS idx_decisions_memory_recall_ids ON decisions USING gi
 -- Comment
 COMMENT ON COLUMN decisions.memory_recall_ids IS 'Array of decision/outcome IDs that were consulted when making this decision';
 
+

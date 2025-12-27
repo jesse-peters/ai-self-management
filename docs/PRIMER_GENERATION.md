@@ -490,3 +490,4 @@ refreshPrimer(pmDir, newConventions);
 - **Manifest System**: Stores project linking information
 - **Plan Mode**: Uses primer for task planning context
 
+

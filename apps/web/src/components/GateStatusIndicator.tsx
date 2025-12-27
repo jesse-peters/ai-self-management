@@ -150,3 +150,4 @@ export function GateStatusCompact({ gates, maxDisplay = 5, onClick, className = 
   );
 }
 
+

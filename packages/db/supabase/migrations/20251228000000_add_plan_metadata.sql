@@ -19,3 +19,4 @@ COMMENT ON COLUMN project_specs.plan_hash IS 'Hash of the plan file content for 
 COMMENT ON COLUMN project_specs.last_imported_at IS 'Timestamp when plan was last imported from file';
 COMMENT ON COLUMN project_specs.last_exported_at IS 'Timestamp when plan was last exported to file';
 
+

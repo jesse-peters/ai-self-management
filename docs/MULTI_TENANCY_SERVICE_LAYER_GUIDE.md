@@ -704,3 +704,4 @@ describe('Workspace Isolation', () => {
 - [ ] Integration tests for workspace isolation
 - [ ] RLS policy enforcement tests
 
+

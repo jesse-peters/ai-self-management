@@ -96,3 +96,4 @@ export async function extractUserIdFromRequest(
     return user?.id || null;
 }
 
+

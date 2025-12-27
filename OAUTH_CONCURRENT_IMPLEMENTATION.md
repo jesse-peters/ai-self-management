@@ -489,3 +489,4 @@ The code challenge must be base64url-encoded:
 - Rate limiting per client_id
 - Support for other grant types (client credentials, etc.)
 - Polling interval recommendations in error responses
+

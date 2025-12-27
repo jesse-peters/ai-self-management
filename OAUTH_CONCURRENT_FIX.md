@@ -140,3 +140,4 @@ Exchange with verifier_2 → code has challenge_2 → SUCCEEDS
 ✅ No database schema changes
 ✅ Just storing complete data instead of partial data
 ✅ Token exchange logic unchanged (it gets better data now)
+

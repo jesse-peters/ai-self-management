@@ -250,3 +250,4 @@ When implementing plan mode tools, you can use:
 - Type generation via `pnpm db:generate-types`
 
 **Safe to deploy**: Yes - all changes are additive and backward compatible.
+

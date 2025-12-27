@@ -351,3 +351,4 @@ describe("Manifest Integration", () => {
 - See [repo-linking-manifests.md](./repo-linking-manifests.md) for complete API documentation
 - See [mcp-task-focused-spec.md](./mcp-task-focused-spec.md) for MCP tool specifications
 - See [SETUP.md](./SETUP.md) for initial project setup
+

@@ -68,3 +68,4 @@ CREATE INDEX IF NOT EXISTS idx_agent_tasks_gates ON agent_tasks USING gin(gates)
 -- Policies are already in place from previous migration for service_role on agent_tasks and work_items
 
 
+

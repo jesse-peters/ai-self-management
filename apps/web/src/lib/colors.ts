@@ -136,3 +136,4 @@ export function getGateStatusIcon(status: GateStatus): string {
     return GATE_STATUS_ICONS[status];
 }
 
+

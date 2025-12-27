@@ -10,3 +10,4 @@ COMMENT ON COLUMN projects.conventions_markdown IS 'Project conventions from ini
 -- Create index for efficient querying
 CREATE INDEX IF NOT EXISTS idx_projects_conventions ON projects(id) WHERE conventions_markdown IS NOT NULL;
 
+

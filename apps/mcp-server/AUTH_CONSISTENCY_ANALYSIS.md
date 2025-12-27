@@ -259,3 +259,4 @@ async function withAuthErrorHandling<T>(
 
 **Priority**: HIGH - Better error messages will help users fix auth issues faster
 
+

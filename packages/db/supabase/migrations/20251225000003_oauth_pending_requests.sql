@@ -36,3 +36,4 @@ CREATE POLICY "Users can view their own pending requests"
   ON oauth_pending_requests FOR SELECT
   USING (auth.uid() = user_id OR user_id IS NULL);
 
+

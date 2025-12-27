@@ -62,3 +62,4 @@ All migrations should apply successfully in sequence.
 - Migration 20251227000000 (multi-tenancy) comes after all existing migrations
 - The fix ensures no duplicate key violations when applying migrations
 
+

@@ -242,3 +242,4 @@ Applying migration 20251227000000_multi_tenancy_workspaces.sql...
 
 The system is now positioned to scale from single users to multi-team organizations while maintaining strong security and data isolation guarantees.
 
+

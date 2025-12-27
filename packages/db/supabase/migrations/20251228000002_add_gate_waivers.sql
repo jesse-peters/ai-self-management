@@ -74,3 +74,4 @@ COMMENT ON COLUMN gate_waivers.decision_id IS 'Required: decision that justifies
 COMMENT ON COLUMN gate_waivers.constraint_evaluation IS 'Results from evaluateConstraints() when waiver was created';
 COMMENT ON COLUMN gate_waivers.created_by IS 'Whether waiver was created by agent or human';
 
+

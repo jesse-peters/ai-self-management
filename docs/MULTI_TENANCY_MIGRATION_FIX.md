@@ -119,3 +119,4 @@ When creating RLS policies that use subqueries:
   - Preserved all policy logic
   - Maintained schema structure
 
+

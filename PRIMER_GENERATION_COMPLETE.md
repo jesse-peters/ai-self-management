@@ -192,3 +192,4 @@ cd packages/core && npm test -- primer.test.ts
 
 The primer generation feature is ready for use in the MVP and provides a solid foundation for agents to understand project context during task execution.
 
+

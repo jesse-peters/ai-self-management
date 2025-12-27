@@ -100,3 +100,4 @@ CREATE TRIGGER project_specs_updated_at
 -- Comment on table
 COMMENT ON TABLE project_specs IS 'Structured project specifications including goals, deliverables, risks, and gate configurations for guided project kickoff';
 
+
